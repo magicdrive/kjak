@@ -1,0 +1,423 @@
+# 設定リファレンス
+
+[English](configuration.md) · [導入ガイド](getting-started_ja.md) · [README](../README_ja.md)
+
+- [1. 設定ファイル](#1-設定ファイル)
+- [2. CLI による設定の管理](#2-cli-による設定の管理)
+- [3. `[defaults]`](#3-defaults)
+- [4. Feather](#4-feather)
+- [5. Group](#5-group)
+- [6. テンプレート](#6-テンプレート)
+- [7. 認証情報とセキュリティ](#7-認証情報とセキュリティ)
+- [8. 配信の動作](#8-配信の動作)
+- [9. 設定例（全体）](#9-設定例全体)
+- [10. kjak による設定ファイルの書き換え](#10-kjak-による設定ファイルの書き換え)
+
+## 1. 設定ファイル
+
+kjak は2つの TOML ファイルを読み込みます。
+
+| ファイル | 場所 | 使われる条件 |
+|---|---|---|
+| グローバル | `--config FILE`、なければ `$KJAK_CONFIG`、なければ `$XDG_CONFIG_HOME/kjak/config.toml`、なければ `~/.config/kjak/config.toml`（macOS も同じ）。Windows で `XDG_CONFIG_HOME` が未設定なら `%AppData%\kjak\config.toml` | 存在すれば常に |
+| プロジェクト | `./.kjak.toml`（カレントディレクトリのみ。親ディレクトリは探さない） | Trust 済みの場合のみ（[7.4](#74-プロジェクト設定の-trust)）。`--no-project` で無視できる |
+
+Trust ストアは、既定のグローバル設定ファイルと同じディレクトリの `trust.toml`（`$XDG_CONFIG_HOME/kjak/trust.toml` など）です。`--config` や `KJAK_CONFIG` を指定しても、Trust ストアの場所は変わりません。
+
+```sh
+kjak config path        # kjak が使うファイルと、./.kjak.toml の状態
+kjak config init        # グローバル設定ファイルを作成（--force で上書き）
+```
+
+`config init` はコメント付きのひな形を書き出します。グローバル設定ファイルがなくてもエラーにはならず、kjak は組み込みの既定値で動作します。
+
+**優先順位**：プロジェクト設定をグローバル設定の上に重ねます。
+
+| 部分 | 規則 |
+|---|---|
+| `[defaults]` | 項目ごと。プロジェクト側で設定した項目が優先され、それ以外はグローバルの値が残る |
+| `[feathers.NAME]` | 名前ごとに**丸ごと**置き換え。グローバル側の項目は1つも残らない |
+| `[groups.NAME]` | 名前ごとに丸ごと置き換え |
+| `[templates.NAME]` | 名前ごとに丸ごと置き換え |
+
+プロジェクト側のグループから、グローバル側の feather を参照できます。参照の正しさはマージ後に検査します。コマンドラインオプション（`--timeout`、`--level` など）は、どちらのファイルよりも優先されます。
+
+**形式**：両ファイルとも同じ形式で、それぞれ最大 1 MiB です。未知のキーや重複したキーはエラーになるので、打ち間違いが黙って無視されることはありません。`kjak config validate` は両方のファイルを検査し（プロジェクト設定は Trust の有無にかかわらず）、`kjak config show` はマージ後の内容を、リテラルの秘密情報を伏せて表示します。
+
+## 2. CLI による設定の管理
+
+| 操作 | feather | group | テンプレート |
+|---|---|---|---|
+| 一覧 | `kjak feather list` | `kjak group list` | `kjak template list` |
+| 1件表示 | `kjak feather show NAME` | `kjak group show NAME` | `kjak template show NAME` |
+| 追加 | `kjak feather add NAME --type T ...` | `kjak group set NAME FEATHER...` | `kjak template set NAME --body ...` |
+| 変更 | `kjak feather add NAME ... --force`（feather 全体を置き換え）、`enable` / `disable` | `kjak group set` を再実行（メンバー一覧を置き換え） | `kjak template set` を再実行 |
+| 削除 | `kjak feather remove NAME` | `kjak group remove NAME` | `kjak template remove NAME` |
+| 試す | `kjak send --to NAME --dry-run "test"`、続けて `--dry-run` なしで送信 | 同左 | `kjak template render NAME --var K=V` |
+
+`list` と `show` は `-o json` に対応しています。feather の一部のキー（たとえばホストだけ）を変更するコマンドはありません。すべてのオプションを付けて `feather add --force` を実行するか、ファイルを直接編集して `kjak config validate` で確認してください。
+
+そのほかの設定（`[defaults]` や、対応するオプションのないキー）は、ファイルを直接編集します。
+
+**スコープ**：`add` / `set` は、`--scope project` を指定しない限りグローバル設定に書き込みます。`remove`、`enable`、`disable` は、`--scope` を指定しなければ、その項目を定義しているファイルを変更します。プロジェクト設定を変更できるのは、Trust 済み（またはまだ存在しない）場合だけです。
+
+**確認方法**：
+
+```sh
+kjak config validate          # 両ファイルの構文・キー・参照
+kjak config show              # マージ後の設定
+kjak send --to NAME --dry-run "test"   # 送信先と認証情報の解決。何も送信しない
+```
+
+## 3. `[defaults]`
+
+| キー | 型 | 既定値 | 意味 |
+|---|---|---|---|
+| `timeout` | 期間の文字列 | `"10s"` | 1回の送信全体の期限。再試行と待機をすべて含む（最大 `10m`） |
+| `max_retries` | 整数 | `2` | 再試行できる失敗について、最初の試行の後に行う再試行の回数（0〜10） |
+| `concurrency` | 整数 | `5` | 同時に配信する feather の数（1〜64） |
+| `level` | 文字列 | `"info"` | レベルを指定しないメッセージのレベル |
+| `targets` | 名前のリスト | — | `--to` を指定しない送信の送信先（feather と group） |
+
+```toml
+[defaults]
+timeout = "15s"
+level = "info"
+targets = ["development"]
+```
+
+`kjak send` の `--timeout`、`--max-retries`、`--concurrency`、`--level`、`--to` を指定すると、その送信に限ってこれらを上書きします。
+
+## 4. Feather
+
+feather は1つの通知先です。Slack の Incoming Webhook、Discord の Webhook、または SMTP サーバーと宛先の組です。`kjak feather types` で種類を一覧できます。
+
+**名前**（feather、group、テンプレート共通）：英数字、`_`、`.`、`-`。最大 64 文字で、英数字で始まる必要があります。同じ名前を feather と group の両方に使うことはできません。
+
+**使い方**：`kjak send --to NAME`。feather を直接指定する場合、その feather が有効で、メッセージのレベルを受け付ける必要があります。そうでなければ、何も送信せずに終了します（exit 2）。
+
+### 共通のキー
+
+| キー | 型 | 既定値 | CLI（`feather add`） | 意味 |
+|---|---|---|---|---|
+| `type` | 文字列 | 必須 | `--type` | `slack`、`discord`、`email`（OS ネイティブの通知には対応していない） |
+| `enabled` | 真偽値 | `true` | `--disabled`、`feather enable` / `disable` | 無効な feather には送信しない |
+| `levels` | リスト | すべてのレベル | `--levels L[,L]` | 受け付けるレベル |
+
+種類に属さないキーを書くとエラーになります。
+
+### slack
+
+| キー | CLI | 意味 |
+|---|---|---|
+| `webhook_url` | `--secret-env`、`--secret-keychain`、`--secret-stdin` | Incoming Webhook の URL（[認証情報](#71-認証情報の参照)） |
+
+```toml
+[feathers.dev_slack]
+type = "slack"
+webhook_url = { env = "KJAK_DEV_SLACK_WEBHOOK" }
+levels = ["warning", "error", "critical"]
+```
+
+メッセージは、テキスト行（`[LEVEL] タイトル: 本文の1行目`）と、レベルに応じた色の添付として投稿されます。添付にはタイトル、本文、タイトルのリンクとして URL が入ります。`&`、`<`、`>` はエスケープされるので、`@channel` やユーザーへのメンションにはなりません。Incoming Webhook は、作成時に選んだチャンネルへ、そのアプリとして投稿します。
+
+### discord
+
+| キー | CLI | 意味 |
+|---|---|---|
+| `webhook_url` | `--secret-env`、`--secret-keychain`、`--secret-stdin` | Webhook の URL |
+| `username` | `--username` | メッセージの表示名（任意） |
+
+```toml
+[feathers.ops_discord]
+type = "discord"
+webhook_url = { keychain = { service = "kjak", account = "ops_discord" } }
+username = "kjak"
+```
+
+メッセージは、レベルに応じた色の埋め込み（embed）1つとして投稿されます。kjak は Webhook を `?wait=true` 付きで実行し（URL の `thread_id` は維持）、Discord にメッセージの作成を確認させます。メンションは無効です（`allowed_mentions.parse = []`）。4096 文字を超える本文は切り詰められ、末尾が `…` になります。
+
+### email
+
+| キー | CLI | 既定値 | 意味 |
+|---|---|---|---|
+| `host` | `--host` | 必須 | SMTP サーバー |
+| `port` | `--port` | 587 / 465 / 25 | `security` に応じる：`starttls` / `tls` / `none` |
+| `security` | `--security` | `"starttls"` | `starttls`（必須。平文に戻らない）、`tls`（最初から TLS）、`none` |
+| `user` | `--user` | — | SMTP ユーザー。`password` と組で使う |
+| `password` | `--secret-env`、`--secret-keychain`、`--secret-stdin` | — | 認証情報 |
+| `from` | `--from` | 必須 | 送信元（アドレスのみ） |
+| `to` | `--mail-to` | 必須 | 宛先（アドレスのみ） |
+| `subject_prefix` | `--subject-prefix` | — | すべての件名の先頭に付ける文字列 |
+
+```toml
+[feathers.oncall_mail]
+type = "email"
+host = "smtp.example.com"
+port = 587
+security = "starttls"
+user = "kjak@example.com"
+password = { env = "KJAK_SMTP_PASSWORD" }
+from = "kjak@example.com"
+to = ["oncall@example.com", "sre@example.com"]
+subject_prefix = "[kjak]"
+levels = ["error", "critical"]
+```
+
+- 証明書を検証します（TLS 1.2 以降）。検証を省略するオプションはありません。
+- `user` と `password` は組で指定します。`security = "none"` では指定できません（パスワードが平文で流れるため）。`none` はローカルのリレー向けです。
+- 認証は AUTH PLAIN、使えなければ AUTH LOGIN です。
+- `from` と `to` はアドレスのみです（`name@example.com`。表示名は不可）。
+- 件名は、`subject_prefix` の後にタイトル、タイトルがなければ `[LEVEL] 本文の1行目` です。本文は UTF-8 の quoted-printable テキストで、末尾に URL が付きます。
+- 宛先が1つでも拒否されると、メッセージ全体が拒否され、誰にも送信されません。
+
+## 5. Group
+
+group は feather の一覧に名前を付けたもので、1つの `--to` で複数の通知先へ送れます。
+
+```sh
+kjak group set development dev_slack dev_discord      # 作成または置き換え
+kjak group set incident dev_slack dev_discord oncall_mail
+kjak group show development
+kjak group remove development
+kjak send --to development "deploy started"
+```
+
+```toml
+[groups.development]
+feathers = ["dev_slack", "dev_discord"]
+```
+
+- メンバーは1つ以上で、すべて feather です（group の入れ子はできません）。同じ feather を2回書くことはできません。
+- `group set` はメンバー一覧全体を置き換えます。
+- 複数の送信先を一度に指定できます：`--to development,oncall_mail` または `--to A --to B`。複数回指定された feather にも、送信は1回だけです。
+- **無効**なメンバーや、`levels` がメッセージのレベルを含まないメンバーは**スキップ**されます。`skip` と表示され、失敗には数えません。
+- メンバーは互いに独立して配信されます。1つが失敗しても、他のメンバーは止まりません。
+
+一部が失敗した場合：
+
+```
+ok    dev_slack (slack) delivered in 280ms (1 attempt)
+FAIL  dev_discord (discord) failed (1 attempt): HTTP 404: Unknown Webhook
+skip  oncall_mail (email): level_filter (group development)
+partial: 1 delivered, 1 failed, 1 skipped
+```
+
+結果は `partial` で、終了コードは `1` です。
+
+## 6. テンプレート
+
+```sh
+kjak template set deploy --title 'Deployed {{.service}}' \
+    --body '{{.service}} {{.version}} is live' --level success
+kjak template render deploy --var service=api --var version=1.4.2
+kjak send --to development --template deploy --var service=api --var version=1.4.2
+```
+
+```toml
+[templates.deploy]
+title = "Deployed {{.service}}"
+body = "{{.service}} {{.version}} is live"
+level = "success"              # テンプレートにもできる："{{.level}}"
+url = "https://ci.example.com/runs/{{.run}}"
+```
+
+`body` は必須です。変数は `--var KEY=VALUE` で渡し、足りない変数があるとエラーになります。使えるのは `text/template` の組み込みアクションだけです。テンプレートファイル（`--template-file FILE`）には、同じキーをトップレベルに書きます。
+
+## 7. 認証情報とセキュリティ
+
+### 7.1 認証情報の参照
+
+feather の秘密情報（Slack や Discord の Webhook URL。URL 自体が認証情報です。または SMTP のパスワード）は、送信時に解決する**参照**として書きます。参照元はちょうど1つです。
+
+| 参照元 | TOML | CLI | 解決方法 |
+|---|---|---|---|
+| `env` | `{ env = "KJAK_DEV_SLACK_WEBHOOK" }` | `--secret-env VAR` | 環境変数（設定済みで空でないこと） |
+| `keychain` | `{ keychain = { service = "kjak", account = "dev_slack" } }` | `--secret-keychain SERVICE/ACCOUNT` | OS のキーチェーン（macOS、Linux） |
+| `literal` | `{ literal = "https://hooks.slack.com/..." }` | `--secret-stdin` | 設定ファイルの値そのもの |
+
+- 参照元が2つ、または1つもない場合はエラーです。単なる文字列（`webhook_url = "https://..."`）もエラーになります。
+- Webhook URL は `https` である必要があります（`http` は `localhost` のみ）。ユーザー情報を含む URL は使えません。
+- 解決できない認証情報があると、何も送信せずに終了します（exit 2）。
+- `feather add` は秘密情報を引数として受け取りません。参照で指定するか、`--secret-stdin` で標準入力から渡します。
+
+**どれを使うか**
+
+| 状況 | 使うもの |
+|---|---|
+| 自分の macOS / Linux デスクトップ | `keychain` |
+| CI、サーバー、コンテナ、cron、Windows | `env`（各環境のシークレット管理から設定する） |
+| 手元での簡単なテスト | `--secret-stdin` による `literal`（グローバル設定ファイルにだけ置く） |
+
+kjak はキーチェーンを読むだけです。エントリーは OS のツールで作成してください。どちらのツールも秘密情報の入力を求めるので、シェルの履歴に残りません。
+
+```sh
+security add-generic-password -s kjak -a dev_slack -w                  # macOS
+secret-tool store --label "kjak dev_slack" service kjak account dev_slack   # Linux（libsecret-tools）
+```
+
+Linux では Secret Service（GNOME Keyring や KWallet のあるデスクトップセッション）が動いている必要があります。ヘッドレスのマシンでは `env` を使ってください。Windows では kjak はキーチェーンに対応していません。
+
+### 7.2 kjak の表示
+
+秘密情報そのものは表示しません。`feather show`、`feather list`、`config show`、`config trust` は、値の代わりに参照元を表示します。
+
+```
+webhook_url  env:KJAK_DEV_SLACK_WEBHOOK
+webhook_url  keychain:kjak/dev_slack
+webhook_url  literal:[REDACTED]
+```
+
+エラーやレポートからは、解決したすべての秘密情報（Webhook URL のパスとクエリを含む）を、表示前に取り除きます。サービス側が返したテキストに含まれていた場合も同様です。
+
+### 7.3 ファイルと権限
+
+kjak はファイルをモード `0600`（所有者のみ）で作成します。既存ファイルのモードは維持しますが、グループとその他の書き込み権限は外します。`literal` の秘密情報はファイルに平文で書かれるので、できるだけ `env` か `keychain` を使ってください。リテラルを含むファイルは、共有するバックアップやリポジトリに入れないでください。
+
+### 7.4 プロジェクト設定の Trust
+
+リポジトリの `.kjak.toml` には、環境変数やキーチェーンのエントリーと、その送信先 URL を書けます。つまり、クローンしたリポジトリによって、`kjak send` があなたの秘密情報を別の場所へ送ってしまう可能性があります。そのため kjak は、そのファイルを明示的に Trust するまでプロジェクト設定を使いません。
+
+```sh
+kjak config trust
+```
+
+```
+project configuration /home/me/src/app/.kjak.toml
+sha256 3f1c...e9
+  feather app_slack: slack, webhook URL from env:APP_SLACK_WEBHOOK
+  group app: app_slack, dev_slack
+Trust this exact content? [y/N]
+```
+
+- Trust の対象は、ファイルの正規化されたパスと内容の SHA-256 で、Trust ストアに保存されます。内容が**少しでも**変わったり、パスが変わったりした場合は、Trust し直す必要があります。
+- Trust していないプロジェクト設定は、それを使うすべてのコマンドでエラーになります（exit 2）。黙って使われることも、黙って無視されることもありません。
+
+  ```
+  kjak: the project configuration is not trusted: /home/me/src/app/.kjak.toml
+    review it, then run `kjak config trust` (or pass --no-project to ignore it)
+  ```
+
+- 信頼できないリポジトリでは、先に `.kjak.toml` を読むか、`--no-project` を付けて kjak を実行してください。
+- 端末がない環境では、`config trust` に `--yes` が必要です。先にファイルを確認してください。
+- `kjak config untrust` で Trust を取り消せます。状態は `kjak config path` で確認できます（`trusted`、`untrusted`、`untrusted (changed since it was trusted)`）。
+
+### 7.5 秘密情報を Git に入れない
+
+- コミットする `.kjak.toml` には、`env` か `keychain` の参照だけを書き、`literal` は書かないでください。秘密情報は各利用者が自分の環境で用意します。
+- Webhook URL は漏れやすい情報です。コミット前に `git diff` を確認し、URL をコミットまたは共有してしまった Webhook は無効化（削除して作り直し）してください。
+- リテラルの秘密情報を含む設定は、リポジトリではなくグローバル設定ファイルに置いてください。
+
+### 7.6 CI で使う場合
+
+- 秘密情報は、CI のシークレット管理から環境変数として渡してください（`env` 参照）。CI ではキーチェーンは使えません。
+- CI で `kjak config trust --yes` を実行すると、チェックアウトしたコミットの内容を、プルリクエストによる変更も含めてそのまま Trust します。パイプラインが管理する設定（`--config FILE` または `KJAK_CONFIG`）と `--no-project` を使うか、レビュー済みのコードだけを実行するパイプラインでのみ Trust してください。
+- 機械で読める記録を残すには `-o json` を使ってください。秘密情報は含まれません。
+
+詳しくは [security.md](security.md)（英語）を参照してください。
+
+## 8. 配信の動作
+
+### 期限とタイムアウト
+
+`timeout`（`--timeout`。既定 10 秒、最大 10 分）は**送信全体**の期限です。すべての feather について、すべての試行と、試行の間の待機が、この時刻までに終わります。期限を過ぎた時点でまだ空き枠を待っていた feather は、試行せずに失敗します。
+
+### 再試行
+
+- 一時的と分かっている失敗に限り、最初の試行の後に最大 `max_retries` 回（既定 2 回）再試行します。対象は HTTP 429、408、502/504 以外の 5xx、リクエストを送り終える前のネットワークエラー、SMTP の 4xx です。
+- 待機時間は、サービスが `Retry-After` を返せばその値、なければ 0.5 秒、1 秒、2 秒……（最大 5 秒、ゆらぎあり）です。期限内に収まらない待機は行いません。
+- 再試行しないもの：HTTP 400/401/403/404 などの拒否、SMTP の 5xx、SMTP のパスワード誤り、証明書の検証失敗。
+
+### 受付状態が不明な場合
+
+リクエスト全体はサービスに届いたのに応答が返ってこなかった場合（接続が切れた、期限を過ぎた、HTTP 502/504）、メッセージは**配信されている可能性があります**。kjak は重複を避けるために再試行せず、受付状態不明の失敗として報告します。
+
+```
+????  dev_slack (slack) failed (1 attempt): ... [acceptance unknown: it may have been delivered; not retried]
+```
+
+再送する前に、送信先を確認してください。
+
+### キャンセル
+
+Ctrl-C（SIGINT）で送信をキャンセルできます。実行中の試行はできるだけ早く終わり、待機中の feather は試行されません。レポートは結果 `canceled` として表示され、kjak は終了コード 130 で終了します。もう一度 Ctrl-C を押すと、すぐに終了します。
+
+### 結果と終了コード
+
+| 結果 | 条件 | 終了コード |
+|---|---|---|
+| `success` | 失敗なし（スキップは可） | 0 |
+| `partial` | 一部が配信され、一部が失敗 | 1 |
+| `failure` | 1つも配信されず、1つ以上が失敗 | 1 |
+| `canceled` | SIGINT | 130 |
+| （エラー） | 送信前の入力・設定・Trust・送信先・認証情報のエラー。何も送信していない | 2 |
+
+テキスト出力では、送信先ごとに次の印が付きます：`ok` 配信済み、`FAIL` 失敗、`????` 受付状態不明の失敗、`skip` スキップ、`plan`（ドライラン）。`-q` を付けると、すべて配信できたときは何も表示しません。
+
+### JSON 出力
+
+`-o json` は `schema_version: 1` の文書を1つ出力します。内容は `outcome`、`summary`（`total`、`delivered`、`failed`、`unknown`、`skipped`）、送信先ごとの `results`（`status`、`acceptance`、`attempts`、`error`、全試行の `history`）です。送信前に失敗した場合も同じ形で、`outcome: "error"` と `error: {code, message}` を標準出力に、診断メッセージを標準エラー出力に出します。各フィールドの詳細は [cli.md](cli.md#json-output--o-json)（英語）を参照してください。
+
+### エラーの読み方
+
+- 標準エラー出力の `kjak: ...` と終了コード 2：何も送信していません。メッセージに、該当するファイル、キー、feather、環境変数が示されます。
+- `FAIL` 行：サービスが拒否した（`HTTP 404: ...`、`SMTP 535 ...`）か、ネットワークが失敗しました。`-o json` ですべての試行を確認できます。
+- [troubleshooting.md](troubleshooting.md)（英語）に、メッセージとその対処をまとめています。
+
+### OS ごとの違い
+
+| | macOS | Linux | Windows |
+|---|---|---|---|
+| `XDG_CONFIG_HOME` 未設定時のグローバル設定ファイル | `~/.config/kjak/config.toml` | `~/.config/kjak/config.toml` | `%AppData%\kjak\config.toml` |
+| `keychain` 参照 | 対応（`security`） | 対応（`secret-tool`。Secret Service が必要） | 非対応。`env` を使う |
+| 設定ファイルのロック | flock | flock | LockFileEx |
+
+配信の詳細は [delivery.md](delivery.md)（英語）を参照してください。
+
+## 9. 設定例（全体）
+
+```toml
+[defaults]
+timeout = "15s"
+targets = ["development"]
+
+[feathers.dev_slack]
+type = "slack"
+webhook_url = { env = "KJAK_DEV_SLACK_WEBHOOK" }
+
+[feathers.dev_discord]
+type = "discord"
+webhook_url = { env = "KJAK_DEV_DISCORD_WEBHOOK" }
+levels = ["error", "critical"]
+
+[feathers.oncall_mail]
+type = "email"
+host = "smtp.example.com"
+user = "kjak@example.com"
+password = { keychain = { service = "kjak", account = "oncall_mail" } }
+from = "kjak@example.com"
+to = ["oncall@example.com"]
+levels = ["critical"]
+
+[groups.development]
+feathers = ["dev_slack", "dev_discord"]
+
+[groups.incident]
+feathers = ["dev_slack", "dev_discord", "oncall_mail"]
+
+[templates.deploy]
+title = "Deployed {{.service}}"
+body = "{{.service}} {{.version}} is live"
+level = "success"
+```
+
+## 10. kjak による設定ファイルの書き換え
+
+`feather add`、`group set`、`template set` などの変更系コマンドは、ファイルを解析して変更し、結果を検査してから（単体でも、もう一方のファイルとマージしても）書き戻します。
+
+- アトミックに書き込みます。同じディレクトリに一時ファイルを作って同期し、元のファイルへリネームします。
+- シンボリックリンクをたどります。リンクになっているファイル（dotfiles のリポジトリなど）はリンクのまま残り、リンク先が書き換わります。リンク先が存在しない場合は拒否します。
+- ロックを取ります。`<file>.lock` に OS の排他ロックをかけ、別の kjak が書き換え中なら待たずに失敗します（`the configuration is being changed by another kjak process`）。ロックはプロセスの終了時に OS が解放するので、異常終了した kjak が他をブロックすることはありません。`.lock` ファイル自体は残りますが、害はありません。`kjak send` は読み込むだけで、ロックを取りません。
+- 変更を検出します。書き込み中に別の手段（ロックを無視するエディターなど）でファイルが変更された場合、kjak は中止し、その変更には手を付けません。
+
+kjak は独自のレイアウトで書き出すため、**コメントとキーの順序は保持されません**。残したい場合は、ファイルを直接編集してください。
