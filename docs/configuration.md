@@ -1,17 +1,40 @@
 # Configuration reference
 
+[日本語](configuration_ja.md) · [Getting started](getting-started.md) · [README](../README.md)
+
+- [1. Configuration files](#1-configuration-files)
+- [2. Managing the configuration with the CLI](#2-managing-the-configuration-with-the-cli)
+- [3. `[defaults]`](#3-defaults)
+- [4. Feathers](#4-feathers)
+- [5. Groups](#5-groups)
+- [6. Templates](#6-templates)
+- [7. Credentials and security](#7-credentials-and-security)
+- [8. Delivery behavior](#8-delivery-behavior)
+- [9. A complete example](#9-a-complete-example)
+- [10. Changes made by kjak](#10-changes-made-by-kjak)
+
+## 1. Configuration files
+
 kjak reads TOML from two files:
 
 | file | location | used |
 |---|---|---|
-| global | `--config`, else `$KJAK_CONFIG`, else `$XDG_CONFIG_HOME/kjak/config.toml` (`~/.config/kjak/config.toml`; on Windows without `XDG_CONFIG_HOME`: `%AppData%\kjak\config.toml`) | always, when it exists |
-| project | `./.kjak.toml` (the current directory only) | only when trusted ([security.md](security.md)); `--no-project` ignores it |
+| global | `--config FILE`, else `$KJAK_CONFIG`, else `$XDG_CONFIG_HOME/kjak/config.toml`, else `~/.config/kjak/config.toml` (also on macOS); on Windows without `XDG_CONFIG_HOME`: `%AppData%\kjak\config.toml` | always, when it exists |
+| project | `./.kjak.toml` (the current directory only; parent directories are not searched) | only when trusted ([7.4](#74-project-configuration-trust)); `--no-project` ignores it |
 
-Both files have the same format, at most 1 MiB each. Unknown keys and keys
-given twice are errors (a typo is never ignored). `kjak config validate` checks both; `kjak config show` prints the
-merged result.
+The trust store is `trust.toml` next to the default global file
+(`$XDG_CONFIG_HOME/kjak/trust.toml`, ...); `--config` and `KJAK_CONFIG` do not
+move it.
 
-## Merge rules
+```sh
+kjak config path        # which files kjak uses, and the state of ./.kjak.toml
+kjak config init        # creates the global file (--force overwrites it)
+```
+
+`config init` writes a commented starting file. A missing global file is not
+an error: kjak runs with the built-in defaults.
+
+**Precedence.** The project file is merged over the global file:
 
 | part | rule |
 |---|---|
@@ -21,11 +44,48 @@ merged result.
 | `[templates.NAME]` | by name, replaced whole |
 
 A project group may name global feathers. References are checked on the
-merged result.
+merged result. Command-line options (`--timeout`, `--level`, ...) win over
+both files.
 
-## `[defaults]`
+**Format.** Both files have the same format, at most 1 MiB each. Unknown keys
+and keys given twice are errors, so a typo is never ignored. `kjak config
+validate` checks both files (the project file whether trusted or not);
+`kjak config show` prints the merged result with literal secrets redacted.
 
-| key | type | default | |
+## 2. Managing the configuration with the CLI
+
+| task | feathers | groups | templates |
+|---|---|---|---|
+| list | `kjak feather list` | `kjak group list` | `kjak template list` |
+| show one | `kjak feather show NAME` | `kjak group show NAME` | `kjak template show NAME` |
+| add | `kjak feather add NAME --type T ...` | `kjak group set NAME FEATHER...` | `kjak template set NAME --body ...` |
+| change | `kjak feather add NAME ... --force` (replaces the whole feather), `enable` / `disable` | `kjak group set` again (replaces the member list) | `kjak template set` again |
+| remove | `kjak feather remove NAME` | `kjak group remove NAME` | `kjak template remove NAME` |
+| try | `kjak send --to NAME --dry-run "test"`, then without `--dry-run` | same | `kjak template render NAME --var K=V` |
+
+`list` and `show` accept `-o json`. There is no command that changes a
+single key of a feather (its host, for example); run `feather add --force`
+with every option, or edit the file and run `kjak config validate`.
+
+Other settings — `[defaults]`, and keys that have no option — are edited in
+the file.
+
+**Scope.** `add`/`set` write the global file unless `--scope project` is
+given. Without `--scope`, `remove`, `enable` and `disable` change the file
+that defines the entry. A project file is changed only when it is trusted
+(or does not exist yet).
+
+**Checking.**
+
+```sh
+kjak config validate          # syntax, keys, references, of both files
+kjak config show              # the merged configuration
+kjak send --to NAME --dry-run "test"   # routing and credentials, nothing sent
+```
+
+## 3. `[defaults]`
+
+| key | type | default | meaning |
 |---|---|---|---|
 | `timeout` | duration string | `"10s"` | the deadline of a whole send, every retry and wait included (max `10m`) |
 | `max_retries` | integer | `2` | retries of a retryable failure, after the first attempt (0–10) |
@@ -33,74 +93,96 @@ merged result.
 | `level` | string | `"info"` | the level of a message that names none |
 | `targets` | list of names | — | the feathers and groups of a send without `--to` |
 
-## `[feathers.NAME]`
+```toml
+[defaults]
+timeout = "15s"
+level = "info"
+targets = ["development"]
+```
 
-Names: letters, digits, `_`, `.`, `-`; at most 64; starting with a letter or
-a digit. A name cannot be both a feather and a group.
+The options `--timeout`, `--max-retries`, `--concurrency`, `--level` and
+`--to` of `kjak send` override them for one send.
 
-Common keys:
+## 4. Feathers
 
-| key | type | default | |
-|---|---|---|---|
-| `type` | string | required | `slack`, `discord`, `email` (`os` and other OS-native types are refused: not supported in v0.1.0) |
-| `enabled` | bool | `true` | |
-| `levels` | list | all levels | the levels the feather accepts |
+A feather is one destination: a Slack incoming webhook, a Discord webhook or
+an SMTP server with its recipients. `kjak feather types` lists the types.
+
+**Names** (feathers, groups, templates): letters, digits, `_`, `.`, `-`; at
+most 64; starting with a letter or a digit. A name cannot be both a feather
+and a group.
+
+**Using one:** `kjak send --to NAME`. A feather named directly must be
+enabled and accept the message's level, otherwise the send stops before
+sending anything (exit 2).
+
+### Common keys
+
+| key | type | default | CLI (`feather add`) | meaning |
+|---|---|---|---|---|
+| `type` | string | required | `--type` | `slack`, `discord` or `email` (OS-native notifications are not available) |
+| `enabled` | bool | `true` | `--disabled`; `feather enable` / `disable` | a disabled feather is not sent to |
+| `levels` | list | all levels | `--levels L[,L]` | the levels the feather accepts |
 
 A key that does not belong to the type is an error.
 
-### Credentials
-
-A secret is a reference with exactly one source:
-
-```toml
-webhook_url = { env = "KJAK_DEV_SLACK_WEBHOOK" }
-webhook_url = { keychain = { service = "kjak", account = "dev_slack" } }
-webhook_url = { literal = "https://hooks.slack.com/services/T000/B000/XXXX" }
-```
-
-Two sources at once, or none, is an error. A plain string
-(`webhook_url = "https://..."`) is an error too: a literal secret is always
-explicit. A `webhook_url` must be `https` (`http` only to localhost). See
-[security.md](security.md).
-
 ### slack
+
+| key | CLI | meaning |
+|---|---|---|
+| `webhook_url` | `--secret-env`, `--secret-keychain`, `--secret-stdin` | the incoming webhook URL (a [credential](#71-credential-references)) |
 
 ```toml
 [feathers.dev_slack]
 type = "slack"
-webhook_url = { env = "KJAK_DEV_SLACK_WEBHOOK" }   # an incoming webhook URL
+webhook_url = { env = "KJAK_DEV_SLACK_WEBHOOK" }
 levels = ["warning", "error", "critical"]
 ```
 
 The message is posted as a text line (`[LEVEL] title: first line`) and an
-attachment colored by level with the title, the body and the URL as the
+attachment colored by level with the title, the body, and the URL as the
 title link. `&`, `<` and `>` are escaped, so a message cannot mention
-`@channel` or users. An incoming webhook posts to the channel and as the app it
-was created for.
+`@channel` or users. An incoming webhook posts to the channel, and as the app,
+it was created for.
 
 ### discord
+
+| key | CLI | meaning |
+|---|---|---|
+| `webhook_url` | `--secret-env`, `--secret-keychain`, `--secret-stdin` | the webhook URL |
+| `username` | `--username` | display name of the messages (optional) |
 
 ```toml
 [feathers.ops_discord]
 type = "discord"
 webhook_url = { keychain = { service = "kjak", account = "ops_discord" } }
-username = "kjak"        # optional display name
+username = "kjak"
 ```
 
 The message is one embed colored by level. kjak executes the webhook with
 `?wait=true` (keeping a `thread_id` of the URL) so that Discord confirms the
-created message. Mentions are disabled (`allowed_mentions.parse = []`). Discord
-limits an embed description to 4096 characters: a longer body is cut and ends
-with `…`.
+created message. Mentions are disabled (`allowed_mentions.parse = []`). A body
+longer than 4096 characters is cut and ends with `…`.
 
 ### email
+
+| key | CLI | default | meaning |
+|---|---|---|---|
+| `host` | `--host` | required | SMTP server |
+| `port` | `--port` | 587 / 465 / 25 | by `security`: `starttls` / `tls` / `none` |
+| `security` | `--security` | `"starttls"` | `starttls` (required, never falls back), `tls` (implicit TLS), `none` |
+| `user` | `--user` | — | SMTP user; goes with `password` |
+| `password` | `--secret-env`, `--secret-keychain`, `--secret-stdin` | — | a credential |
+| `from` | `--from` | required | sender, a bare address |
+| `to` | `--mail-to` | required | recipients, bare addresses |
+| `subject_prefix` | `--subject-prefix` | — | put before every subject |
 
 ```toml
 [feathers.oncall_mail]
 type = "email"
 host = "smtp.example.com"
-port = 587                       # default: 587 starttls, 465 tls, 25 none
-security = "starttls"            # starttls (default), tls (implicit TLS), none
+port = 587
+security = "starttls"
 user = "kjak@example.com"
 password = { env = "KJAK_SMTP_PASSWORD" }
 from = "kjak@example.com"
@@ -109,26 +191,64 @@ subject_prefix = "[kjak]"
 levels = ["error", "critical"]
 ```
 
-- `starttls` requires the server to offer STARTTLS: kjak never falls back to
-  clear text. Certificates are verified (TLS 1.2 or later).
-- `user` and `password` go together; with `security = "none"` they are refused
-  (the password would travel in clear text). `none` suits a local relay.
+- Certificates are verified (TLS 1.2 or later); there is no option to skip
+  the check.
+- `user` and `password` go together; with `security = "none"` they are
+  refused (the password would travel in clear text). `none` suits a local
+  relay.
 - AUTH PLAIN, else AUTH LOGIN.
 - `from` and `to` are bare addresses (`name@example.com`, no display name).
 - The subject is the title, or `[LEVEL] first line of the body`, after
-  `subject_prefix`. The body is UTF-8 quoted-printable text, followed by the URL.
+  `subject_prefix`. The body is UTF-8 quoted-printable text, followed by the
+  URL.
+- One refused recipient refuses the whole message: nothing is sent.
 
-## `[groups.NAME]`
+## 5. Groups
+
+A group is a named list of feathers, so that one `--to` reaches several
+destinations.
+
+```sh
+kjak group set development dev_slack dev_discord      # create or replace
+kjak group set incident dev_slack dev_discord oncall_mail
+kjak group show development
+kjak group remove development
+kjak send --to development "deploy started"
+```
 
 ```toml
 [groups.development]
 feathers = ["dev_slack", "dev_discord"]
 ```
 
-At least one member, each a feather, each once. Groups do not nest in
-v0.1.0.
+- At least one member, each a feather (groups do not nest), each once.
+- `group set` replaces the whole member list.
+- Several targets at once: `--to development,oncall_mail` or `--to A --to B`.
+  A feather named twice is sent to once.
+- A member that is **disabled** or whose `levels` exclude the message's level
+  is **skipped**: shown as `skip`, not counted as a failure.
+- Every member is delivered independently; one failure does not stop the
+  others.
 
-## `[templates.NAME]`
+Partial failure:
+
+```
+ok    dev_slack (slack) delivered in 280ms (1 attempt)
+FAIL  dev_discord (discord) failed (1 attempt): HTTP 404: Unknown Webhook
+skip  oncall_mail (email): level_filter (group development)
+partial: 1 delivered, 1 failed, 1 skipped
+```
+
+The outcome is `partial` and the exit status `1`.
+
+## 6. Templates
+
+```sh
+kjak template set deploy --title 'Deployed {{.service}}' \
+    --body '{{.service}} {{.version}} is live' --level success
+kjak template render deploy --var service=api --var version=1.4.2
+kjak send --to development --template deploy --var service=api --var version=1.4.2
+```
 
 ```toml
 [templates.deploy]
@@ -139,11 +259,211 @@ url = "https://ci.example.com/runs/{{.run}}"
 ```
 
 `body` is required. Variables are given with `--var KEY=VALUE`; a missing one
-is an error. Only `text/template`'s built-in actions are available.
+is an error. Only `text/template`'s built-in actions are available. A
+template file (`--template-file FILE`) holds the same keys at the top level.
 
-A template file (`--template-file`) holds the same keys at the top level.
+## 7. Credentials and security
 
-## A complete example
+### 7.1 Credential references
+
+A feather's secret — a Slack or Discord webhook URL (the URL is the
+credential) or an SMTP password — is a reference with exactly one source,
+resolved when a send runs:
+
+| source | TOML | CLI | resolved from |
+|---|---|---|---|
+| `env` | `{ env = "KJAK_DEV_SLACK_WEBHOOK" }` | `--secret-env VAR` | the environment variable (set and non-empty) |
+| `keychain` | `{ keychain = { service = "kjak", account = "dev_slack" } }` | `--secret-keychain SERVICE/ACCOUNT` | the OS keychain (macOS, Linux) |
+| `literal` | `{ literal = "https://hooks.slack.com/..." }` | `--secret-stdin` | the file itself |
+
+- Two sources, or none, is an error. A plain string (`webhook_url =
+  "https://..."`) is an error too.
+- A webhook URL must be `https` (`http` only for `localhost`), without user
+  information.
+- A credential that does not resolve stops the send before anything is sent
+  (exit 2).
+- `feather add` never takes the secret as an argument: by reference, or on
+  standard input with `--secret-stdin`.
+
+**Which source to use**
+
+| situation | use |
+|---|---|
+| your own macOS or Linux desktop | `keychain` |
+| CI, servers, containers, cron, Windows | `env`, filled from the platform's secret store |
+| a quick local test | `literal` via `--secret-stdin`, in your global file only |
+
+kjak only reads the keychain. Create the entry with the OS tool, which
+prompts for the secret so it stays out of your shell history:
+
+```sh
+security add-generic-password -s kjak -a dev_slack -w                  # macOS
+secret-tool store --label "kjak dev_slack" service kjak account dev_slack   # Linux (libsecret-tools)
+```
+
+On Linux a Secret Service (a desktop session with GNOME Keyring or KWallet)
+must run; headless machines should use `env`. Windows has no keychain support
+in kjak.
+
+### 7.2 What kjak shows
+
+Secrets are never printed. `feather show`, `feather list`, `config show` and
+`config trust` print the source instead:
+
+```
+webhook_url  env:KJAK_DEV_SLACK_WEBHOOK
+webhook_url  keychain:kjak/dev_slack
+webhook_url  literal:[REDACTED]
+```
+
+Errors and reports remove every resolved secret (and a webhook URL's path and
+query) before printing, including text a provider echoes back.
+
+### 7.3 Files and permissions
+
+kjak creates its files with mode `0600` (owner only) and keeps an existing
+file's mode minus write permission for group and others. A `literal` secret
+sits in the file in clear text, so prefer `env` or `keychain`, and keep files
+with literals out of backups you share and out of repositories.
+
+### 7.4 Project configuration trust
+
+A `.kjak.toml` in a repository can name environment variables and keychain
+entries and the URLs they are sent to. A repository you clone could therefore
+make `kjak send` send your secrets elsewhere. kjak uses a project file only
+after you trust that exact file:
+
+```sh
+kjak config trust
+```
+
+```
+project configuration /home/me/src/app/.kjak.toml
+sha256 3f1c...e9
+  feather app_slack: slack, webhook URL from env:APP_SLACK_WEBHOOK
+  group app: app_slack, dev_slack
+Trust this exact content? [y/N]
+```
+
+- The trust is the file's canonical path and the SHA-256 of its content,
+  stored in the trust store. **Any change** of the content, or another path,
+  needs a new trust.
+- An untrusted project file is an error for every command that would use it
+  (exit 2), never used and never ignored silently:
+
+  ```
+  kjak: the project configuration is not trusted: /home/me/src/app/.kjak.toml
+    review it, then run `kjak config trust` (or pass --no-project to ignore it)
+  ```
+
+- In an untrusted repository, read `.kjak.toml` first, or run kjak with
+  `--no-project`.
+- Without a terminal, `config trust` requires `--yes`: review the file first.
+- `kjak config untrust` withdraws the trust; `kjak config path` shows the
+  state (`trusted`, `untrusted`, `untrusted (changed since it was trusted)`).
+
+### 7.5 Keeping secrets out of Git
+
+- Commit a `.kjak.toml` with `env` or `keychain` references only, never a
+  `literal`. Each user then provides the secret in their own environment.
+- Webhook URLs leak easily: check `git diff` before committing, and revoke
+  (delete and recreate) a webhook whose URL was committed or shared.
+- A file that holds literal secrets belongs in your global configuration, not
+  in the repository.
+
+### 7.6 In CI
+
+- Give secrets as environment variables from the CI's secret store
+  (`env` references); the keychain is not available there.
+- Trusting `.kjak.toml` in CI with `kjak config trust --yes` trusts whatever
+  the checked-out commit contains, including a change in a pull request. Use
+  `--no-project` with a configuration the pipeline controls (`--config FILE`
+  or `KJAK_CONFIG`), or trust only in pipelines that run reviewed code.
+- Use `-o json` to keep a machine-readable record; it contains no secret.
+
+More: [security.md](security.md).
+
+## 8. Delivery behavior
+
+### Deadline and timeout
+
+`timeout` (`--timeout`, default 10s, at most 10m) is the deadline of the
+**whole send**: every attempt and every wait between attempts, of every
+feather, ends by then. A feather still waiting for a free slot when it passes
+fails without an attempt.
+
+### Retries
+
+- At most `max_retries` (default 2) retries after the first attempt, only of
+  failures known to be transient: HTTP 429, 408 and 5xx other than 502/504,
+  network errors before the request was fully sent, SMTP 4xx.
+- Waits: `Retry-After` when the provider gives one, else 0.5s, 1s, 2s, …
+  (at most 5s, with jitter). A wait that does not fit the deadline is not
+  started.
+- Never retried: refusals such as HTTP 400/401/403/404, SMTP 5xx, a wrong
+  SMTP password, a failed certificate check.
+
+### Unknown acceptance
+
+When the whole request reached the provider but no answer came back (the
+connection broke, the deadline passed, HTTP 502/504), the message **may have
+been delivered**. kjak does not retry it, to avoid a duplicate, and reports it
+as failed with unknown acceptance:
+
+```
+????  dev_slack (slack) failed (1 attempt): ... [acceptance unknown: it may have been delivered; not retried]
+```
+
+Check the destination before sending again.
+
+### Cancellation
+
+Ctrl-C (SIGINT) cancels the send: attempts in progress end as soon as
+possible, queued feathers are not attempted, the report is printed with the
+outcome `canceled`, and kjak exits 130. A second Ctrl-C ends kjak at once.
+
+### Results and exit status
+
+| outcome | when | exit |
+|---|---|---|
+| `success` | nothing failed (skipped targets allowed) | 0 |
+| `partial` | some delivered, some failed | 1 |
+| `failure` | none delivered, at least one failed | 1 |
+| `canceled` | SIGINT | 130 |
+| (error) | input, configuration, trust, routing or credential error before sending: nothing was sent | 2 |
+
+Text output marks each target: `ok` delivered, `FAIL` failed, `????` failed
+with unknown acceptance, `skip` skipped, `plan` (dry run). `-q` prints
+nothing when everything was delivered.
+
+### JSON output
+
+`-o json` prints one document with `schema_version: 1`: `outcome`,
+`summary` (`total`, `delivered`, `failed`, `unknown`, `skipped`) and one entry
+per target in `results` (`status`, `acceptance`, `attempts`, `error`,
+`history` of every attempt). A command that fails before sending prints the
+same shape with `outcome: "error"` and `error: {code, message}` on stdout,
+and the diagnostic on stderr. Field by field: [cli.md](cli.md#json-output--o-json).
+
+### Reading errors
+
+- `kjak: ...` on stderr with exit 2: nothing was sent; the message names the
+  file, key, feather or variable.
+- A `FAIL` line: the provider refused (`HTTP 404: ...`, `SMTP 535 ...`) or the
+  network failed; `-o json` shows every attempt.
+- [troubleshooting.md](troubleshooting.md) lists the messages and their fixes.
+
+### Differences between operating systems
+
+| | macOS | Linux | Windows |
+|---|---|---|---|
+| global file without `XDG_CONFIG_HOME` | `~/.config/kjak/config.toml` | `~/.config/kjak/config.toml` | `%AppData%\kjak\config.toml` |
+| `keychain` credentials | yes (`security`) | yes (`secret-tool`, needs a Secret Service) | no: use `env` |
+| configuration lock | flock | flock | LockFileEx |
+
+Details of delivery: [delivery.md](delivery.md).
+
+## 9. A complete example
 
 ```toml
 [defaults]
@@ -180,28 +500,23 @@ body = "{{.service}} {{.version}} is live"
 level = "success"
 ```
 
-## Changes made by kjak
+## 10. Changes made by kjak
 
 `feather add`, `group set`, `template set` and the other changing commands
 parse the file, change it, validate the result (alone and merged with the
 other file) and write it back:
 
 - atomically: a temporary file in the same directory, synced, renamed over
-  the file; the file keeps its mode, minus write permission for group and
-  others (a new file is 0600);
+  the file;
 - through symbolic links: a file that is a link (a dotfiles repository) stays
   a link and its target is written; a link to nothing is refused;
-- under a lock: an exclusive OS lock (flock on macOS/Linux, LockFileEx on
-  Windows) on `<file>.lock`; a second kjak fails instead of waiting (`the
-  configuration is being changed by another kjak process`). The OS releases
-  the lock when its process ends, so a crashed or killed kjak blocks nobody;
-  the `.lock` file itself stays (it is never followed if it is a symbolic
-  link). `kjak send` only reads and takes no lock;
+- under a lock: an exclusive OS lock on `<file>.lock`; a second kjak fails
+  instead of waiting (`the configuration is being changed by another kjak
+  process`). The OS releases the lock when its process ends, so a crashed
+  kjak blocks nobody; the `.lock` file itself stays and is harmless. `kjak
+  send` only reads and takes no lock;
 - checked: if the file changed while kjak wrote it (an editor that ignores
   the lock), kjak stops and leaves that change alone.
 
 kjak writes its own layout: **comments and key order are not kept**. Edit by
 hand if you want to keep them.
-
-A project file is changed only when it is trusted (or does not exist yet);
-the trust then moves to the content kjak wrote.

@@ -1,5 +1,7 @@
 # kjak
 
+[日本語](README_ja.md) · [Getting started](docs/getting-started.md) · [Configuration](docs/configuration.md)
+
 kjak delivers one notification to many destinations — Slack, Discord and
 e-mail — from the command line, a script or CI. Each destination is a
 **feather**; feathers can be gathered in **groups**.
@@ -40,12 +42,16 @@ windows/amd64.
 
 ## Quick start
 
+The [Getting started guide](docs/getting-started.md) walks through each step
+for Slack, Discord and e-mail.
+
 ```sh
 # 1. a configuration file (~/.config/kjak/config.toml)
 kjak config init
 
 # 2. a feather; its webhook URL comes from an environment variable
-export KJAK_DEV_SLACK_WEBHOOK='https://hooks.slack.com/services/...'
+printf 'Slack webhook URL: '; read -rs KJAK_DEV_SLACK_WEBHOOK; echo
+export KJAK_DEV_SLACK_WEBHOOK
 kjak feather add dev_slack --type slack --secret-env KJAK_DEV_SLACK_WEBHOOK
 
 # 3. a group
@@ -145,7 +151,7 @@ Any change to the file withdraws the trust. See
 [docs/configuration.md](docs/configuration.md) and
 [docs/security.md](docs/security.md).
 
-## Known limitations of v0.1.0
+## Known limitations
 
 - Feathers: Slack (incoming webhooks), Discord (webhooks) and e-mail (SMTP).
   **OS-native notifications are not supported** (a future feather); a feather
@@ -161,8 +167,9 @@ More in [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## Documentation
 
+- [Getting started](docs/getting-started.md) ([日本語](docs/getting-started_ja.md)): install, Slack, Discord, e-mail, recipes
+- [Configuration reference](docs/configuration.md) ([日本語](docs/configuration_ja.md)): every key, CLI management, credentials, trust, delivery behavior
 - [CLI usage](docs/cli.md)
-- [Configuration reference and feather examples](docs/configuration.md)
 - [Credentials, trust and security](docs/security.md)
 - [Delivery, retry and acceptance semantics](docs/delivery.md)
 - [Development guide](docs/development.md)
