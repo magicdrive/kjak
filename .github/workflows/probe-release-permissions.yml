@@ -1,0 +1,58 @@
+name: Probe (release permissions, read-only)
+
+# Throwaway diagnostic for the v0.0.1 release failure (run 39766468249):
+# what GITHUB_TOKEN can read with the permissions of the release jobs.
+# Read-only: nothing is created, edited or deleted.
+
+on:
+  push:
+    branches:
+      - 'probe/release-attestation-permissions'
+
+permissions:
+  contents: read
+
+env:
+  TAG: v0.0.1
+
+jobs:
+  publish_perms:
+    name: Probe (publish job, contents write)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          gh --version | head -1
+          probe() { echo "::group::$*"; "$@"; echo "exit=$?"; echo "::endgroup::"; }
+          probe gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '{immutable, draft}'
+          probe gh api "repos/$GITHUB_REPOSITORY/immutable-releases"
+          probe gh api "repos/$GITHUB_REPOSITORY/attestations/sha1:b402586a7595e1a50d0f68d7dad30de6e8f62ebd?predicate_type=release" --jq '.attestations | length'
+          probe gh release verify "$TAG" --repo "$GITHUB_REPOSITORY"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir public --pattern checksums.txt
+          probe gh release verify-asset "$TAG" public/checksums.txt --repo "$GITHUB_REPOSITORY"
+
+  verify_perms:
+    name: Probe (contents write and attestations read)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      attestations: read
+    steps:
+      - name: Probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          gh --version | head -1
+          probe() { echo "::group::$*"; "$@"; echo "exit=$?"; echo "::endgroup::"; }
+          probe gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '{immutable, draft}'
+          probe gh api "repos/$GITHUB_REPOSITORY/immutable-releases"
+          probe gh api "repos/$GITHUB_REPOSITORY/attestations/sha1:b402586a7595e1a50d0f68d7dad30de6e8f62ebd?predicate_type=release" --jq '.attestations | length'
+          probe gh release verify "$TAG" --repo "$GITHUB_REPOSITORY"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir public --pattern checksums.txt
+          probe gh release verify-asset "$TAG" public/checksums.txt --repo "$GITHUB_REPOSITORY"
