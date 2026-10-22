@@ -1,0 +1,89 @@
+#!/bin/sh
+# Checks the archives of a GoReleaser run, without publishing anything:
+#   - checksums.txt lists exactly the five archives, each matches it;
+#   - each platform has exactly one archive holding kjak (kjak.exe), LICENSE
+#     and README.md, and nothing else;
+#   - each binary is built for the platform its archive names (when `file`
+#     exists) and is statically linked (CGO_ENABLED=0);
+#   - the binary for this machine runs and prints the expected version.
+#
+# usage: scripts/verify-dist.sh [DIST] [EXPECTED-VERSION]   (e.g. v0.1.0)
+set -eu
+
+dist=${1:-dist}
+want_version=${2:-}
+fail() { echo "verify-dist: $*" >&2; exit 1; }
+
+[ -d "$dist" ] || fail "no directory $dist"
+cd "$dist"
+sums=checksums.txt
+[ -f "$sums" ] || fail "no $sums"
+
+sha256() {
+	if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{ print $1 }'
+	else shasum -a 256 "$1" | awk '{ print $1 }'; fi
+}
+
+targets="darwin_arm64 darwin_amd64 linux_arm64 linux_amd64 windows_amd64"
+[ "$(wc -l < "$sums" | tr -d ' ')" = 5 ] || fail "$sums lists $(wc -l < "$sums" | tr -d ' ') files, want 5"
+while read -r sum file; do
+	[ -f "$file" ] || fail "$file of $sums is missing"
+	[ "$(sha256 "$file")" = "$sum" ] || fail "checksum mismatch: $file"
+done < "$sums"
+echo "ok   checksums (5 archives)"
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+host_os=$(go env GOOS 2>/dev/null || uname -s | tr '[:upper:]' '[:lower:]')
+host_arch=$(go env GOARCH 2>/dev/null || uname -m)
+case "$host_arch" in x86_64) host_arch=amd64 ;; aarch64) host_arch=arm64 ;; esac
+ran=no
+
+for target in $targets; do
+	os=${target%_*}
+	arch=${target#*_}
+	if [ "$os" = windows ]; then ext=zip bin=kjak.exe; else ext=tar.gz bin=kjak; fi
+	set -- kjak_*_"$target.$ext"
+	[ -f "$1" ] || fail "$target: no .$ext archive"
+	[ $# -eq 1 ] || fail "$target: $# archives"
+	archive=$1
+	awk -v f="$archive" '$2 == f { found = 1 } END { exit !found }' "$sums" || fail "$archive is not in $sums"
+
+	out="$work/$target"
+	mkdir -p "$out"
+	if [ "$ext" = zip ]; then
+		unzip -q "$archive" -d "$out"
+	else
+		tar -xzf "$archive" -C "$out"
+	fi
+	contents=$(cd "$out" && find . -type f | sed 's|^\./||' | LC_ALL=C sort | tr '\n' ' ')
+	[ "$contents" = "LICENSE README.md $bin " ] || fail "$archive holds: $contents"
+	[ "$ext" = zip ] || [ -x "$out/$bin" ] || fail "$archive: $bin is not executable"
+
+	if command -v file >/dev/null 2>&1; then
+		desc=$(file -b "$out/$bin")
+		case "$os/$arch" in
+			linux/amd64) want="ELF 64-bit.*x86-64" ;;
+			linux/arm64) want="ELF 64-bit.*(aarch64|ARM aarch64)" ;;
+			darwin/amd64) want="Mach-O 64-bit.*x86_64" ;;
+			darwin/arm64) want="Mach-O 64-bit.*arm64" ;;
+			windows/amd64) want="PE32\+.*x86-64" ;;
+		esac
+		echo "$desc" | grep -Eq "$want" || fail "$archive: $bin is $desc"
+		if [ "$os" = linux ]; then
+			echo "$desc" | grep -q "statically linked" || fail "$archive: $bin is not statically linked: $desc"
+		fi
+	fi
+
+	if [ "$os" = "$host_os" ] && [ "$arch" = "$host_arch" ]; then
+		v=$("$out/$bin" version)
+		case "$v" in "kjak version v"*) ;; *) fail "$archive: version prints '$v'" ;; esac
+		if [ -n "$want_version" ] && [ "$v" != "kjak version $want_version" ]; then
+			fail "$archive: '$v', want 'kjak version $want_version'"
+		fi
+		ran=yes
+	fi
+	echo "ok   $archive"
+done
+[ "$ran" = yes ] || echo "note no archive for this machine ($host_os/$host_arch): no binary was run"
+echo "verify-dist: OK"

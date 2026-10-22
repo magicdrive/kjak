@@ -1,0 +1,21 @@
+Usage:
+  kjak group list [-o text|json]
+  kjak group show NAME [-o text|json]
+  kjak group set NAME FEATHER... [--scope global|project]
+  kjak group remove NAME [--scope global|project]
+
+A group is a named list of feathers. Its members are feathers only: groups do
+not nest in v0.1.0. `set` creates or replaces the group whole.
+
+A member that is disabled, or does not accept the level of a message, is
+skipped (and reported as skipped) when the group is sent to.
+
+Options:
+  -s, --scope SCOPE   global or project (default: the file that defines it,
+                      else global)
+  -c, --config FILE   The global configuration file
+      --no-project    Ignore ./.kjak.toml
+  -h, --help          Show this help
+
+Example:
+  kjak group set development dev_slack dev_discord

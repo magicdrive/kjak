@@ -1,0 +1,47 @@
+Usage:
+  kjak feather list [-o text|json]
+  kjak feather show NAME [-o text|json]
+  kjak feather add NAME --type slack|discord|email [options]
+  kjak feather remove NAME [--scope global|project]
+  kjak feather enable NAME [--scope global|project]
+  kjak feather disable NAME [--scope global|project]
+  kjak feather types
+
+A feather is one notification destination.
+
+Options of add:
+      --type TYPE              slack, discord or email (required)
+  -s, --scope SCOPE            global (default) or project
+      --force                  Replace a feather of the same name
+      --disabled               Add it disabled
+      --levels L[,L]           Accept only these levels (default: all)
+
+  The secret (webhook_url of slack and discord, password of email), one of:
+      --secret-env VAR         Read it from the environment variable VAR
+      --secret-keychain S/A    Read it from the OS keychain (service/account)
+      --secret-stdin           Store it in the file, read from standard input
+
+  discord:
+      --username NAME          Display name of the messages
+  email:
+      --host HOST              SMTP server (required)
+      --port PORT              Default 587 (starttls), 465 (tls), 25 (none)
+      --security MODE          starttls (default), tls or none
+      --user USER              SMTP user (with a password secret)
+      --from ADDRESS           Sender (required)
+      --mail-to ADDRESS[,..]   Recipients (required, repeatable)
+      --subject-prefix TEXT    Prefix of every subject
+
+Common options:
+  -c, --config FILE            The global configuration file
+      --no-project             Ignore ./.kjak.toml
+  -h, --help                   Show this help
+
+Without --scope, remove, enable and disable change the file that defines the
+feather. A project file is changed only when it is trusted.
+
+Examples:
+  kjak feather add dev_slack --type slack --secret-env KJAK_DEV_SLACK_WEBHOOK
+  kjak feather add ops_mail --type email --host smtp.example.com \
+      --user kjak@example.com --secret-keychain kjak/ops_mail \
+      --from kjak@example.com --mail-to oncall@example.com

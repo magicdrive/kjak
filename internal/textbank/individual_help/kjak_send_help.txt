@@ -1,0 +1,49 @@
+Usage:
+  kjak send [options] BODY...
+  kjak send [options] --stdin
+  kjak send [options] --json-input FILE|-
+  kjak send [options] --template NAME [--var KEY=VALUE]...
+  kjak send [options] --template-file FILE [--var KEY=VALUE]...
+
+Send one message to feathers and groups. The message comes from exactly one
+input: the BODY arguments (joined by spaces), standard input, a JSON document
+({"title", "body", "level", "url"}), a configured template or a template file.
+
+Targets:
+  -t, --to NAME[,NAME]    A feather or a group (repeatable). Default: the
+                          configuration's defaults.targets
+
+Message:
+  -T, --title TEXT        Title (one line)
+  -l, --level LEVEL       info, success, warning, error or critical
+                          (default: defaults.level, else info)
+  -u, --url URL           A link (http or https)
+      --stdin             Read the body from standard input
+      --json-input FILE   Read the message as JSON ("-": standard input);
+                          excludes --title, --level and --url
+      --template NAME     Render a template of the configuration
+      --template-file F   Render a template file (TOML: title, body, level, url)
+      --var KEY=VALUE     A template variable (repeatable)
+
+Delivery:
+      --timeout DURATION  Deadline of the whole send, retries included
+                          (default: defaults.timeout, else 10s)
+      --max-retries N     Retries of a retryable failure (default 2)
+      --concurrency N     Feathers delivered at the same time (default 5)
+      --dry-run           Resolve targets and credentials; send nothing
+
+Output and configuration:
+  -o, --output FORMAT     text (default) or json (schema_version 1)
+  -q, --quiet             No text output when everything was delivered
+  -c, --config FILE       The global configuration file
+      --no-project        Ignore ./.kjak.toml
+  -h, --help              Show this help
+
+Exit status: 0 delivered, 1 a delivery failed, 2 nothing was sent (input,
+configuration or preflight error), 130 interrupted.
+
+Examples:
+  kjak send --to dev_slack "build finished"
+  make test 2>&1 | tail -n 20 | kjak send --to development --stdin --level error --title "tests failed"
+  kjak send --to ops --template deploy --var service=api --var version=1.4.2
+  echo '{"title":"Disk","body":"/var at 91%","level":"warning"}' | kjak send --to ops --json-input -

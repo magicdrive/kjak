@@ -1,0 +1,2 @@
+go test fuzz v1
+string("httP://127.0.0.0")

@@ -1,0 +1,22 @@
+Usage:
+  kjak template list [-o text|json]
+  kjak template show NAME [-o text|json]
+  kjak template set NAME --body TEXT|--body-stdin [--title T] [--level L] [--url U] [--scope S]
+  kjak template remove NAME [--scope global|project]
+  kjak template render NAME [--var KEY=VALUE]... [-o text|json]
+
+A template is a message whose fields are Go text/template strings, e.g.
+"{{.service}} {{.version}} is live". A variable a template uses must be given
+(--var); render shows the message without sending it.
+
+Options:
+  -s, --scope SCOPE   global or project (default: the file that defines it,
+                      else global)
+  -c, --config FILE   The global configuration file
+      --no-project    Ignore ./.kjak.toml
+  -h, --help          Show this help
+
+Example:
+  kjak template set deploy --title 'Deployed {{.service}}' \
+      --body '{{.service}} {{.version}} is live' --level success
+  kjak template render deploy --var service=api --var version=1.4.2

@@ -1,0 +1,357 @@
+name: Release
+
+# Pushing an annotated tag vX.Y.Z is the approval of a release; from there
+# the release is fully automatic (docs/release.md):
+#
+#   1 tag        the tag is annotated, well formed, on main, and new
+#   2 ci         the whole CI (ci.yml) on the tagged commit, CI Gate included
+#   3 build      GoReleaser builds once (--skip=publish), the archives are
+#                verified, attested and kept as the artifact of this run
+#   4 draft      exactly those files are uploaded to a draft release
+#   5 verify     the draft's assets are downloaded and compared with the
+#                build, their attestations verified
+#   6 publish    the draft is published; the repository's immutable releases
+#                make it immutable; the release attestation is verified
+#   7 homebrew   the formula (from the published checksums) goes to the tap
+#   8 post       the public assets, attestations and formula are checked
+#
+# Build once, publish once, recover forward, fail closed: nothing is rebuilt
+# after step 3, an asset is never replaced, a failure stops the release, and
+# a broken release is fixed by a new version, never by changing this one.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: '1.27.3'
+  GOTOOLCHAIN: local
+  GORELEASER_VERSION: v2.18.2
+  TAG: ${{ github.ref_name }}
+
+jobs:
+  tag:
+    name: Tag Validation
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the tag
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          case "$TAG" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "not a release tag: $TAG (want vX.Y.Z)"; exit 1 ;;
+          esac
+          echo "$TAG" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$' \
+            || { echo "not semantic: $TAG"; exit 1; }
+          # the checkout may hold a lightweight copy of the tag: fetch it as it is
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          [ "$(git cat-file -t "refs/tags/$TAG")" = tag ] || { echo "$TAG is not an annotated tag"; exit 1; }
+          sha=$(git rev-parse "refs/tags/$TAG^{commit}")
+          [ "$sha" = "$GITHUB_SHA" ] || { echo "the tag moved: $sha != $GITHUB_SHA"; exit 1; }
+          git fetch origin main
+          git merge-base --is-ancestor "$sha" origin/main || { echo "$TAG is not on main"; exit 1; }
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "a release $TAG exists already: publish once (recover forward with a new version)"; exit 1
+          fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          case "$TAG" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  ci:
+    name: CI
+    needs: tag
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build, Verify and Attest
+    needs: [tag, ci]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write     # attestation signing
+      attestations: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install GoReleaser (pinned)
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
+        with:
+          distribution: goreleaser
+          version: ${{ env.GORELEASER_VERSION }}
+          install-only: true
+
+      # The only build of the release. GoReleaser publishes nothing here
+      # (--skip=publish, and the configuration disables its release).
+      - name: Build the release archives
+        run: |
+          make release-check
+          goreleaser release --clean --skip=publish
+
+      - name: Verify the archives
+        run: sh scripts/verify-dist.sh dist "$TAG"
+
+      # a pre-release gets no formula (scripts/formula.sh refuses it)
+      - name: Formula from the checksums
+        if: needs.tag.outputs.prerelease == 'false'
+        run: sh scripts/formula.sh dist "$TAG" > dist/kjak.rb
+
+      - name: Attest the build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+
+      - name: Keep the release files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+            dist/kjak.rb
+          if-no-files-found: error  # kjak.rb is absent for a pre-release
+          retention-days: 90
+
+  draft:
+    name: Draft Release
+    needs: [tag, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the release files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: release
+
+      - name: Create the draft and upload the assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          # publish once: no release, and no draft of an earlier run, for this
+          # tag (drafts are not bound to tags and the tag job cannot see them)
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
+            --jq '.[] | select(.tag_name == env.TAG) | "\(.id) draft=\(.draft)"')
+          if [ -n "$existing" ]; then
+            echo "a release or draft of $TAG exists: $existing"
+            echo "delete a stale draft (docs/release.md, Recovery) or release a new version"
+            exit 1
+          fi
+          cd release
+          sha256sum -c checksums.txt
+          notes="kjak $TAG. Install: brew install magicdrive/tap/kjak. Verify: gh attestation verify <archive> --repo $GITHUB_REPOSITORY"
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+            --title "kjak $TAG" --notes "$notes" \
+            ./*.tar.gz ./*.zip checksums.txt
+
+  verify:
+    name: Pre-publish Verification
+    needs: [tag, draft]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # a draft is visible to writers only; nothing is changed here
+      attestations: read
+    steps:
+      - name: Download the release files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: built
+
+      - name: The draft holds exactly the built files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          [ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true ] \
+            || { echo "$TAG is not a draft"; exit 1; }
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir draft
+          (cd built && ls -- *.tar.gz *.zip checksums.txt) | sort > built.list
+          (cd draft && ls) | sort > draft.list
+          [ "$(wc -l < built.list)" -eq 6 ] || { echo "expected 5 archives and checksums.txt"; exit 1; }
+          diff built.list draft.list || { echo "the draft's assets differ from the build"; exit 1; }
+          while read -r f; do
+            cmp "built/$f" "draft/$f" || { echo "$f differs from the build"; exit 1; }
+          done < built.list
+          (cd draft && sha256sum -c checksums.txt)
+
+      - name: Build attestations of the draft's assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          for f in draft/*.tar.gz draft/*.zip draft/checksums.txt; do
+            gh attestation verify "$f" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-ref "refs/tags/$TAG" --deny-self-hosted-runners
+          done
+
+  publish:
+    name: Publish (Immutable Release)
+    needs: [tag, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the release files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: built
+
+      - name: Publish the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          case "$TAG" in
+            *-*) gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease ;;
+            *) gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest ;;
+          esac
+
+      # Immutable releases are a repository setting (docs/release.md). A
+      # published release that is not immutable stops here, before the tap:
+      # recover forward (fix the setting, release a new version).
+      - name: The release is immutable and attested
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          immutable=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.immutable')
+          [ "$immutable" = true ] || { echo "$TAG is published but not immutable (immutable=$immutable)"; exit 1; }
+          gh release verify "$TAG" --repo "$GITHUB_REPOSITORY"
+          for f in built/*.tar.gz built/*.zip built/checksums.txt; do
+            gh release verify-asset "$TAG" "$f" --repo "$GITHUB_REPOSITORY"
+          done
+
+  homebrew:
+    name: Homebrew Formula
+    needs: [tag, publish]
+    if: needs.tag.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the release files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: built
+
+      # The formula's URLs and SHA-256 are those of the published assets.
+      - name: Check the formula against the published release
+        run: |
+          set -eu
+          grep -o 'https://github.com/magicdrive/kjak/releases/download/[^"]*' built/kjak.rb | sort -u > urls
+          [ "$(wc -l < urls)" -eq 4 ] || { echo "expected 4 URLs in the formula"; exit 1; }
+          while read -r url; do
+            file=${url##*/}
+            want=$(awk -v f="$file" '$2 == f { print $1 }' built/checksums.txt)
+            got=$(curl -fsSL --retry 3 "$url" | sha256sum | awk '{ print $1 }')
+            [ -n "$want" ] && [ "$got" = "$want" ] || { echo "$url: $got != $want"; exit 1; }
+            grep -q "sha256 \"$want\"" built/kjak.rb || { echo "the formula lacks the SHA-256 of $file"; exit 1; }
+          done < urls
+
+      - name: The tap token is set
+        env:
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          [ -n "$TAP_GITHUB_TOKEN" ] || { echo "TAP_GITHUB_TOKEN is not set: the formula is not published (recover: set it, re-run this job)"; exit 1; }
+
+      - name: Checkout the tap
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: magicdrive/homebrew-tap
+          ref: main
+          path: tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+
+      - name: Publish Formula/kjak.rb
+        run: |
+          set -eu
+          mkdir -p tap/Formula
+          cp built/kjak.rb tap/Formula/kjak.rb
+          cd tap
+          git config user.name "magicdrive bot"
+          git config user.email "hiroshi.ikegami+githubbot@magicdrive.jp"
+          git add Formula/kjak.rb
+          if git diff --cached --quiet; then
+            echo "Formula/kjak.rb is up to date"; exit 0
+          fi
+          git commit -m "kjak $TAG"
+          git push origin HEAD:main
+
+  post-release:
+    name: Post-release Verification (${{ matrix.os }})
+    needs: [tag, publish, homebrew]
+    # a pre-release skips homebrew; anything else that is not a success stops
+    if: >-
+      always() && needs.publish.result == 'success' &&
+      (needs.homebrew.result == 'success' ||
+       (needs.tag.outputs.prerelease == 'true' && needs.homebrew.result == 'skipped'))
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - name: The public assets and their attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -eu
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir public
+          cd public
+          if command -v sha256sum >/dev/null; then sha256sum -c checksums.txt; else shasum -a 256 -c checksums.txt; fi
+          for f in ./*.tar.gz ./*.zip checksums.txt; do
+            gh attestation verify "$f" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" --source-ref "refs/tags/$TAG"
+            gh release verify-asset "$TAG" "$f" --repo "$GITHUB_REPOSITORY"
+          done
+
+      - name: Install from the tap and run
+        if: runner.os == 'macOS' && needs.tag.outputs.prerelease == 'false'
+        run: |
+          set -eu
+          brew update
+          brew install magicdrive/tap/kjak
+          kjak version | tee /dev/stderr | grep -qx "kjak version $TAG"
+          brew test magicdrive/tap/kjak
