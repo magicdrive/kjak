@@ -235,26 +235,67 @@ jobs:
           name: release
           path: built
 
+      # Publish once: a re-run of this job finds the release public already
+      # and only verifies it (the release is never edited after publishing).
       - name: Publish the draft
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
+          draft=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)
+          if [ "$draft" != true ]; then
+            echo "$TAG is published already (a re-run): it is not published again, only verified"
+            exit 0
+          fi
           case "$TAG" in
             *-*) gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease ;;
             *) gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest ;;
           esac
 
-      # Immutable releases are a repository setting (docs/release.md). A
-      # published release that is not immutable stops here, before the tap:
-      # recover forward (fix the setting, release a new version).
+      # Immutable releases are a repository setting (docs/release.md). GitHub
+      # makes a published release immutable, and signs its release
+      # attestation, a moment after publishing (run 39766468249 read
+      # immutable=false 0.4s after, and no attestation 0.7s after): both are
+      # awaited, bounded (RELEASE_WAIT_TRIES x RELEASE_WAIT_PAUSE s), and only
+      # the reads are repeated; the verification itself runs once. A release
+      # that does not become immutable stops here, before the tap: recover
+      # forward (fix the setting, release a new version).
       - name: The release is immutable and attested
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          immutable=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.immutable')
-          [ "$immutable" = true ] || { echo "$TAG is published but not immutable (immutable=$immutable)"; exit 1; }
+          tries=${RELEASE_WAIT_TRIES:-18} pause=${RELEASE_WAIT_PAUSE:-10}
+          case "$tries$pause" in
+            *[!0-9]*) echo "RELEASE_WAIT_TRIES and RELEASE_WAIT_PAUSE are whole numbers"; exit 1 ;;
+          esac
+          [ "$tries" -ge 1 ] || { echo "RELEASE_WAIT_TRIES must be 1 or more"; exit 1; }
+          n=1 state=
+          until state=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '"\(.draft) \(.immutable)"') &&
+            [ "$state" = "false true" ]; do
+            case "$state" in
+              true\ *) echo "$TAG is still a draft: it was not published"; exit 1 ;;
+            esac
+            [ "$n" -lt "$tries" ] || {
+              echo "$TAG is published but not immutable after $tries reads, ${pause}s apart (draft immutable: ${state:-unknown})"
+              echo "the repository's immutable releases setting is off? (docs/release.md, Recovery)"
+              exit 1
+            }
+            n=$((n + 1)); sleep "$pause"
+          done
+          # the release attestation's subject is the tag ref (gh release verify)
+          ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)
+          case ${#ref} in
+            40) alg=sha1 ;;
+            64) alg=sha256 ;;
+            *) echo "the ref of $TAG is not a SHA: $ref"; exit 1 ;;
+          esac
+          n=1
+          until count=$(gh api "repos/$GITHUB_REPOSITORY/attestations/$alg:$ref?predicate_type=release" --jq '.attestations | length') &&
+            [ "$count" -gt 0 ]; do
+            [ "$n" -lt "$tries" ] || { echo "no release attestation of $TAG ($alg:$ref) after $tries reads, ${pause}s apart"; exit 1; }
+            n=$((n + 1)); sleep "$pause"
+          done
           gh release verify "$TAG" --repo "$GITHUB_REPOSITORY"
           for f in built/*.tar.gz built/*.zip built/checksums.txt; do
             gh release verify-asset "$TAG" "$f" --repo "$GITHUB_REPOSITORY"
@@ -300,15 +341,30 @@ jobs:
           path: tap
           token: ${{ secrets.TAP_GITHUB_TOKEN }}
 
-      - name: Publish Formula/kjak.rb
+      # The formula goes where Homebrew looks in the tap (Tap#formula_dir:
+      # the first of Formula/, HomebrewFormula/ and the root that exists).
+      # magicdrive/homebrew-tap keeps its formulas at the root: a new
+      # Formula/ there would hide every other formula of the tap.
+      - name: Publish the formula to the tap
         run: |
           set -eu
-          mkdir -p tap/Formula
-          cp built/kjak.rb tap/Formula/kjak.rb
+          dir=.
+          for d in Formula HomebrewFormula; do
+            if [ -d "tap/$d" ]; then dir=$d; break; fi
+          done
+          want=./kjak.rb
+          [ "$dir" = . ] || want=./$dir/kjak.rb
+          found=$(cd tap && find . -path ./.git -prune -o -name kjak.rb -type f -print)
+          stray=
+          for f in $found; do
+            [ "$f" = "$want" ] || stray="$stray $f"
+          done
+          [ -z "$stray" ] ||{ echo "a kjak.rb where Homebrew does not look (it reads $dir/): $stray; resolve it in the tap by hand"; exit 1; }
+          cp built/kjak.rb "tap/$dir/kjak.rb"
           cd tap
           git config user.name "magicdrive bot"
           git config user.email "hiroshi.ikegami+githubbot@magicdrive.jp"
-          git add Formula/kjak.rb
+          git add "$dir/kjak.rb"
           if git diff --cached --quiet; then
             echo "Formula/kjak.rb is up to date"; exit 0
           fi
