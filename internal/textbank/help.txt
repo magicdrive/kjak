@@ -1,0 +1,31 @@
+kjak - deliver a notification to Slack, Discord and e-mail
+
+Usage:
+  kjak <command> [options]
+
+Commands:
+  send       Send a message to feathers and groups
+  feather    Manage feathers (notification destinations)
+  group      Manage groups of feathers
+  config     Show, validate, initialize and trust configuration files
+  template   Manage message templates
+  version    Show the version
+
+Options:
+  -h, --help     Show this help
+  -v, --version  Show the version
+
+Run 'kjak <command> --help' for the options of a command.
+
+Feather types: slack, discord, email
+(OS-native notifications are not supported in v0.1.0.)
+
+Configuration:
+  global   $XDG_CONFIG_HOME/kjak/config.toml (default ~/.config/kjak/config.toml)
+  project  ./.kjak.toml, used only after `kjak config trust`
+
+Exit status:
+  0    success
+  1    a delivery failed (or its acceptance is unknown)
+  2    input, configuration or preflight error: nothing was sent
+  130  interrupted (SIGINT)

@@ -1,0 +1,4 @@
+Usage: kjak <command> [options]
+
+Commands: send, feather, group, config, template, version
+Run 'kjak --help' for details.

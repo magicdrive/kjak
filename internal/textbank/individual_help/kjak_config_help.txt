@@ -1,0 +1,22 @@
+Usage:
+  kjak config path [-o text|json]
+  kjak config show [-o text|json]
+  kjak config validate
+  kjak config init [--force]
+  kjak config trust [--yes]
+  kjak config untrust
+
+  path      Show the configuration files and the trust state of ./.kjak.toml
+  show      Show the effective configuration (literal secrets redacted)
+  validate  Check the global and the project file (trusted or not)
+  init      Create the global configuration file
+  trust     Trust ./.kjak.toml: its canonical path and the SHA-256 of its
+            content. A changed file needs a new trust. Without a terminal,
+            --yes is required (review the file first)
+  untrust   Withdraw the trust of ./.kjak.toml
+
+Options:
+  -c, --config FILE   The global configuration file
+      --no-project    Ignore ./.kjak.toml
+  -y, --yes           (trust) Do not ask
+  -h, --help          Show this help
