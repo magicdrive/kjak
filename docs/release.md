@@ -33,7 +33,9 @@ make publish tag=v0.1.0
 
 `make publish` checks the tag first (`make publish-check tag=v0.1.0` does only
 this, pushing nothing): `vX.Y.Z[-pre]`, on `main` with a clean working tree,
-`HEAD` equal to `origin/main`, no such tag locally or on origin. Then it runs
+`HEAD` equal to `origin/main`, no such tag locally or on origin, immutable
+releases enabled and, for a stable version, `TAP_GITHUB_TOKEN` set (it needs
+`gh`, logged in as a maintainer). Then it runs
 `make check`, creates the annotated tag and pushes only that tag. By hand,
 the same is:
 
@@ -52,8 +54,8 @@ Then watch the run of "Release":
 | 3 | Build, Verify and Attest | `goreleaser release --clean --skip=publish` (v2.18.2), `scripts/verify-dist.sh dist vX.Y.Z`, formula from `checksums.txt`, build provenance attestation of the archives and `checksums.txt`, upload as the `release` artifact | config check, build, archive contents, checksums, version, attestation |
 | 4 | Draft Release | refuses any release **or draft** of the tag (drafts of a failed run are not bound to the tag and invisible to the tag job), then `gh release create --draft --verify-tag` with exactly the artifact's files | an existing release/draft, upload |
 | 5 | Pre-publish Verification | downloads the draft's assets: same names, byte-identical to the build, checksums, `gh attestation verify` (signer workflow `release.yml`, source ref the tag, GitHub-hosted runner) | any difference |
-| 6 | Publish (Immutable Release) | `gh release edit --draft=false`; the release must report `immutable: true`; `gh release verify` and `gh release verify-asset` for every asset (release attestation) | not immutable, attestation |
-| 7 | Homebrew Formula | the formula's 4 URLs downloaded and hashed against `checksums.txt`; `Formula/kjak.rb` committed to `magicdrive/homebrew-tap` | mismatch, token missing, push |
+| 6 | Publish (Immutable Release) | `gh release edit --draft=false` (only a draft: a re-run of the job does not publish again); then waits, bounded (18 reads 10s apart), until the release reports `draft: false, immutable: true` and its release attestation exists (GitHub makes both a moment after publishing); then `gh release verify` and `gh release verify-asset` for every asset, once | still a draft, not immutable, no attestation, a verification |
+| 7 | Homebrew Formula | the formula's 4 URLs downloaded and hashed against `checksums.txt`; `kjak.rb` committed to `magicdrive/homebrew-tap` where Homebrew reads formulas (the first of `Formula/`, `HomebrewFormula/` and the root that exists: the root for this tap); a `kjak.rb` elsewhere stops the job | mismatch, token missing, stray `kjak.rb`, push |
 | 8 | Post-release Verification | public download, checksums, attestations (Linux, macOS); `brew install magicdrive/tap/kjak`, `kjak version`, `brew test` (macOS) | any |
 
 A pre-release tag (`v0.2.0-rc.1`) is published as a pre-release, not latest,
@@ -103,9 +105,31 @@ gh release verify-asset v0.1.0 kjak_0.1.0_linux_amd64.tar.gz --repo magicdrive/k
 | 1–3 | nothing published | fix on main; delete the tag (`git push --delete origin vX.Y.Z`, if the ruleset allows a maintainer to) or, preferably, tag the next patch version |
 | 4–5 | a draft exists (not public) | delete the draft (`gh release delete vX.Y.Z --yes`); re-run the workflow from the start, or tag the next version. Do not upload by hand |
 | 6, not immutable | the release is public and mutable | enable immutable releases; do not edit this release; release the next patch version |
-| 6, attestation | published | investigate; do not change assets; release the next version |
+| 6, attestation | published | check it read-only (`gh release verify`, `gh release verify-asset`, `gh attestation verify` below); if it verifies, the release is sound: only the tap is missing (next row). If it does not: do not change assets; release the next version |
 | 7 | published, tap not updated | fix the cause (token, permissions) and **re-run the failed job** (it uses the same artifact); or commit `kjak.rb` of the artifact to the tap by hand |
 | 8 | published, tap updated | investigate; a bad binary is fixed by a new version, never by replacing assets |
 
 Never rebuild and upload binaries for an existing tag: the attestations and
 checksums name the original build.
+
+A re-run runs the workflow **as it is at the tag**, not as it is on main: a
+fix of `release.yml` never reaches the run of an earlier tag. Before re-running
+a job of an older release, read that job in `release.yml` at the tag; when the
+fix matters, release the next version instead (or do the step by hand, as its
+row says).
+
+`make publish-check` (and so `make publish`) checks the two repository
+settings the workflow's `GITHUB_TOKEN` cannot read (HTTP 403), with your `gh`:
+immutable releases enabled, and, for a stable version, the secret
+`TAP_GITHUB_TOKEN` set.
+
+### v0.0.1 (run 39766468249)
+
+The publish job read `immutable=false` 0.4s after publishing; its re-run (the
+workflow at v0.0.1 publishes again on a re-run) read `immutable=true` but no
+release attestation, signed by GitHub the same second. The release is
+immutable and its release and build attestations verify; the tap has no
+kjak: `TAP_GITHUB_TOKEN` was not set, and the homebrew job at v0.0.1 writes
+`Formula/kjak.rb`, which would hide the tap's other formulas. **Do not re-run
+run 39766468249**; the tap gets kjak from the next version (or by hand from
+that run's artifact, at the tap's root).

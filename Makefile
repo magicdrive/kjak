@@ -4,6 +4,7 @@
 BUILD_DIR = $(CURDIR)/build
 CMD_DIRS = $(wildcard cmd/*)
 BINARY_NAME = kjak
+REPOSITORY = magicdrive/kjak
 VERSION = $(shell git describe --tags --always)
 LDFLAGS += -X "main.version=$(VERSION)"
 
@@ -207,6 +208,14 @@ publish-check:
 		[ -n "$$(git ls-remote --tags origin "refs/tags/$(tag)")" ]; then \
 		echo "Error: the tag $(tag) exists already (recover forward with a new version)"; exit 1; \
 	fi
+	@# the release workflow's GITHUB_TOKEN can read neither of these (HTTP 403):
+	@# checked here, with the maintainer's gh, before anything is published
+	@[ "$$(gh api repos/$(REPOSITORY)/immutable-releases --jq .enabled)" = true ] || \
+		{ echo "Error: immutable releases are not enabled for $(REPOSITORY) (Settings > General > Releases; docs/release.md)"; exit 1; }
+	@case "$(tag)" in *-*) ;; *) \
+		gh secret list --repo $(REPOSITORY) --json name --jq '.[].name' | grep -qx TAP_GITHUB_TOKEN || \
+		{ echo "Error: the secret TAP_GITHUB_TOKEN is not set for $(REPOSITORY): a stable release would stop before the tap (docs/release.md)"; exit 1; } ;; \
+	esac
 	@echo "publish-check: $(tag) on $$(git rev-parse --short HEAD) OK"
 
 # Publish to github.com: push the annotated tag; the release workflow does the rest
