@@ -189,10 +189,16 @@ func TestBinaryExitCodes(t *testing.T) {
 	}
 }
 
-// Every `kjak ...` command line in README.md names a real command and
-// action: its --help succeeds.
+// Every `kjak ...` command line in the README and the guides names a real
+// command and action: its --help succeeds.
 func TestReadmeCommandsExist(t *testing.T) {
-	f, err := os.Open("../../README.md")
+	for _, doc := range []string{"README.md", "README_ja.md", "docs/getting-started.md", "docs/getting-started_ja.md", "docs/configuration.md", "docs/configuration_ja.md"} {
+		t.Run(doc, func(t *testing.T) { checkDocCommands(t, "../../"+doc) })
+	}
+}
+
+func checkDocCommands(t *testing.T, path string) {
+	f, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,10 +234,10 @@ func TestReadmeCommandsExist(t *testing.T) {
 		}
 		checked[key] = true
 		if r := s.kjak("", append(args, "--help")...); r.code != 0 {
-			t.Errorf("README: kjak %s --help: exit %d %s", key, r.code, r.stderr)
+			t.Errorf("%s: kjak %s --help: exit %d %s", path, key, r.code, r.stderr)
 		}
 	}
-	if len(checked) < 5 {
-		t.Fatalf("only %d README commands found", len(checked))
+	if len(checked) < 3 { // the parsing above found nothing
+		t.Fatalf("%s: only %d commands found", path, len(checked))
 	}
 }
