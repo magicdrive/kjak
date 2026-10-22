@@ -184,6 +184,37 @@ dev-tools:
 goreg:
 	git ls-files | grep -e '.go$$' | xargs -I GOFILE goreg -w GOFILE
 
+# Check that tag=vX.Y.Z[-pre] can be published: the checks of the release
+# workflow's Tag Validation that can run here (docs/release.md), before
+# anything is pushed. The workflow checks again (and that no release exists).
+.PHONY: publish-check
+publish-check:
+	@if [ -z "$(tag)" ]; then \
+		echo "Error: version is not set. Please set it and try again."; \
+		echo "ex) make publish tag=v0.1.0"; \
+		exit 1; \
+	fi
+	@echo "$(tag)" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$$' || \
+		{ echo "Error: not a release tag: $(tag) (want vX.Y.Z or vX.Y.Z-pre)"; exit 1; }
+	@[ "$$(git rev-parse --abbrev-ref HEAD)" = main ] || \
+		{ echo "Error: publish from main (on $$(git rev-parse --abbrev-ref HEAD))"; exit 1; }
+	@[ -z "$$(git status --porcelain)" ] || \
+		{ echo "Error: the working tree is not clean"; exit 1; }
+	@git fetch --quiet origin main --tags
+	@[ "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" ] || \
+		{ echo "Error: HEAD is not origin/main (git pull --ff-only, or push through a pull request)"; exit 1; }
+	@if git rev-parse -q --verify "refs/tags/$(tag)" >/dev/null || \
+		[ -n "$$(git ls-remote --tags origin "refs/tags/$(tag)")" ]; then \
+		echo "Error: the tag $(tag) exists already (recover forward with a new version)"; exit 1; \
+	fi
+	@echo "publish-check: $(tag) on $$(git rev-parse --short HEAD) OK"
+
+# Publish to github.com: push the annotated tag; the release workflow does the rest
+.PHONY: publish
+publish: publish-check check
+	git tag -a $(tag) -m "kjak $(tag)"
+	git push origin refs/tags/$(tag)
+
 # Show help
 .PHONY: help
 help:
@@ -210,4 +241,6 @@ help:
 	@echo "  make clean             - Remove build artifacts"
 	@echo "  make dev-tools         - Install dev tools"
 	@echo "  make goreg             - Execute goreg -w to entire gofile"
-	@echo "  make help              - Show this message"
+	@echo "  make publish-check tag=<tag> - Check that <tag> can be published (nothing is pushed)"
+	@echo "  make publish tag=<tag> - Publish to github.com (annotated tag on main; the release workflow runs)"
+	@echo "  make help             - Show this message"

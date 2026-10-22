@@ -74,9 +74,10 @@ adapter. There is no DI framework: `subcmd.Runtime` carries the outside world
 Deliberate differences: kjak's entry point is `cmd/kjak.go` (package `cmd`)
 as its specification requires, instead of `cmd/<name>/mod.go`; the
 subcommands return an exit status instead of calling `os.Exit`, so that the
-whole command line is testable in-process; there is no `make publish` (a
-lightweight tag pushed from a laptop): a release is an annotated tag and the
-release workflow ([release.md](release.md)).
+whole command line is testable in-process; `make publish tag=vX.Y.Z` pushes
+an **annotated** tag (the release workflow refuses a lightweight one) after
+checking it locally: well formed, from a clean `main` equal to `origin/main`,
+new, and `make check` passing ([release.md](release.md)).
 
 ## Tests
 
