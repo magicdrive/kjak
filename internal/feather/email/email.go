@@ -4,7 +4,8 @@
 // the acceptance of a message depends on how far the transaction got, which
 // net/smtp does not tell: an error before the end of the data is a message
 // the server certainly did not accept, an error after the terminating "."
-// was sent is one it may have accepted (docs/delivery.md).
+// was sent is one it may have accepted (docs/delivery.md). The SMTP
+// libraries do not tell either (docs/development.md, Dependencies).
 package email
 
 import (
@@ -433,8 +434,8 @@ func (f *Feather) Compose(msg core.Message) ([]byte, error) {
 		b.WriteString(k + ": " + v + "\r\n")
 	}
 	header("From", f.From)
-	header("To", strings.Join(f.To, ", "))
-	header("Subject", mime.QEncoding.Encode("UTF-8", subject))
+	header("To", fold("To", f.To, ", "))
+	header("Subject", fold("Subject", strings.Split(mime.QEncoding.Encode("UTF-8", subject), " "), " "))
 	header("Date", now.Format(time.RFC1123Z))
 	header("Message-ID", "<"+id+"@kjak>")
 	header("MIME-Version", "1.0")
@@ -455,6 +456,30 @@ func (f *Feather) Compose(msg core.Message) ([]byte, error) {
 		return nil, err
 	}
 	return b.Bytes(), nil
+}
+
+// fold joins the parts of the value of header name with sep, and folds
+// before a part that would make the line longer than 76 characters (RFC 5322
+// 2.1.1 limits a line to 998: a long encoded subject, many recipients). The
+// space that ends sep becomes the folding white space, so unfolding gives
+// back the parts joined with sep.
+func fold(name string, parts []string, sep string) string {
+	var b strings.Builder
+	line := len(name) + len(": ")
+	for i, p := range parts {
+		if i > 0 {
+			if line+len(sep)+len(p) > 76 {
+				b.WriteString(strings.TrimSuffix(sep, " ") + "\r\n ")
+				line = 1
+			} else {
+				b.WriteString(sep)
+				line += len(sep)
+			}
+		}
+		b.WriteString(p)
+		line += len(p)
+	}
+	return b.String()
 }
 
 func (f *Feather) messageID() (string, error) {
