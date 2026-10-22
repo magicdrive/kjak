@@ -142,7 +142,7 @@ ended interrupts nothing: the exit status is the deliveries'.
 ## Testing these rules
 
 Every rule above has a test, most of them critical tests
-(`test/critical-tests.txt`): the engine with a fake clock and scripted
+(`TestCritical_*`): the engine with a fake clock and scripted
 adapters, the webhooks against `httptest` servers that refuse, rate-limit or
 cut the connection after reading the request, the e-mail feather against a
 fake SMTP server that closes or stalls after the terminator. See
