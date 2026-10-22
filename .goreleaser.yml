@@ -53,8 +53,6 @@ brews:
       owner: magicdrive
       name: homebrew-tap
       branch: main
-      # only the tap; the release itself uses the workflow's GITHUB_TOKEN
-      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
     homepage: "https://github.com/magicdrive/kjak"
     description: "Send one notification to Slack, Discord and e-mail from the command line"
     license: "MIT"

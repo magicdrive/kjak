@@ -21,20 +21,17 @@ jobs:
     needs: ci
     runs-on: ubuntu-latest
     permissions:
-      contents: write      # the release
+      contents: read       # the release is made with PERSONAL_GITHUB_TOKEN
       id-token: write      # the build provenance attestation
       attestations: write
     steps:
       # GoReleaser pushes the formula after the release is published: a
-      # missing tap token stops here instead (a pre-release leaves the tap).
-      - name: The tap token is set
+      # missing token stops here instead, before anything is published.
+      - name: The release token is set
         env:
-          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          PERSONAL_GITHUB_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         run: |
-          case "$GITHUB_REF_NAME" in
-            *-*) ;;
-            *) [ -n "$TAP_GITHUB_TOKEN" ] || { echo "the secret TAP_GITHUB_TOKEN is not set"; exit 1; } ;;
-          esac
+          [ -n "$PERSONAL_GITHUB_TOKEN" ] || { echo "the secret PERSONAL_GITHUB_TOKEN is not set"; exit 1; }
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -65,8 +62,8 @@ jobs:
           version: v2.18.2  # pinned; the config is checked with this version
           args: release --clean
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          # the release and the tap, as in ark and enma
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
 
       # `gh attestation verify <archive> --repo magicdrive/kjak` (README)
       - name: Attest the build provenance

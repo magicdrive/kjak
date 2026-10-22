@@ -9,9 +9,9 @@ rest.
 1. Settings → General → Releases: enable **immutable releases**. A published
    release can then not be changed (its assets are never replaced), and GitHub
    attests it (`gh release verify`).
-2. Secret `TAP_GITHUB_TOKEN`: a fine-grained token with contents read/write
-   on `magicdrive/homebrew-tap` only. The release itself uses the workflow's
-   `GITHUB_TOKEN`.
+2. Secret `PERSONAL_GITHUB_TOKEN` (as in ark and enma): a token with
+   contents read/write on `magicdrive/kjak` (the release) and
+   `magicdrive/homebrew-tap` (the formula).
 
 ## Releasing
 
@@ -23,7 +23,7 @@ make publish tag=v0.1.0      # make test-verbose, then the tag is pushed
 `release.yml`:
 
 1. **ci** — the whole `ci.yml` on the tagged commit.
-2. **release** — the tap token is set (not needed for a pre-release);
+2. **release** — the release token is set;
    GoReleaser snapshot and `scripts/verify-dist.sh`; then `goreleaser release
    --clean`: the archives and `kjak_checksums.txt` go to a draft release,
    which GoReleaser publishes, and the formula goes to the root of
@@ -61,3 +61,6 @@ is on main.
 v0.0.1 was released by the earlier workflow (its checksum file is
 `checksums.txt`); it is immutable and attested, and is not in the tap. Do not
 re-run its run (39766468249).
+
+The tag v0.0.2 (run 39779957468) stopped before anything was published: its
+workflow asked for a token that is not set. Nothing of it exists but the tag.
