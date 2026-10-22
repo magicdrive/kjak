@@ -28,6 +28,16 @@ Principles:
 
 ```sh
 git switch main && git pull --ff-only
+make publish tag=v0.1.0
+```
+
+`make publish` checks the tag first (`make publish-check tag=v0.1.0` does only
+this, pushing nothing): `vX.Y.Z[-pre]`, on `main` with a clean working tree,
+`HEAD` equal to `origin/main`, no such tag locally or on origin. Then it runs
+`make check`, creates the annotated tag and pushes only that tag. By hand,
+the same is:
+
+```sh
 make check                                    # locally, optional: CI runs it again
 git tag -a v0.1.0 -m "kjak v0.1.0"
 git push origin v0.1.0
