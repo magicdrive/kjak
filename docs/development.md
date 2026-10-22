@@ -74,20 +74,17 @@ adapter. There is no DI framework: `subcmd.Runtime` carries the outside world
 Deliberate differences: kjak's entry point is `cmd/kjak.go` (package `cmd`)
 as its specification requires, instead of `cmd/<name>/mod.go`; the
 subcommands return an exit status instead of calling `os.Exit`, so that the
-whole command line is testable in-process; `make publish tag=vX.Y.Z` pushes
-an **annotated** tag (the release workflow refuses a lightweight one) after
-checking it locally: well formed, from a clean `main` equal to `origin/main`,
-new, and `make check` passing ([release.md](release.md)).
+whole command line is testable in-process; CI tests Windows on every change
+(kjak has Windows code of its own: the configuration lock, paths).
 
 ## Tests
 
 ```sh
 make test            # unit + integration + e2e, no cache (go test -count=1 ./...)
 make race            # the same with -race
-make coverage        # coverage.out + coverage.html (-covermode=atomic; no threshold)
-make critical-test   # the critical tests 20 times
-make critical-race   # the critical tests 5 times with -race
 make vet staticcheck vulncheck
+make fuzz            # every fuzz target for FUZZTIME (10s)
+make check           # vet, staticcheck, test, race, gofmt, go mod tidy
 ```
 
 Tests are deterministic: no test waits for real time to pass.
@@ -108,62 +105,29 @@ Tests are deterministic: no test waits for real time to pass.
 
 A flaky test is a bug: fix it, never skip it.
 
-### Critical tests
-
-Tests of the rules that must never regress — worker pool limit, result order,
+Tests of the rules that must never regress (worker pool limit, result order,
 retry limit, Retry-After, deadline, cancellation, ambiguous acceptance,
-concurrent config modification, aggregation, trust, secret redaction — are
-named `TestCritical_<Name>` and listed in `test/critical-tests.txt`
-(`<package> <test>` per line).
+concurrent config modification, aggregation, trust, secret redaction) are
+named `TestCritical_<Name>`; they run with every other test.
+`architecture_test.go` checks the dependency rules.
 
-`scripts/critical-tests.sh` (`make critical-check`, and before every critical
-run) fails when the manifest is empty, malformed, has duplicates, names a test
-that does not exist in its package, or misses a `TestCritical_` test of the
-code. The run then requires every listed test to have passed exactly COUNT
-times — `go test -run` with a pattern that matches nothing passes, so the
-count is checked.
-
-Adding one: name it `TestCritical_...`, add its line to the manifest, run
-`make critical-check`.
-
-### Tests of the gates themselves
-
-- `scripts_test.go` runs `critical-tests.sh` against a fixture module (a
-  self-skipping critical test must fail the run), `ci-gate.sh` with failed,
-  skipped, cancelled, missing and extra jobs, `formula.sh` (pre-release,
-  mismatched tag, malformed checksum) and `verify-dist.sh`.
-- `release_workflow_test.go` checks the job order of `release.yml`, build
-  once (only the build job builds or signs), the pre-release and stale-draft
-  rules, and that the CI Gate needs every job.
-- `architecture_test.go` checks the dependency rules.
-
-### Fuzzing
-
-`make fuzz` (CI: Fuzz Smoke) runs the fuzz targets — message validation, TOML
-parsing (round trip), webhook URL checks, the JSON input object, the webhook
-classification and `Retry-After`, SMTP dot stuffing and reply parsing — for
-`FUZZTIME` (10s) each. A crasher is written to the package's `testdata/fuzz`
-and then runs as a regular test.
+The fuzz targets cover message validation, TOML parsing (round trip), webhook
+URL checks, the JSON input object, the webhook classification and
+`Retry-After`, SMTP dot stuffing and reply parsing. `make fuzz` finds them
+with `go test -list`; a failing input is written to the package's
+`testdata/fuzz` and then runs as a regular test.
 
 ## CI
 
-`.github/workflows/ci.yml`, on every push to main and every pull request:
+`.github/workflows/ci.yml` (as enma's, plus ark's fuzz smoke), on every push
+to main and every pull request:
 
 | job | runs |
 |---|---|
-| Quality / Format / Module Integrity | `make fmt-check vet critical-check`, shellcheck |
-| Staticcheck | `make staticcheck` (v0.8.2) |
-| govulncheck | `make vulncheck` (v1.9.0) |
-| Unit / Integration | `make test` on Linux and macOS; its `go test -count=1 ./...` on Windows |
-| Race (Linux) | `make race` |
-| Coverage (Linux) | `make coverage`, uploads the profile and the report |
-| Critical Repeat 20x / Critical Race 5x (Linux) | `make critical-test` / `make critical-race` |
-| Cross Build | `make <os>/<arch>` for the five targets, `CGO_ENABLED=0` |
-| Native Smoke | the cross-built binary run by `scripts/smoke.sh` on Linux, macOS, Windows |
-| Fuzz Smoke (Linux) | `make fuzz`: every fuzz target for 10s |
-| Release Dry Run | `make snapshot`: GoReleaser check, archives, verify-dist, formula |
-| **CI Gate** | `scripts/ci-gate.sh`: succeeds only if all 12 jobs above succeeded (failed, skipped, cancelled, missing or extra fail it) |
+| test (ubuntu, macos, windows) | gofmt (Linux), `go vet`, `go test -count=1 ./...`, `-race` (not Windows) |
+| lint | `go mod verify`, `go mod tidy -diff`, `make staticcheck`, `GOOS=windows go vet`, shellcheck |
+| fuzz | `make fuzz` |
+| dist | `make vulncheck`, GoReleaser snapshot, `scripts/verify-dist.sh` |
 
-The main branch ruleset requires the check `CI Gate`. Tool versions are pinned
-in the Makefile (and Go / GoReleaser in the workflow `env`); change them
-there.
+Tool versions are pinned in the Makefile (staticcheck, govulncheck) and the
+workflows (GoReleaser, actions by commit SHA); Go comes from `go.mod`.

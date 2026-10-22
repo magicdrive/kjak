@@ -29,7 +29,7 @@ Or download an archive from [GitHub Releases](https://github.com/magicdrive/kjak
 (`.tar.gz` for macOS and Linux, `.zip` for Windows) and check it:
 
 ```sh
-sha256sum -c checksums.txt --ignore-missing
+sha256sum -c kjak_checksums.txt --ignore-missing
 gh attestation verify kjak_0.1.0_linux_amd64.tar.gz --repo magicdrive/kjak
 ```
 

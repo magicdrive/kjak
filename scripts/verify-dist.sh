@@ -1,13 +1,13 @@
 #!/bin/sh
 # Checks the archives of a GoReleaser run, without publishing anything:
-#   - checksums.txt lists exactly the five archives, each matches it;
+#   - kjak_checksums.txt lists exactly the five archives, each matches it;
 #   - each platform has exactly one archive holding kjak (kjak.exe), LICENSE
 #     and README.md, and nothing else;
 #   - each binary is built for the platform its archive names (when `file`
 #     exists) and is statically linked (CGO_ENABLED=0);
 #   - the binary for this machine runs and prints the expected version.
 #
-# usage: scripts/verify-dist.sh [DIST] [EXPECTED-VERSION]   (e.g. v0.1.0)
+# usage: scripts/verify-dist.sh [DIST] [EXPECTED-VERSION-SUBSTRING]   (e.g. v0.1.0, snapshot)
 set -eu
 
 dist=${1:-dist}
@@ -16,7 +16,7 @@ fail() { echo "verify-dist: $*" >&2; exit 1; }
 
 [ -d "$dist" ] || fail "no directory $dist"
 cd "$dist"
-sums=checksums.txt
+sums=kjak_checksums.txt
 [ -f "$sums" ] || fail "no $sums"
 
 sha256() {
@@ -78,9 +78,7 @@ for target in $targets; do
 	if [ "$os" = "$host_os" ] && [ "$arch" = "$host_arch" ]; then
 		v=$("$out/$bin" version)
 		case "$v" in "kjak version v"*) ;; *) fail "$archive: version prints '$v'" ;; esac
-		if [ -n "$want_version" ] && [ "$v" != "kjak version $want_version" ]; then
-			fail "$archive: '$v', want 'kjak version $want_version'"
-		fi
+		case "$v" in *"$want_version"*) ;; *) fail "$archive: '$v' lacks '$want_version'" ;; esac
 		ran=yes
 	fi
 	echo "ok   $archive"
