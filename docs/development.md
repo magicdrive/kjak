@@ -55,6 +55,24 @@ provider (payload, Discord's `?wait=true` and `retry_after` body) is in the
 adapter. There is no DI framework: `subcmd.Runtime` carries the outside world
 (stdio, environment, keychain, clock, HTTP client), and tests replace it.
 
+## Dependencies
+
+kjak depends on `github.com/pelletier/go-toml/v2` (TOML) and
+`golang.org/x/sys` (the Windows file lock). The transports use the standard
+library only. Libraries were evaluated in October 2026 against what
+[delivery.md](delivery.md) promises, and not adopted:
+
+| library | why not |
+|---|---|
+| `github.com/slack-go/slack` v0.30.1 | the webhook call discards the response body (Slack's error text), reads `Retry-After` as seconds only (an HTTP date becomes a parse error that hides the status), and wraps the transport error that quotes the URL, which is the secret; a 30k-line module with a WebSocket dependency for one POST |
+| `github.com/bwmarrin/discordgo` v0.29.0 | retries HTTP 502 up to 3 times by default (a duplicate: kjak reports 502 as unknown) and sleeps on 429 without a context; a bot framework |
+| `github.com/disgoorg/disgo` v0.19.6 | retries rate-limited requests itself; a 41k-line framework |
+| `github.com/wneessen/go-mail` v0.8.1 | its data writer ignores the error of writing the terminator, so a failure before the end of the message cannot be told from a lost reply after it; standard `textproto` replies (a bare `250` is refused); a context for the dial only; `x/crypto`, `x/text` and 2.6 MB more in a minimal program |
+| `github.com/emersion/go-smtp` v0.25.0 | no context; it resets the connection deadline at every command, which would undo kjak's cancellation; the same terminator and reply limits |
+| `github.com/go-mail/mail` | archived (last release 2018) |
+
+Re-evaluate when one of these can report how far a request got.
+
 ## Conventions inherited from Ark and Enma
 
 - `main.go` with `var version` set by `-ldflags "-X main.version=..."`, falling
