@@ -200,25 +200,35 @@ func write(t *testing.T, path, content string) {
 	}
 }
 
+// absPath is an absolute path on this OS ("/xdg" is not absolute on
+// Windows, where it would be ignored like a relative XDG_CONFIG_HOME).
+func absPath(p string) string {
+	if runtime.GOOS == "windows" {
+		return `C:` + filepath.FromSlash(p)
+	}
+	return p
+}
+
 func TestDefaultPaths(t *testing.T) {
+	xdg, home, work := absPath("/xdg"), absPath("/home/u"), absPath("/work")
 	env := Env{
 		Getenv: func(k string) string {
-			return map[string]string{"XDG_CONFIG_HOME": "/xdg"}[k]
+			return map[string]string{"XDG_CONFIG_HOME": xdg}[k]
 		},
-		HomeDir: func() (string, error) { return "/home/u", nil },
-		Getwd:   func() (string, error) { return "/work", nil },
+		HomeDir: func() (string, error) { return home, nil },
+		Getwd:   func() (string, error) { return work, nil },
 		GOOS:    "linux",
 	}
 	p, err := DefaultPaths(env, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Global != filepath.Join("/xdg", "kjak", "config.toml") || p.Project != filepath.Join("/work", ".kjak.toml") || p.TrustStore != filepath.Join("/xdg", "kjak", "trust.toml") {
+	if p.Global != filepath.Join(xdg, "kjak", "config.toml") || p.Project != filepath.Join(work, ".kjak.toml") || p.TrustStore != filepath.Join(xdg, "kjak", "trust.toml") {
 		t.Fatalf("paths = %+v", p)
 	}
 	env.Getenv = func(k string) string { return map[string]string{"KJAK_CONFIG": "/etc/kjak.toml"}[k] }
 	p, _ = DefaultPaths(env, "", true)
-	if p.Global != "/etc/kjak.toml" || p.Project != "" || p.TrustStore != filepath.Join("/home/u", ".config", "kjak", "trust.toml") {
+	if p.Global != "/etc/kjak.toml" || p.Project != "" || p.TrustStore != filepath.Join(home, ".config", "kjak", "trust.toml") {
 		t.Fatalf("paths = %+v", p)
 	}
 	p, _ = DefaultPaths(env, "/flag.toml", false)
@@ -228,7 +238,7 @@ func TestDefaultPaths(t *testing.T) {
 	// a relative XDG_CONFIG_HOME is ignored (XDG Base Directory spec)
 	env.Getenv = func(k string) string { return map[string]string{"XDG_CONFIG_HOME": "rel"}[k] }
 	p, _ = DefaultPaths(env, "", true)
-	if !strings.HasPrefix(p.Global, filepath.Join("/home/u", ".config")) {
+	if !strings.HasPrefix(p.Global, filepath.Join(home, ".config")) {
 		t.Fatalf("relative XDG: %+v", p)
 	}
 }

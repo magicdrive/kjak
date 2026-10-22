@@ -18,7 +18,8 @@ func workflowJobs(t *testing.T, path string) (string, map[string]string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := string(b)
+	// a Windows checkout may turn the line endings into CRLF
+	s := strings.ReplaceAll(string(b), "\r\n", "\n")
 	i := strings.Index(s, "\njobs:\n")
 	if i < 0 {
 		t.Fatalf("%s: no jobs", path)
