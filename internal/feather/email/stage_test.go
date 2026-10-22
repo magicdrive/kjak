@@ -128,3 +128,52 @@ func TestComposeFoldsLongHeaders(t *testing.T) {
 		t.Fatal("nothing was folded")
 	}
 }
+
+// A Subject unfolds (RFC 5322 2.2.3: remove each CRLF) to the subject as
+// written, space for space. Its lines are at most 998 octets, a continuation
+// starts with a space, and no line is only white space: FWS has one CRLF, two
+// in a row are the obsolete syntax that must not be generated (3.2.2, 4).
+func TestComposeSubjectFoldingBoundaries(t *testing.T) {
+	x := func(n int) string { return strings.Repeat("x", n) }
+	for _, title := range []string{
+		"Deployment    completed",
+		x(60) + "    " + x(30),
+		x(66) + "  " + x(9),
+		x(70) + "  " + strings.Repeat("A", 75),
+		x(70) + "   ",
+		x(30) + "  " + x(70) + "  " + x(70) + "   " + x(5),
+		strings.Repeat("A", 75), strings.Repeat("A", 76), strings.Repeat("A", 77), strings.Repeat("A", 78),
+		strings.Repeat("A", 997), strings.Repeat("A", 998), strings.Repeat("A", 999), strings.Repeat("A", 2000),
+		strings.Repeat("通知 ", 50) + " end",
+	} {
+		want := title
+		if r := []rune(title); len(r) > 200 {
+			want = string(r[:199]) + "…"
+		}
+		f := newFeather(newFakeSMTP(t, nil), nil, email.SecurityNone)
+		b, err := f.Compose(core.Message{Title: title, Body: "x", Level: core.LevelInfo})
+		if err != nil {
+			t.Fatal(err)
+		}
+		head, _, _ := strings.Cut(string(b), "\r\n\r\n")
+		_, raw, _ := strings.Cut(head, "\r\nSubject: ")
+		raw, _, _ = strings.Cut(raw, "\r\nDate: ")
+		for i, line := range strings.Split("Subject: "+raw, "\r\n") {
+			if len(line) > 998 || strings.TrimLeft(line, " \t") == "" || (i > 0 && line[0] != ' ') {
+				t.Fatalf("%.20q...: line %d is %q", title, i, line)
+			}
+		}
+		subject := strings.ReplaceAll(raw, "\r\n", "")
+		if strings.HasPrefix(subject, "=?") {
+			if subject, err = new(mime.WordDecoder).DecodeHeader(subject); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if subject != want {
+			t.Fatalf("%.20q... unfolds to %q", title, subject)
+		}
+		if _, err := mail.ReadMessage(strings.NewReader(string(b))); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

@@ -462,13 +462,14 @@ func (f *Feather) Compose(msg core.Message) ([]byte, error) {
 // before a part that would make the line longer than 76 characters (RFC 5322
 // 2.1.1 limits a line to 998: a long encoded subject, many recipients). The
 // space that ends sep becomes the folding white space, so unfolding gives
-// back the parts joined with sep.
+// back the parts joined with sep. It never folds before an empty part (spaces
+// in a row): that would leave a line of only white space.
 func fold(name string, parts []string, sep string) string {
 	var b strings.Builder
 	line := len(name) + len(": ")
 	for i, p := range parts {
 		if i > 0 {
-			if line+len(sep)+len(p) > 76 {
+			if p != "" && line+len(sep)+len(p) > 76 {
 				b.WriteString(strings.TrimSuffix(sep, " ") + "\r\n ")
 				line = 1
 			} else {
