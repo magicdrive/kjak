@@ -28,4 +28,4 @@ Exit status:
   0    success
   1    a delivery failed (or its acceptance is unknown)
   2    input, configuration or preflight error: nothing was sent
-  130  interrupted (SIGINT)
+  130  interrupted (SIGINT, SIGTERM)
