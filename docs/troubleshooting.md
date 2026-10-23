@@ -23,6 +23,9 @@
 | `the file is larger than 1048576 bytes` | a configuration file over 1 MiB | split it, or check that `.kjak.toml` is what you think |
 | `STARTTLS: the server sent clear-text data after its reply` | something injected data before TLS (or a broken server) | check the network path to the SMTP server |
 | `... is a symbolic link to a file that does not exist` | kjak was asked to write through a dangling link | fix or remove the link |
+| `cannot write the result: ...` (send) | the report could not be written (a full disk, a closed pipe); the deliveries were made, the exit status is theirs | check the exit status before sending again; fix the output |
+| `cannot write the output: ...` (exit 2) | the output of another command could not be written | fix the output (disk, pipe) and run the command again |
+| `kjak send --stdin` waits | standard input is a terminal or a pipe nobody closes (cron, CI) | give the body as an argument, or end the input (`< /dev/null` is an empty body, refused) |
 
 ## Results
 

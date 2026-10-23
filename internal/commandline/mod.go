@@ -4,7 +4,10 @@ package commandline
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"syscall"
 
 	"github.com/magicdrive/kjak/internal/commandline/subcmd"
 	"github.com/magicdrive/kjak/internal/credential"
@@ -30,7 +33,39 @@ type Keychain = credential.Keychain
 func StdIO() Runtime { return subcmd.OSRuntime() }
 
 // Execute runs the command line args and returns the exit status.
+//
+// The output of a command other than send is its result: when it cannot be
+// written, the command fails (exit 2). A send reports that itself and keeps
+// the exit status of its delivery.
 func Execute(ctx context.Context, version string, args []string, rt Runtime) int {
+	out := &outputWriter{w: rt.Stdout}
+	rt.Stdout = out
+	code := execute(ctx, version, args, rt)
+	if out.err == nil || code != subcmd.ExitOK || args[0] == Send {
+		return code
+	}
+	// a reader that went away (| head) needs no diagnostic
+	if !errors.Is(out.err, syscall.EPIPE) {
+		fmt.Fprintf(rt.Stderr, "kjak: cannot write the output: %v\n", out.err)
+	}
+	return subcmd.ExitUsage
+}
+
+// outputWriter keeps the first error of the writes to w.
+type outputWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (o *outputWriter) Write(p []byte) (int, error) {
+	n, err := o.w.Write(p)
+	if err != nil && o.err == nil {
+		o.err = err
+	}
+	return n, err
+}
+
+func execute(ctx context.Context, version string, args []string, rt Runtime) int {
 	if len(args) == 0 {
 		fmt.Fprint(rt.Stderr, textbank.ShortHelpMessage)
 		return subcmd.ExitUsage

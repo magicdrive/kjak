@@ -11,13 +11,21 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
 
-// SIGINT during a delivery: kjak stops and exits 130. (Windows has no
-// SIGINT to send to another process; os.Interrupt is not deliverable there.)
+// SIGINT or SIGTERM (a CI job canceled, a service stopped) during a
+// delivery: kjak stops, reports and exits 130. (Windows has no signal to
+// send to another process; os.Interrupt is not deliverable there.)
 func TestBinarySIGINTExits130(t *testing.T) {
+	for _, sig := range []os.Signal{os.Interrupt, syscall.SIGTERM} {
+		t.Run(sig.String(), func(t *testing.T) { testSignalExits130(t, sig) })
+	}
+}
+
+func testSignalExits130(t *testing.T, sig os.Signal) {
 	received := make(chan struct{}, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body) // then the server notices the client leave
@@ -42,7 +50,7 @@ func TestBinarySIGINTExits130(t *testing.T) {
 		_ = cmd.Process.Kill()
 		t.Fatal("the request never arrived")
 	}
-	if err := cmd.Process.Signal(os.Interrupt); err != nil {
+	if err := cmd.Process.Signal(sig); err != nil {
 		t.Fatal(err)
 	}
 	err := cmd.Wait()
@@ -53,5 +61,49 @@ func TestBinarySIGINTExits130(t *testing.T) {
 	// the request had been sent: its acceptance is unknown, and reported
 	if !strings.Contains(out.String(), `"canceled": true`) || !strings.Contains(out.String(), `"acceptance": "unknown"`) {
 		t.Fatalf("report = %s", out.String())
+	}
+}
+
+// A reader that goes away (kjak send ... | head -c0) makes the report
+// unwritable, not the delivery unreported: kjak is not killed by SIGPIPE,
+// its exit status is still the delivery's.
+func TestBinaryClosedStdoutKeepsExitStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer srv.Close()
+	s := newSandbox(t)
+	s.env = append(s.env, "HOOK="+srv.URL)
+	s.must("feather", "add", "f", "--type", "slack", "--secret-env", "HOOK")
+
+	for _, tc := range []struct {
+		args []string
+		want int
+	}{
+		{[]string{"send", "--to", "f", "x"}, 0},
+		{[]string{"send", "--to", "nobody", "x"}, 2},
+	} {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Close()
+		cmd := exec.Command(binary, tc.args...)
+		cmd.Dir, cmd.Env, cmd.Stdout = s.dir, s.env, w
+		var errOut bytes.Buffer
+		cmd.Stderr = &errOut
+		err = cmd.Run()
+		w.Close()
+		code := 0
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			code = ee.ExitCode()
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if code != tc.want {
+			t.Fatalf("%v: exit %d (%v), want %d; stderr %q", tc.args, code, err, tc.want, errOut.String())
+		}
 	}
 }

@@ -418,9 +418,9 @@ Check the destination before sending again.
 
 ### Cancellation
 
-Ctrl-C (SIGINT) cancels the send: attempts in progress end as soon as
+Ctrl-C (SIGINT) or SIGTERM cancels the send: attempts in progress end as soon as
 possible, queued feathers are not attempted, the report is printed with the
-outcome `canceled`, and kjak exits 130. A second Ctrl-C ends kjak at once.
+outcome `canceled`, and kjak exits 130. A second signal ends kjak at once.
 
 ### Results and exit status
 
@@ -429,7 +429,7 @@ outcome `canceled`, and kjak exits 130. A second Ctrl-C ends kjak at once.
 | `success` | nothing failed (skipped targets allowed) | 0 |
 | `partial` | some delivered, some failed | 1 |
 | `failure` | none delivered, at least one failed | 1 |
-| `canceled` | SIGINT | 130 |
+| `canceled` | SIGINT or SIGTERM | 130 |
 | (error) | input, configuration, trust, routing or credential error before sending: nothing was sent | 2 |
 
 Text output marks each target: `ok` delivered, `FAIL` failed, `????` failed

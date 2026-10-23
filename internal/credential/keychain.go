@@ -31,6 +31,9 @@ type Runner func(ctx context.Context, name string, args ...string) (stdout []byt
 
 func execRunner(ctx context.Context, name string, args ...string) ([]byte, int, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	// the context kills the tool, not a child it left holding its output:
+	// stop waiting for that output soon after
+	cmd.WaitDelay = time.Second
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = nil // the tools print nothing secret there, but nothing useful either

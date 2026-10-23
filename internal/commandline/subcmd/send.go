@@ -42,7 +42,7 @@ func Send(ctx context.Context, rt *Runtime, args []string) int {
 		return rt.fail(ctx, err)
 	}
 	settings := l.Effective.Settings()
-	msg, err := buildMessage(rt, opt, l.Effective, settings)
+	msg, err := buildMessage(ctx, rt, opt, l.Effective, settings)
 	if err != nil {
 		var coded *codedError
 		if !errors.As(err, &coded) {
@@ -154,13 +154,13 @@ type jsonMessage struct {
 
 // buildMessage reads the message from its one input, applies --title,
 // --level and --url, and validates it.
-func buildMessage(rt *Runtime, opt *option.SendOption, cfg *configure.File, s configure.Settings) (core.Message, error) {
+func buildMessage(ctx context.Context, rt *Runtime, opt *option.SendOption, cfg *configure.File, s configure.Settings) (core.Message, error) {
 	var msg core.Message
 	switch opt.Mode {
 	case option.InputArgs:
 		msg.Body = opt.Body
 	case option.InputStdin:
-		b, err := readLimited(rt.Stdin, "standard input")
+		b, err := readStdin(ctx, rt.Stdin)
 		if err != nil {
 			return msg, err
 		}
@@ -169,7 +169,7 @@ func buildMessage(rt *Runtime, opt *option.SendOption, cfg *configure.File, s co
 		var b []byte
 		var err error
 		if opt.JSONInput == "-" {
-			b, err = readLimited(rt.Stdin, "standard input")
+			b, err = readStdin(ctx, rt.Stdin)
 		} else {
 			b, err = readFileLimited(opt.JSONInput)
 		}
@@ -265,6 +265,27 @@ func checkJSONObject(b []byte) error {
 		return errors.New("expected one JSON object")
 	}
 	return nil
+}
+
+// readStdin reads standard input like readLimited, until ctx is done
+// (SIGINT, SIGTERM) at the latest: a pipe nobody closes (cron, CI) never
+// ends. The read left behind ends with the process.
+func readStdin(ctx context.Context, r io.Reader) ([]byte, error) {
+	type read struct {
+		b   []byte
+		err error
+	}
+	done := make(chan read, 1)
+	go func() {
+		b, err := readLimited(r, "standard input")
+		done <- read{b, err}
+	}()
+	select {
+	case res := <-done:
+		return res.b, res.err
+	case <-ctx.Done():
+		return nil, context.Cause(ctx)
+	}
 }
 
 func readLimited(r io.Reader, what string) ([]byte, error) {
