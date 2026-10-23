@@ -8,14 +8,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// fifoNeedsWake: poll(2) and kqueue on macOS do not tell that the writer
-// of a FIFO closed (select does, below FD_SETSIZE only), so a FIFO with a
-// path is read with blocking reads that the end of the context wakes
-// (readFIFO).
-const fifoNeedsWake = true
+// fifoEndPolled: poll(2) and kqueue on macOS do not tell that the writer of
+// a FIFO closed (select does, below FD_SETSIZE only), so a FIFO is read by
+// readFIFO, which looks again every fifoRecheck.
+const fifoEndPolled = false
 
-// fifoPath is the path of the named FIFO f; an anonymous pipe has none (and
-// poll tells its end).
+// fifoPath is the path of the named FIFO f, to open it again; an anonymous
+// pipe has none (and poll tells its end).
 func fifoPath(f *os.File) (string, bool) {
 	buf := make([]byte, unix.PathMax) // on the heap: fcntl gets its address
 	_, err := unix.FcntlInt(f.Fd(), unix.F_GETPATH, int(uintptr(unsafe.Pointer(&buf[0]))))

@@ -10,27 +10,23 @@ import (
 	"io/fs"
 	"os"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
 
-// readFileInput reads the file of --json-input (readInput): a FIFO too,
-// whose open waits for its writer within the context.
+// readFileInput reads the file of --json-input (readInput). It is opened
+// without waiting (O_NONBLOCK: a FIFO without a writer does not hold the
+// open) and read through that description only: what becomes of the path
+// afterwards does not matter.
 func readFileInput(ctx context.Context, path string) ([]byte, error) {
-	if fifoNeedsWake {
-		if st, err := os.Stat(path); err == nil && st.Mode().Type() == fs.ModeNamedPipe {
-			return readFIFO(ctx, nil, path, path)
-		}
-	}
-	// O_NONBLOCK: the open of a FIFO without a writer does not wait (poll
-	// waits for one)
 	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	if fifoNeedsWake && isFIFO(f) {
-		return nil, fmt.Errorf("%s became a FIFO while kjak opened it", path)
+	if !fifoEndPolled && isFIFO(f) {
+		return readFIFO(ctx, f, path)
 	}
 	return readInput(ctx, f, path)
 }
@@ -43,37 +39,35 @@ func readInput(ctx context.Context, f *os.File, what string) ([]byte, error) {
 	if st, err := f.Stat(); err == nil && st.Mode().IsRegular() {
 		return readLimited(f, what)
 	}
-	if isFIFO(f) {
-		if path, ok := fifoPath(f); ok && !nonBlocking(f) {
-			return readFIFO(ctx, f, path, what)
+	if !fifoEndPolled && isFIFO(f) {
+		if path, ok := fifoPath(f); ok {
+			// a named FIFO (kjak send --stdin < fifo): read through a
+			// description of kjak's own, which it may make non-blocking
+			g, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW, 0)
+			if err != nil {
+				return nil, fmt.Errorf("cannot read %s: its FIFO is no longer at %s", what, path)
+			}
+			defer g.Close()
+			if a, b := statOf(f), statOf(g); a == nil || b == nil || !os.SameFile(a, b) {
+				return nil, fmt.Errorf("cannot read %s: its FIFO is no longer at %s", what, path)
+			}
+			return readFIFO(ctx, g, what)
 		}
 	}
 	return readPolled(ctx, f, what)
 }
 
-// readPolled reads f, each read waiting in poll(2) for f or for the byte
-// that the end of ctx writes to a pipe of its own. A FIFO without a writer
-// is not readable until one writes or closes.
+// readPolled reads f, each read waiting in poll(2) for f or for the end of
+// ctx. A FIFO without a writer is not readable until one writes or closes.
 func readPolled(ctx context.Context, f *os.File, what string) ([]byte, error) {
-	wr, ww, err := os.Pipe()
+	canceled, release, err := cancelPipe(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read %s: %w", what, err)
 	}
-	defer wr.Close()
-	defer ww.Close()
-	woke := make(chan struct{})
-	stop := context.AfterFunc(ctx, func() {
-		defer close(woke)
-		_, _ = ww.Write([]byte{0})
-	})
-	defer func() {
-		if !stop() {
-			<-woke
-		}
-	}()
+	defer release()
 
 	// Fd: blocking reads, made once poll tells
-	fds := []unix.PollFd{{Fd: int32(f.Fd()), Events: unix.POLLIN}, {Fd: int32(wr.Fd()), Events: unix.POLLIN}}
+	fds := []unix.PollFd{{Fd: int32(f.Fd()), Events: unix.POLLIN}, {Fd: int32(canceled), Events: unix.POLLIN}}
 	var b []byte
 	buf := make([]byte, 32<<10)
 	for {
@@ -109,88 +103,95 @@ func readPolled(ctx context.Context, f *os.File, what string) ([]byte, error) {
 	}
 }
 
-// readFIFO reads the FIFO at path with blocking reads (opening it first
-// when f is nil: the open waits for a writer), for a system whose poll(2)
-// does not tell that a FIFO's writer closed (fifoNeedsWake). The end of ctx
-// wakes the open or read: it opens the FIFO, a reader and a writer that do
-// not wait, and writes a byte into it, after checking that the path is
-// still that FIFO.
-func readFIFO(ctx context.Context, f *os.File, path, what string) ([]byte, error) {
-	var want unix.Stat_t
-	if err := unix.Stat(path, &want); err != nil {
+// fifoRecheck bounds a wait of readFIFO: how late it may see that the
+// writer of a FIFO closed.
+const fifoRecheck = 100 * time.Millisecond
+
+// readFIFO reads the FIFO f, a non-blocking description of kjak's own, on
+// a system whose poll(2) does not tell that a FIFO's writer closed
+// (fifoEndPolled false: macOS). It waits in poll for data or the end of ctx,
+// fifoRecheck at most, and reads without waiting: no data with a writer
+// there is EAGAIN, no writer is a read of 0, the end once a writer was
+// seen. Nothing is written into the FIFO and its path is not used again. A
+// writer that comes and goes without writing between two looks is not
+// seen: the read waits for the next one.
+func readFIFO(ctx context.Context, f *os.File, what string) ([]byte, error) {
+	canceled, release, err := cancelPipe(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("cannot read %s: %w", what, err)
 	}
-	finished, woke := make(chan struct{}), make(chan struct{})
-	stop := context.AfterFunc(ctx, func() {
-		defer close(woke)
-		wakeFIFO(path, &want, finished)
-	})
-	defer func() {
-		close(finished)
-		if !stop() {
-			<-woke
-		}
-	}()
-	if f == nil {
-		var err error
-		if f, err = os.OpenFile(path, os.O_RDONLY, 0); err != nil { // a writer, or the wake
-			return nil, err
-		}
-		defer f.Close()
+	defer release()
+	fd := int(f.Fd()) // Fd makes it blocking: it is ours, make it non-blocking again
+	if err := unix.SetNonblock(fd, true); err != nil {
+		return nil, fmt.Errorf("cannot read %s: %w", what, err)
 	}
-	var got unix.Stat_t
-	if err := unix.Fstat(int(f.Fd()), &got); err != nil || got.Dev != want.Dev || got.Ino != want.Ino {
-		return nil, fmt.Errorf("cannot read %s: the FIFO changed while kjak opened it", what)
-	}
+
+	fds := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}, {Fd: int32(canceled), Events: unix.POLLIN}}
 	var b []byte
 	buf := make([]byte, 32<<10)
+	writer := false
 	for {
-		n, err := f.Read(buf)
-		if ctx.Err() != nil {
-			return nil, context.Cause(ctx)
-		}
-		if b = append(b, buf[:n]...); len(b) > maxInput {
-			return nil, fmt.Errorf("%s is larger than %d bytes", what, maxInput)
-		}
-		if err == io.EOF {
+		n, err := unix.Read(fd, buf)
+		switch {
+		case n > 0:
+			writer = true
+			if b = append(b, buf[:n]...); len(b) > maxInput {
+				return nil, fmt.Errorf("%s is larger than %d bytes", what, maxInput)
+			}
+			continue
+		case err == unix.EINTR:
+			continue
+		case err == unix.EAGAIN:
+			writer = true
+		case err != nil:
+			return nil, fmt.Errorf("cannot read %s: %w", what, err)
+		case writer:
 			return b, nil
 		}
-		if err != nil {
+		fds[0].Revents, fds[1].Revents = 0, 0
+		if _, err := unix.Poll(fds, int(fifoRecheck/time.Millisecond)); err != nil && err != unix.EINTR {
 			return nil, fmt.Errorf("cannot read %s: %w", what, err)
+		}
+		if fds[1].Revents != 0 {
+			return nil, context.Cause(ctx)
+		}
+		if fds[0].Revents&unix.POLLNVAL != 0 {
+			return nil, fmt.Errorf("cannot read %s: the system cannot wait for it", what)
 		}
 	}
 }
 
-// wakeFIFO ends a blocking open or read of the FIFO want at path: a reader
-// lets a writer open without waiting, the writer lets the open return and
-// its byte the read, both held until the read is finished.
-func wakeFIFO(path string, want *unix.Stat_t, finished <-chan struct{}) {
-	same := func(fd int) bool {
-		var st unix.Stat_t
-		return unix.Fstat(fd, &st) == nil && st.Dev == want.Dev && st.Ino == want.Ino
-	}
-	r, err := unix.Open(path, unix.O_RDONLY|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+// cancelPipe is a descriptor that becomes readable when ctx is done (a
+// byte written by context.AfterFunc), and the release that waits for that
+// write, if it started, then closes the pipe.
+func cancelPipe(ctx context.Context) (int, func(), error) {
+	r, w, err := os.Pipe()
 	if err != nil {
-		return
+		return 0, nil, err
 	}
-	defer unix.Close(r)
-	w, err := unix.Open(path, unix.O_WRONLY|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+	woke := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		defer close(woke)
+		_, _ = w.Write([]byte{0})
+	})
+	return int(r.Fd()), func() {
+		if !stop() {
+			<-woke
+		}
+		w.Close()
+		r.Close()
+	}, nil
+}
+
+func statOf(f *os.File) os.FileInfo {
+	st, err := f.Stat()
 	if err != nil {
-		return
+		return nil
 	}
-	defer unix.Close(w)
-	if same(r) && same(w) {
-		_, _ = unix.Write(w, []byte{0}) // a full FIFO: the read returns anyway
-		<-finished
-	}
+	return st
 }
 
 func isFIFO(f *os.File) bool {
 	st, err := f.Stat()
 	return err == nil && st.Mode().Type() == fs.ModeNamedPipe
-}
-
-func nonBlocking(f *os.File) bool {
-	fl, err := unix.FcntlInt(f.Fd(), unix.F_GETFL, 0)
-	return err == nil && fl&unix.O_NONBLOCK != 0
 }
