@@ -202,7 +202,7 @@ func buildMessage(ctx context.Context, rt *Runtime, opt *option.SendOption, cfg 
 		if opt.JSONInput == "-" {
 			b, err = readStdin(ctx, rt.Stdin)
 		} else {
-			b, err = readFileLimited(opt.JSONInput)
+			b, err = readFileLimited(ctx, opt.JSONInput)
 		}
 		if err != nil {
 			return msg, err
@@ -298,25 +298,13 @@ func checkJSONObject(b []byte) error {
 	return nil
 }
 
-// readStdin reads standard input like readLimited, until ctx is done
-// (SIGINT, SIGTERM) at the latest: a pipe nobody closes (cron, CI) never
-// ends. The read left behind ends with the process.
+// readStdin reads standard input until ctx is done at the latest
+// (readInput); a reader that is not a file (a test's) is read as it is.
 func readStdin(ctx context.Context, r io.Reader) ([]byte, error) {
-	type read struct {
-		b   []byte
-		err error
+	if f, ok := r.(*os.File); ok {
+		return readInput(ctx, f, "standard input")
 	}
-	done := make(chan read, 1)
-	go func() {
-		b, err := readLimited(r, "standard input")
-		done <- read{b, err}
-	}()
-	select {
-	case res := <-done:
-		return res.b, res.err
-	case <-ctx.Done():
-		return nil, context.Cause(ctx)
-	}
+	return readLimited(r, "standard input")
 }
 
 func readLimited(r io.Reader, what string) ([]byte, error) {
@@ -330,11 +318,13 @@ func readLimited(r io.Reader, what string) ([]byte, error) {
 	return b, nil
 }
 
-func readFileLimited(path string) ([]byte, error) {
-	f, err := os.Open(path)
+// readFileLimited reads the file of --json-input, a FIFO too (openInput,
+// readInput).
+func readFileLimited(ctx context.Context, path string) ([]byte, error) {
+	f, err := openInput(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	return readLimited(f, path)
+	return readInput(ctx, f, path)
 }
