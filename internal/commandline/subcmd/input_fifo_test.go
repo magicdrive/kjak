@@ -240,7 +240,9 @@ func TestFIFOCancelRacesTheEnd(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		wrote := make(chan struct{})
 		go func() {
+			defer close(wrote)
 			_, _ = w.WriteString(doc[:10])
 			_, _ = w.WriteString(doc[10:])
 			w.Close()
@@ -254,6 +256,7 @@ func TestFIFOCancelRacesTheEnd(t *testing.T) {
 		case <-time.After(10 * time.Second):
 			t.Fatal("the read did not end")
 		}
+		<-wrote // a canceled read left the writer to an EPIPE; it is done with the FIFO
 	}
 }
 
@@ -333,11 +336,14 @@ func TestStdinFIFOWithoutItsPath(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			wrote := make(chan struct{})
 			go func() {
+				defer close(wrote)
 				_, _ = w.WriteString("the body")
 				w.Close()
 			}()
 			b, err := readStdin(context.Background(), r)
+			<-wrote // its close is not left to a later test's count of descriptors
 			if runtime.GOOS == "darwin" {
 				if err == nil || !strings.Contains(err.Error(), "no longer at") {
 					t.Fatalf("%q %v", b, err)

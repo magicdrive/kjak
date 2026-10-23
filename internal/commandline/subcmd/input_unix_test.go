@@ -36,12 +36,16 @@ func TestReadInputReadsToTheEnd(t *testing.T) {
 		t.Fatalf("%q %v", b, err)
 	}
 	r, w, _ := os.Pipe()
-	defer r.Close()
+	wrote := make(chan struct{})
 	go func() {
+		defer close(wrote)
 		_, _ = w.Write(make([]byte, maxInput+1))
 		w.Close()
 	}()
-	if _, err := readInput(context.Background(), r, "pipe"); err == nil {
+	_, err := readInput(context.Background(), r, "pipe")
+	r.Close() // ends the write blocked beyond the limit (EPIPE)
+	<-wrote   // and its close, not left to a later test's count of descriptors
+	if err == nil {
 		t.Fatal("an input over the limit was read")
 	}
 }
@@ -226,7 +230,9 @@ func TestReadInputFIFOLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := make(chan *os.File, 1)
+	wrote := make(chan struct{})
 	go func() {
+		defer close(wrote)
 		f, err := os.OpenFile(fifo, os.O_WRONLY, 0)
 		if err != nil {
 			close(w)
@@ -237,7 +243,8 @@ func TestReadInputFIFOLimit(t *testing.T) {
 	}()
 	_, err := readFileLimited(context.Background(), fifo)
 	if f, ok := <-w; ok {
-		defer f.Close()
+		<-wrote // a close during the write would happen when it ends, in a later test
+		f.Close()
 	}
 	if err == nil || !strings.Contains(err.Error(), "larger than") {
 		t.Fatalf("err = %v", err)
