@@ -5,9 +5,15 @@ import (
 	"os"
 )
 
-// openInput opens an input file (Windows has no FIFO at a path).
-func openInput(path string) (*os.File, error) {
-	return os.Open(path)
+// readFileInput reads the file of --json-input (Windows has no FIFO at a
+// path).
+func readFileInput(ctx context.Context, path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return readInput(ctx, f, path)
 }
 
 // readInput reads f to its end, maxInput bytes at most. A read of a

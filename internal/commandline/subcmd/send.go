@@ -318,13 +318,8 @@ func readLimited(r io.Reader, what string) ([]byte, error) {
 	return b, nil
 }
 
-// readFileLimited reads the file of --json-input, a FIFO too (openInput,
-// readInput).
+// readFileLimited reads the file of --json-input, a FIFO too
+// (readFileInput).
 func readFileLimited(ctx context.Context, path string) ([]byte, error) {
-	f, err := openInput(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	return readInput(ctx, f, path)
+	return readFileInput(ctx, path)
 }
