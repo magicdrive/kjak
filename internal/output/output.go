@@ -83,7 +83,8 @@ const (
 	CodeCredential       = "credential"        // a secret that does not resolve or is not acceptable
 	CodeInput            = "input"             // the message or its input
 	CodeNotFound         = "not_found"         // a named feather, group or template
-	CodeInterrupted      = "interrupted"       // SIGINT
+	CodeDeadline         = "deadline"          // the deadline of the send passed before anything was sent
+	CodeInterrupted      = "interrupted"       // SIGINT, SIGTERM
 	CodeError            = "error"             // anything else
 )
 

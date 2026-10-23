@@ -10,11 +10,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/magicdrive/kjak/internal/clock"
 	"github.com/magicdrive/kjak/internal/commandline/option"
 	"github.com/magicdrive/kjak/internal/configure"
 	"github.com/magicdrive/kjak/internal/core"
 	"github.com/magicdrive/kjak/internal/credential"
 	"github.com/magicdrive/kjak/internal/delivery"
+	"github.com/magicdrive/kjak/internal/feather"
 	"github.com/magicdrive/kjak/internal/feather/builtin"
 	"github.com/magicdrive/kjak/internal/feather/webhook"
 	"github.com/magicdrive/kjak/internal/output"
@@ -55,6 +57,30 @@ func Send(ctx context.Context, rt *Runtime, args []string) int {
 		return rt.fail(ctx, err)
 	}
 
+	// The deadline of the send starts once the message is read (its input
+	// is paced by its producer: `make test | kjak send --stdin`): the
+	// credentials and every delivery, retry and wait end by then.
+	timeout := settings.Timeout
+	if opt.Timeout > 0 {
+		timeout = opt.Timeout
+	}
+	c := rt.Clock
+	if c == nil {
+		c = clock.Real{}
+	}
+	start := c.Now()
+	preflight, cancel := clock.WithDeadline(ctx, c, timeout, feather.ErrDeadline)
+	defer cancel()
+	// pastDeadline is the error of a preflight that the deadline ended
+	// (nothing was sent): exit 2, error code deadline.
+	pastDeadline := func(err error) error {
+		msg := fmt.Sprintf("the deadline of %s passed before anything was sent", timeout)
+		if err != nil {
+			msg += ": " + err.Error()
+		}
+		return withCode(output.CodeDeadline, errors.New(msg))
+	}
+
 	// preflight: every active feather is built (its credentials resolved)
 	// before anything is sent
 	redactor := &credential.Redactor{}
@@ -74,8 +100,11 @@ func Send(ctx context.Context, rt *Runtime, args []string) int {
 	for _, e := range plan.Entries {
 		t := delivery.Target{Name: e.Name, Type: e.Config.Type, Groups: e.Groups, Skip: e.Skip}
 		if e.Skip == nil {
-			f, err := builtin.Build(ctx, e.Name, e.Config, deps)
+			f, err := builtin.Build(preflight, e.Name, e.Config, deps)
 			if err != nil {
+				if ctx.Err() == nil && preflight.Err() != nil {
+					err = pastDeadline(err)
+				}
 				return rt.fail(ctx, &redactedError{msg: redactor.Redact(err.Error()), err: err})
 			}
 			t.Feather = f
@@ -85,17 +114,19 @@ func Send(ctx context.Context, rt *Runtime, args []string) int {
 	if ctx.Err() != nil {
 		return rt.fail(ctx, ctx.Err())
 	}
+	// the deliveries have what the preflight left; none starts after it
+	remaining := timeout - c.Now().Sub(start)
+	if preflight.Err() != nil || remaining <= 0 {
+		return rt.fail(ctx, pastDeadline(nil))
+	}
 
 	opts := delivery.Options{
-		Timeout:     settings.Timeout,
+		Timeout:     remaining,
 		MaxRetries:  settings.MaxRetries,
 		Concurrency: settings.Concurrency,
 		Clock:       rt.Clock,
 		Backoff:     rt.Backoff,
 		Redactor:    redactor,
-	}
-	if opt.Timeout > 0 {
-		opts.Timeout = opt.Timeout
 	}
 	if opt.MaxRetries >= 0 {
 		opts.MaxRetries = opt.MaxRetries
