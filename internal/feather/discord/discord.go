@@ -111,7 +111,9 @@ func truncate(s string, max int) string {
 	return string(r[:max-1]) + "…"
 }
 
-// RetryAfterBody reads Discord's 429 body: {"retry_after": seconds}.
+// RetryAfterBody reads Discord's 429 body: {"retry_after": seconds},
+// capped like a Retry-After header (in seconds: a float beyond what a
+// duration holds would convert to a negative wait).
 func RetryAfterBody(body []byte) (time.Duration, bool) {
 	var v struct {
 		RetryAfter *float64 `json:"retry_after"`
@@ -119,7 +121,7 @@ func RetryAfterBody(body []byte) (time.Duration, bool) {
 	if json.Unmarshal(body, &v) != nil || v.RetryAfter == nil || *v.RetryAfter < 0 {
 		return 0, false
 	}
-	return time.Duration(*v.RetryAfter * float64(time.Second)), true
+	return time.Duration(min(*v.RetryAfter, webhook.MaxRetryAfter.Seconds()) * float64(time.Second)), true
 }
 
 // Detail reads Discord's error body: {"message": "...", "code": n}.

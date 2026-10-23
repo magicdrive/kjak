@@ -42,7 +42,7 @@ func FuzzParseRetryAfter(f *testing.F) {
 	f.Add(strconv.Itoa(-1))
 	f.Fuzz(func(t *testing.T, v string) {
 		d, ok := ParseRetryAfter(v, time.Unix(1_800_000_000, 0))
-		if d < 0 || d > maxRetryAfter || (!ok && d != 0) {
+		if d < 0 || d > MaxRetryAfter || (!ok && d != 0) {
 			t.Fatalf("%q: %s %t", v, d, ok)
 		}
 	})

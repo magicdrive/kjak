@@ -200,11 +200,12 @@ func (p *Poster) retryAfter(h http.Header, body []byte) time.Duration {
 	return 0
 }
 
-// maxRetryAfter caps a Retry-After (the deadline ends a send long before).
-const maxRetryAfter = 24 * time.Hour
+// MaxRetryAfter caps the wait a provider asks for (the deadline ends a send
+// long before).
+const MaxRetryAfter = 24 * time.Hour
 
 // ParseRetryAfter parses a Retry-After value: delay seconds or an HTTP date,
-// capped at maxRetryAfter.
+// capped at MaxRetryAfter.
 func ParseRetryAfter(v string, now time.Time) (time.Duration, bool) {
 	v = strings.TrimSpace(v)
 	if v == "" {
@@ -214,8 +215,8 @@ func ParseRetryAfter(v string, now time.Time) (time.Duration, bool) {
 		if secs < 0 {
 			return 0, false
 		}
-		if secs > int64(maxRetryAfter/time.Second) {
-			return maxRetryAfter, true
+		if secs > int64(MaxRetryAfter/time.Second) {
+			return MaxRetryAfter, true
 		}
 		return time.Duration(secs) * time.Second, true
 	}
@@ -224,8 +225,8 @@ func ParseRetryAfter(v string, now time.Time) (time.Duration, bool) {
 		if d < 0 {
 			d = 0
 		}
-		if d > maxRetryAfter {
-			d = maxRetryAfter
+		if d > MaxRetryAfter {
+			d = MaxRetryAfter
 		}
 		return d, true
 	}

@@ -87,3 +87,22 @@ func TestWaitURLRejectsGarbage(t *testing.T) {
 		t.Fatal("accepted")
 	}
 }
+
+// The retry_after of a 429 body is capped like a Retry-After header (24h):
+// a value beyond what a duration holds is the cap, not a negative wait that
+// would retry at once.
+func TestRetryAfterBodyCapped(t *testing.T) {
+	for _, tc := range []struct {
+		body string
+		want time.Duration
+	}{
+		{`{"retry_after": 1.5}`, 1500 * time.Millisecond},
+		{`{"retry_after": 100000}`, webhook.MaxRetryAfter},
+		{`{"retry_after": 1e20}`, webhook.MaxRetryAfter},
+		{`{"retry_after": 1e300}`, webhook.MaxRetryAfter},
+	} {
+		if d, ok := discord.RetryAfterBody([]byte(tc.body)); !ok || d != tc.want {
+			t.Errorf("%s: %s %v, want %s", tc.body, d, ok, tc.want)
+		}
+	}
+}
