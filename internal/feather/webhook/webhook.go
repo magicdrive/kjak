@@ -5,12 +5,16 @@
 // The classification (docs/delivery.md):
 //
 //	2xx                         confirmed
-//	408, 429, 500, 503          rejected, retryable (Retry-After honored)
+//	429                         rejected, retryable (Retry-After, or
+//	                              RetryAfterBody, honored)
+//	408, 500, 503               rejected, retryable (503: Retry-After
+//	                              honored)
 //	502, 504                    unknown: a gateway may have forwarded it
 //	other 5xx                   rejected, retryable
 //	3xx, other 4xx              rejected, permanent
 //	error before the request    rejected, retryable (it never fully left)
 //	  was fully written
+//	TLS certificate refused     rejected, permanent
 //	error after it was written  unknown, not retried
 package webhook
 
