@@ -26,7 +26,8 @@ Message:
       --var KEY=VALUE     A template variable (repeatable)
 
 Delivery:
-      --timeout DURATION  Deadline of the whole send, retries included
+      --timeout DURATION  Deadline of the send once the message is read:
+                          credentials, deliveries, retries and waits
                           (default: defaults.timeout, else 10s)
       --max-retries N     Retries of a retryable failure (default 2)
       --concurrency N     Feathers delivered at the same time (default 5)

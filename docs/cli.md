@@ -40,7 +40,7 @@ Exactly one input gives the message; two of them are a usage error (exit 2).
 |---|---|
 | `BODY...` | the arguments joined by spaces |
 | `--stdin` | standard input (trailing newlines removed), at most 1 MiB |
-| `--json-input FILE` | one JSON object `{"title", "body", "level", "url"}` (unknown keys, a key given twice, or anything after the object are errors); `-` reads standard input, at most 1 MiB |
+| `--json-input FILE` | one JSON object `{"title", "body", "level", "url"}` (unknown keys, a key given twice, or anything after the object are errors); `-` reads standard input, at most 1 MiB. FILE may be a FIFO (Unix): kjak waits for its writer to close it, and SIGINT or SIGTERM ends the wait |
 | `--template NAME` | a template of the configuration, rendered with `--var` |
 | `--template-file FILE` | a TOML file with the keys of a template (`title`, `body`, `level`, `url`) |
 
@@ -57,8 +57,8 @@ Targets: `-t, --to NAME` (repeatable, comma-separated) names feathers and
 groups; without `--to`, `defaults.targets` is used. Each feather is delivered
 to once, in the order it is first named (see [delivery.md](delivery.md)).
 
-Delivery options: `--timeout DURATION` (whole send, retries included; at most
-10m), `--max-retries N` (0–10), `--concurrency N` (1–64) — the bounds of the
+Delivery options: `--timeout DURATION` (the deadline of the send once the
+message is read: credentials, deliveries, retries and waits; at most 10m), `--max-retries N` (0–10), `--concurrency N` (1–64) — the bounds of the
 configuration's `[defaults]`. `--dry-run` resolves the targets and the
 credentials (the preflight) and sends nothing. `-q, --quiet` prints nothing
 when every target was delivered.
@@ -163,6 +163,7 @@ on **stderr**:
 | `credential` | a secret that does not resolve, or a resolved webhook URL that is not acceptable |
 | `input` | the message or its input (empty body, invalid level, JSON input, template) |
 | `not_found` | a named feather, group or template |
+| `deadline` | the deadline of the send (`--timeout`) passed before anything was sent, while the credentials were resolved |
 | `interrupted` | SIGINT or SIGTERM before any delivery (exit 130) |
 | `error` | anything else |
 
@@ -186,7 +187,14 @@ be written (a full disk, a reader that went away), kjak says so on stderr
 and the exit status is still the deliveries'. The output of every other
 command is its result: when it cannot be written, the command fails with
 exit 2 (a changing command has made its change by then); a closed pipe
-(`| head`) is not reported on stderr.
+(`| head`) is not reported on stderr, on Unix (EPIPE) as on Windows
+(`ERROR_NO_DATA`, `ERROR_BROKEN_PIPE`).
+
+So a JSON report on stdout is whole unless kjak said `cannot write the
+result` on stderr; the exit status tells the deliveries either way, and a
+delivery whose acceptance is `unknown` may have arrived: check before
+sending again. With `set -o pipefail`, `kjak send ... | head` fails only
+when the deliveries did. An unwritable stderr changes no exit status.
 
 ## kjak feather
 

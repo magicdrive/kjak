@@ -87,7 +87,7 @@ kjak send --to NAME --dry-run "test"   # routing and credentials, nothing sent
 
 | key | type | default | meaning |
 |---|---|---|---|
-| `timeout` | duration string | `"10s"` | the deadline of a whole send, every retry and wait included (max `10m`) |
+| `timeout` | duration string | `"10s"` | the deadline of a whole send once its message is read: credentials, every retry and wait included (max `10m`) |
 | `max_retries` | integer | `2` | retries of a retryable failure, after the first attempt (0–10) |
 | `concurrency` | integer | `5` | feathers delivered at the same time (1–64) |
 | `level` | string | `"info"` | the level of a message that names none |
@@ -388,9 +388,15 @@ More: [security.md](security.md).
 ### Deadline and timeout
 
 `timeout` (`--timeout`, default 10s, at most 10m) is the deadline of the
-**whole send**: every attempt and every wait between attempts, of every
-feather, ends by then. A feather still waiting for a free slot when it passes
-fails without an attempt.
+**whole send**, from the moment its message is read: resolving the
+credentials (a keychain lookup, which may wait for a confirmation dialog),
+every attempt and every wait between attempts, of every feather, end by
+then. A deadline that passes while the credentials are resolved ends the
+send with exit 2 (`error.code: deadline`), nothing sent; raise `--timeout`
+if a keychain dialog needs longer. A feather still waiting for a free slot
+when it passes fails without an attempt. Reading the message (standard
+input, a FIFO) is not under the deadline: it waits for its writer, and
+SIGINT or SIGTERM ends that wait.
 
 ### Retries
 
@@ -430,7 +436,16 @@ outcome `canceled`, and kjak exits 130. A second signal ends kjak at once.
 | `partial` | some delivered, some failed | 1 |
 | `failure` | none delivered, at least one failed | 1 |
 | `canceled` | SIGINT or SIGTERM | 130 |
-| (error) | input, configuration, trust, routing or credential error before sending: nothing was sent | 2 |
+| (error) | input, configuration, trust, routing or credential error before sending, or the deadline passing while the credentials were resolved: nothing was sent | 2 |
+
+The deliveries and the report are two facts. When the report of `kjak send`
+cannot be written (a full disk, a reader that closed the pipe), kjak says
+`cannot write the result` on stderr and the exit status is still the
+deliveries'; without that message, the JSON on stdout is whole. A delivery
+whose acceptance is `unknown` may have arrived: check before sending again.
+The output of the other commands is their result: when it cannot be
+written, they fail with exit 2; a reader that closed the pipe (`| head`) is
+not reported on stderr, on Unix as on Windows.
 
 Text output marks each target: `ok` delivered, `FAIL` failed, `????` failed
 with unknown acceptance, `skip` skipped, `plan` (dry run). `-q` prints
