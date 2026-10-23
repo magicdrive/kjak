@@ -9,3 +9,5 @@ import "os"
 const fifoEndPolled = true
 
 func fifoPath(*os.File) (string, bool) { return "", false }
+
+func selectFIFO(int, int) (bool, bool, error) { return false, false, nil }

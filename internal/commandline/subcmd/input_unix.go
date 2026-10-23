@@ -109,12 +109,14 @@ const fifoRecheck = 100 * time.Millisecond
 
 // readFIFO reads the FIFO f, a non-blocking description of kjak's own, on
 // a system whose poll(2) does not tell that a FIFO's writer closed
-// (fifoEndPolled false: macOS). It waits in poll for data or the end of ctx,
-// fifoRecheck at most, and reads without waiting: no data with a writer
-// there is EAGAIN, no writer is a read of 0, the end once a writer was
-// seen. Nothing is written into the FIFO and its path is not used again. A
-// writer that comes and goes without writing between two looks is not
-// seen: the read waits for the next one.
+// (fifoEndPolled false: macOS). It waits in select (selectFIFO) for data,
+// the close of a writer or the end of ctx, and reads only then: a read of 0
+// is the end. Where select cannot wait, it waits in poll for data or the
+// end of ctx, fifoRecheck at most, and reads without waiting: no data with
+// a writer there is EAGAIN, no writer is a read of 0, the end once a writer
+// was seen; a writer that comes and goes without writing between two looks
+// is not seen there, and the read waits for the next one. Nothing is
+// written into the FIFO and its path is not used again.
 func readFIFO(ctx context.Context, f *os.File, what string) ([]byte, error) {
 	canceled, release, err := cancelPipe(ctx)
 	if err != nil {
@@ -131,6 +133,17 @@ func readFIFO(ctx context.Context, f *os.File, what string) ([]byte, error) {
 	buf := make([]byte, 32<<10)
 	writer := false
 	for {
+		if isCanceled, ok, err := selectFIFO(fd, canceled); ok {
+			switch {
+			case err == unix.EINTR:
+				continue
+			case err != nil:
+				return nil, fmt.Errorf("cannot read %s: %w", what, err)
+			case isCanceled:
+				return nil, context.Cause(ctx)
+			}
+			writer = true // data, or a writer closed
+		}
 		n, err := unix.Read(fd, buf)
 		switch {
 		case n > 0:

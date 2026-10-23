@@ -257,6 +257,52 @@ func TestFIFOCancelRacesTheEnd(t *testing.T) {
 	}
 }
 
+// A writer that opens the FIFO and closes it without writing (a producer
+// that failed: `false > fifo`) ends the input, empty, as on Linux: kjak
+// does not wait for another one. Whether kjak or the writer came first.
+func TestFIFOEmptyWriterEndsTheInput(t *testing.T) {
+	for _, writerFirst := range []bool{false, true} {
+		for range 20 {
+			fifo := filepath.Join(t.TempDir(), "in")
+			if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			type read struct {
+				b   []byte
+				err error
+			}
+			done := make(chan read, 1)
+			kjak := func() { go func() { b, err := readFileLimited(context.Background(), fifo); done <- read{b, err} }() }
+			wrote := make(chan error, 1)
+			writer := func() {
+				w, err := os.OpenFile(fifo, os.O_WRONLY, 0) // waits for kjak
+				if err == nil {
+					err = w.Close()
+				}
+				wrote <- err
+			}
+			if writerFirst {
+				go writer()
+				kjak()
+			} else {
+				kjak()
+				writer()
+			}
+			if err := <-wrote; err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case r := <-done:
+				if r.err != nil || len(r.b) != 0 {
+					t.Fatalf("writer first %v: %q %v", writerFirst, r.b, r.err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatalf("writer first %v: the end of a writer that wrote nothing was not seen", writerFirst)
+			}
+		}
+	}
+}
+
 // Standard input that is a named FIFO whose path no longer leads to it
 // (removed, or another file there) before kjak reads it: macOS, which reads
 // such a FIFO through its path, says so; Linux polls the descriptor it
