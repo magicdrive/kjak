@@ -99,11 +99,12 @@ kjak speaks SMTP itself to know the stage of an error:
 | same | 5xx reply | rejected | no |
 | same | network error | rejected | yes |
 | connect | TLS certificate verification failed | rejected | no |
-| AUTH | 535 and other refusals | rejected | no (retrying a wrong password locks accounts); 454 is retried |
+| AUTH | 535 and other refusals | rejected | no (retrying a wrong password locks accounts); 454 and 421 are retried |
 | while sending the content (no terminator yet) | network error | rejected | yes — without the final `.` the server cannot accept it |
 | after the terminating `.` | 2xx | confirmed | — |
 | after the terminating `.` | 4xx / 5xx | rejected | 4xx yes, 5xx no |
 | after the terminating `.` | connection lost, timeout, deadline, SIGINT | **unknown** | no |
+| after the terminating `.` | any other reply (a malformed or 1xx/3xx code) | **unknown** (`protocol`) | no |
 
 The content and the terminator are flushed separately, so an error in the
 content is distinguishable from an error after the terminator. From the first

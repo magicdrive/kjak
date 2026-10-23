@@ -74,6 +74,24 @@ func TestFIFOInputDelivers(t *testing.T) {
 	}
 }
 
+// A FIFO whose writer closes it without writing (a producer that failed) is
+// an empty input: exit 2, nothing sent, without waiting for another writer.
+func TestFIFOEmptyWriterIsAnInputError(t *testing.T) {
+	p := newProvider(t, 200, "ok")
+	e := newEnv(t)
+	e.writeGlobal(featherConfig("a", "slack", p.URL))
+	fifo := filepath.Join(t.TempDir(), "in")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan result, 1)
+	go func() { done <- e.run("send", "--to", "a", "--json-input", fifo) }()
+	openFIFOWriter(t, fifo).Close()
+	if r := waitResult(t, done, "the end of an empty writer was not seen"); r.code != 2 || p.count() != 0 {
+		t.Fatalf("exit %d, %d sent: %s", r.code, p.count(), r.stderr)
+	}
+}
+
 // openFIFOWriter opens path for writing once kjak has it open for reading.
 func openFIFOWriter(t *testing.T, path string) *os.File {
 	t.Helper()
