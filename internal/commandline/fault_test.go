@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -94,5 +95,42 @@ func TestOversizedInputs(t *testing.T) {
 	}
 	if p.count() != 0 {
 		t.Fatal("something was sent")
+	}
+}
+
+type epipeWriter struct{}
+
+func (epipeWriter) Write([]byte) (int, error) { return 0, syscall.EPIPE }
+
+// The output of the other commands is their result: when it cannot be
+// written (a full disk), the command fails (exit 2) and says why; a reader
+// that went away (| head) needs no diagnostic.
+func TestCommandOutputWriteFailure(t *testing.T) {
+	e := newEnv(t)
+	e.writeGlobal(featherConfig("a", "slack", "https://hooks.example/x"))
+	for _, args := range [][]string{{"feather", "list"}, {"feather", "list", "-o", "json"}, {"config", "validate"}, {"version"}} {
+		var errOut bytes.Buffer
+		r := e.runWith(func(rt *commandline.Runtime) { rt.Stdout = failingWriter{}; rt.Stderr = &errOut }, args...)
+		if r.code != 2 || !strings.Contains(errOut.String(), "cannot write the output") {
+			t.Fatalf("%v: exit %d, stderr %q", args, r.code, errOut.String())
+		}
+		errOut.Reset()
+		r = e.runWith(func(rt *commandline.Runtime) { rt.Stdout = epipeWriter{}; rt.Stderr = &errOut }, args...)
+		if r.code != 2 || errOut.Len() != 0 {
+			t.Fatalf("%v, closed pipe: exit %d, stderr %q", args, r.code, errOut.String())
+		}
+	}
+}
+
+// A feather in several groups is refused naming the first group, every
+// time (not the one a map happened to give).
+func TestFeatherRemoveNamesGroupDeterministically(t *testing.T) {
+	e := newEnv(t)
+	e.writeGlobal(featherConfig("a", "slack", "https://hooks.example/x") +
+		"[groups.zz]\nfeathers = [\"a\"]\n[groups.bb]\nfeathers = [\"a\"]\n[groups.mm]\nfeathers = [\"a\"]\n")
+	for i := 0; i < 30; i++ {
+		if r := e.run("feather", "remove", "a"); r.code != 2 || !strings.Contains(r.stderr, `group "bb"`) {
+			t.Fatalf("exit %d: %s", r.code, r.stderr)
+		}
 	}
 }

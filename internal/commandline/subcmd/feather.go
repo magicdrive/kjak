@@ -245,8 +245,8 @@ func featherRemove(ctx context.Context, rt *Runtime, args []string) int {
 		if _, ok := f.Feathers[opt.Name]; !ok {
 			return notFound("feather", opt.Name)
 		}
-		for g, gc := range f.Groups {
-			for _, m := range gc.Feathers {
+		for _, g := range sortedNames(f.Groups) {
+			for _, m := range f.Groups[g].Feathers {
 				if m == opt.Name {
 					return fmt.Errorf("feather %q is a member of group %q: change the group first", opt.Name, g)
 				}
