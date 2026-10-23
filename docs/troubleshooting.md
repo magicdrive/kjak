@@ -27,6 +27,7 @@
 | `cannot write the output: ...` (exit 2) | the output of another command could not be written | fix the output (disk, pipe) and run the command again |
 | `kjak send --stdin` waits | standard input is a terminal or a pipe nobody closes (cron, CI) | give the body as an argument, or end the input (`< /dev/null` is an empty body, refused) |
 | `cannot read standard input: the system cannot wait for it` (exit 2) | macOS: standard input is a device it cannot poll, such as `/dev/null` (an empty body either way) | give the body as an argument, or pipe it in |
+| `cannot read standard input: its FIFO is no longer at ...` (macOS) | standard input is a named FIFO whose path was removed or replaced before kjak read it (macOS reads it through its path) | give the FIFO with `--json-input`, or keep its path until kjak reads it |
 | `kjak send --json-input FIFO` waits | the FIFO's writer has not closed it (or there is none yet) | close the writer; SIGINT or SIGTERM ends the wait (130) |
 | `the deadline of 10s passed before anything was sent: ...` (exit 2) | resolving the credentials took the whole `--timeout` (a keychain waiting for a confirmation dialog) | answer the dialog sooner, or raise `--timeout` |
 
