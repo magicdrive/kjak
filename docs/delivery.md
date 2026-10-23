@@ -120,14 +120,15 @@ One refused recipient (RCPT) refuses the whole message: no DATA is sent.
   acceptance, retryability, status or SMTP code, `retry_after_ms` and the
   `wait_ms` that followed.
 
-## Cancellation (SIGINT)
+## Cancellation (SIGINT, SIGTERM)
 
-Ctrl-C cancels the send: attempts in progress end as soon as possible (with
+Ctrl-C (SIGINT) or SIGTERM (a CI job canceled, a service or container
+stopped) cancels the send: attempts in progress end as soon as possible (with
 the acceptance their stage gives: an HTTP request already written is
 `unknown`), queued feathers are not attempted, the report is printed with
 `outcome: canceled`, and kjak exits 130. Ctrl-C during the preflight (a
-keychain lookup waiting for a dialog) ends kjak too (130, nothing sent); a
-second Ctrl-C kills it at once. A SIGINT that arrives after the last delivery
+keychain lookup waiting for a dialog, `--stdin` reading a pipe nobody
+closes) ends kjak too (130, nothing sent); a second signal kills it at once. A SIGINT that arrives after the last delivery
 ended interrupts nothing: the exit status is the deliveries'.
 
 ## Aggregation
@@ -137,7 +138,7 @@ ended interrupts nothing: the exit status is the deliveries'.
 | `success` | no failed target (skipped targets allowed; a send whose targets are all skipped succeeds) | 0 |
 | `partial` | some delivered, some failed | 1 |
 | `failure` | none delivered, at least one failed | 1 |
-| `canceled` | SIGINT | 130 |
+| `canceled` | SIGINT or SIGTERM | 130 |
 
 ## Testing these rules
 

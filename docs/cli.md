@@ -163,7 +163,7 @@ on **stderr**:
 | `credential` | a secret that does not resolve, or a resolved webhook URL that is not acceptable |
 | `input` | the message or its input (empty body, invalid level, JSON input, template) |
 | `not_found` | a named feather, group or template |
-| `interrupted` | SIGINT before any delivery (exit 130) |
+| `interrupted` | SIGINT or SIGTERM before any delivery (exit 130) |
 | `error` | anything else |
 
 Messages never contain a secret (they are redacted like a report's).
@@ -179,7 +179,14 @@ is text on stderr only, stdout stays empty, exit 2.
 | 0 | every attempted target was delivered (skipped targets do not count) |
 | 1 | at least one delivery failed — including an **unknown** acceptance |
 | 2 | input, configuration or preflight error: nothing was sent |
-| 130 | interrupted by SIGINT (Ctrl-C); the report of what happened is still printed |
+| 130 | interrupted by SIGINT (Ctrl-C) or SIGTERM (a canceled CI job, a stopped service); the report of what happened is still printed |
+
+The output of `send` is a report of deliveries already made: when it cannot
+be written (a full disk, a reader that went away), kjak says so on stderr
+and the exit status is still the deliveries'. The output of every other
+command is its result: when it cannot be written, the command fails with
+exit 2 (a changing command has made its change by then); a closed pipe
+(`| head`) is not reported on stderr.
 
 ## kjak feather
 

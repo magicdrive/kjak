@@ -174,7 +174,7 @@ exit status:
 | `0` | every target delivered |
 | `1` | a delivery failed (or its result is unknown) |
 | `2` | input, configuration or preflight error: nothing was sent |
-| `130` | interrupted (Ctrl-C) |
+| `130` | interrupted (Ctrl-C, or SIGTERM) |
 
 ### Step 6 — when it does not work
 

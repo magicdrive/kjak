@@ -20,7 +20,7 @@ The layout follows magicdrive/ark and magicdrive/enma:
 
 ```
 main.go                      version from -ldflags or the build info; calls cmd.Execute
-cmd/kjak.go                  signals (SIGINT -> context), exit status; nothing else
+cmd/kjak.go                  signals (SIGINT, SIGTERM -> context; SIGPIPE caught), exit status
 internal/
   commandline/               dispatch of `kjak <command>` (no default command)
     option/                  flag parsing per command; input exclusivity
@@ -118,7 +118,7 @@ Tests are deterministic: no test waits for real time to pass.
   certificate generated per test.
 - The CLI is tested in-process with a fake `Runtime`
   (`internal/commandline/commandline_test.go`) and as a binary
-  (`internal/e2e`, including SIGINT on Unix).
+  (`internal/e2e`, including SIGINT, SIGTERM and a closed stdout on Unix).
 - No test sends anything outside the machine.
 
 A flaky test is a bug: fix it, never skip it.
