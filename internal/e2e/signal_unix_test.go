@@ -121,6 +121,9 @@ func testSIGTERMWhileReadingFIFO(t *testing.T, extra int) {
 	if extra > 0 {
 		var rl syscall.Rlimit
 		if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rl); err != nil || rl.Cur < uint64(extra)+256 {
+			if os.Getenv("CI") != "" { // CI must run it
+				t.Fatalf("RLIMIT_NOFILE is %d (%v): kjak cannot inherit %d descriptors", rl.Cur, err, extra)
+			}
 			t.Skipf("RLIMIT_NOFILE is %d (%v): kjak cannot inherit %d descriptors", rl.Cur, err, extra)
 		}
 	}

@@ -92,6 +92,9 @@ func highFDs(t *testing.T) {
 	t.Helper()
 	var rl syscall.Rlimit
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rl); err != nil || rl.Cur < 1024+256 {
+		if os.Getenv("CI") != "" { // CI must run it
+			t.Fatalf("RLIMIT_NOFILE is %d (%v): 1024 descriptors cannot be held", rl.Cur, err)
+		}
 		t.Skipf("RLIMIT_NOFILE is %d (%v): 1024 descriptors cannot be held", rl.Cur, err)
 	}
 	var held []int
