@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func strp(s string) *string { return &s }
@@ -176,5 +178,20 @@ func TestKeychainLookupCanceled(t *testing.T) {
 		if _, err := keychainFor(goos, blocking, found).Lookup(ctx, "s", "a"); !errors.Is(err, context.Canceled) {
 			t.Errorf("%s: err = %v", goos, err)
 		}
+	}
+}
+
+// A keychain tool whose child keeps standard output open (a helper it
+// started) does not hold kjak past the end of the lookup's context.
+func TestExecRunnerDoesNotWaitForOrphans(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs a POSIX shell")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, _, _ = execRunner(ctx, "/bin/sh", "-c", "sleep 30 & sleep 30")
+	if d := time.Since(start); d > 10*time.Second {
+		t.Fatalf("the lookup returned after %s", d)
 	}
 }
