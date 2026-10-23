@@ -2,6 +2,7 @@ package commandline_test
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/magicdrive/kjak/internal/commandline"
 )
 
 // A JSON document with a key twice is ambiguous (encoding/json keeps the
@@ -144,5 +147,30 @@ func TestInterruptDuringCredentialResolution(t *testing.T) {
 		}
 	case <-time.After(20 * time.Second):
 		t.Fatal("kjak kept waiting for the keychain after SIGINT")
+	}
+}
+
+// Standard input that never ends (a pipe nobody closes, in cron or CI) does
+// not hold kjak after SIGINT or SIGTERM: it stops reading, exits 130, sends
+// nothing.
+func TestInterruptWhileReadingStdin(t *testing.T) {
+	p := newProvider(t, 200, "ok")
+	e := newEnv(t)
+	e.writeGlobal(featherConfig("a", "slack", p.URL))
+	stdin, w := io.Pipe()
+	defer w.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	done := make(chan result, 1)
+	go func() {
+		done <- e.runFull(ctx, func(rt *commandline.Runtime) { rt.Stdin = stdin }, "send", "--to", "a", "--stdin")
+	}()
+	select {
+	case r := <-done:
+		if r.code != 130 || p.count() != 0 {
+			t.Fatalf("exit %d, %d sent", r.code, p.count())
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("kjak kept reading standard input after SIGINT")
 	}
 }
