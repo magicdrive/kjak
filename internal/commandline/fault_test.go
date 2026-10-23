@@ -134,3 +134,55 @@ func TestFeatherRemoveNamesGroupDeterministically(t *testing.T) {
 		}
 	}
 }
+
+// partialWriter takes the first n bytes, then fails every write with err.
+type partialWriter struct {
+	n   int
+	err error
+	got bytes.Buffer
+}
+
+func (w *partialWriter) Write(p []byte) (int, error) {
+	if left := w.n - w.got.Len(); left < len(p) {
+		w.got.Write(p[:max(left, 0)])
+		return max(left, 0), w.err
+	}
+	return w.got.Write(p)
+}
+
+// The output contract when the output breaks part way, through a JSON
+// document: a send keeps the exit status of its deliveries and says on
+// stderr that its report is incomplete (closed pipe or not: the deliveries
+// were made); another command fails (exit 2), quietly for a closed pipe. A
+// stderr that cannot be written changes no exit status.
+func TestOutputContractOnPartialWrites(t *testing.T) {
+	p := newProvider(t, 200, "ok")
+	e := newEnv(t)
+	e.writeGlobal(featherConfig("a", "slack", p.URL))
+	for _, err := range []error{syscall.EPIPE, syscall.ENOSPC} {
+		var errOut bytes.Buffer
+		w := &partialWriter{n: 20, err: err}
+		r := e.runWith(func(rt *commandline.Runtime) { rt.Stdout = w; rt.Stderr = &errOut }, "send", "--to", "a", "-o", "json", "x")
+		if r.code != 0 || !strings.Contains(errOut.String(), "cannot write the result") || w.got.Len() != 20 {
+			t.Fatalf("send, %v: exit %d, stderr %q, %d bytes", err, r.code, errOut.String(), w.got.Len())
+		}
+		errOut.Reset()
+		w = &partialWriter{n: 20, err: err}
+		r = e.runWith(func(rt *commandline.Runtime) { rt.Stdout = w; rt.Stderr = &errOut }, "feather", "list", "-o", "json")
+		quiet := err == syscall.EPIPE
+		if r.code != 2 || (errOut.Len() == 0) != quiet {
+			t.Fatalf("feather list, %v: exit %d, stderr %q", err, r.code, errOut.String())
+		}
+	}
+	if n := p.count(); n != 2 {
+		t.Fatalf("%d deliveries", n)
+	}
+	r := e.runWith(func(rt *commandline.Runtime) { rt.Stderr = failingWriter{} }, "send", "--to", "nobody", "x")
+	if r.code != 2 {
+		t.Fatalf("an unwritable stderr: exit %d", r.code)
+	}
+	r = e.runWith(func(rt *commandline.Runtime) { rt.Stderr = failingWriter{} }, "send", "--to", "a", "x")
+	if r.code != 0 {
+		t.Fatalf("an unwritable stderr: exit %d", r.code)
+	}
+}

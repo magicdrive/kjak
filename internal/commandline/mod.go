@@ -4,10 +4,8 @@ package commandline
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"syscall"
 
 	"github.com/magicdrive/kjak/internal/commandline/subcmd"
 	"github.com/magicdrive/kjak/internal/credential"
@@ -45,7 +43,7 @@ func Execute(ctx context.Context, version string, args []string, rt Runtime) int
 		return code
 	}
 	// a reader that went away (| head) needs no diagnostic
-	if !errors.Is(out.err, syscall.EPIPE) {
+	if !isBrokenPipe(out.err) {
 		fmt.Fprintf(rt.Stderr, "kjak: cannot write the output: %v\n", out.err)
 	}
 	return subcmd.ExitUsage

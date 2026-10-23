@@ -241,3 +241,27 @@ func checkDocCommands(t *testing.T, path string) {
 		t.Fatalf("%s: only %d commands found", path, len(checked))
 	}
 }
+
+// A reader that went away (| head) ends a command other than send with exit
+// 2 and nothing on stderr, on every system: a closed pipe is EPIPE on Unix,
+// ERROR_NO_DATA or ERROR_BROKEN_PIPE on Windows.
+func TestBinaryClosedPipeIsQuiet(t *testing.T) {
+	s := newSandbox(t)
+	s.env = append(s.env, "HOOK=https://hooks.example/x")
+	s.must("feather", "add", "f", "--type", "slack", "--secret-env", "HOOK")
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Close()
+	cmd := exec.Command(binary, "feather", "list", "-o", "json")
+	cmd.Dir, cmd.Env, cmd.Stdout = s.dir, s.env, w
+	var errOut bytes.Buffer
+	cmd.Stderr = &errOut
+	err = cmd.Run()
+	w.Close()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() != 2 || errOut.Len() != 0 {
+		t.Fatalf("exit %v, stderr %q", err, errOut.String())
+	}
+}
