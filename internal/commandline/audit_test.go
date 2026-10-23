@@ -2,10 +2,10 @@ package commandline_test
 
 import (
 	"context"
-	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -157,7 +157,11 @@ func TestInterruptWhileReadingStdin(t *testing.T) {
 	p := newProvider(t, 200, "ok")
 	e := newEnv(t)
 	e.writeGlobal(featherConfig("a", "slack", p.URL))
-	stdin, w := io.Pipe()
+	stdin, w, err := os.Pipe() // a file: the reader kjak gets from the OS
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stdin.Close()
 	defer w.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

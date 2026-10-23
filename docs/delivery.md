@@ -24,9 +24,17 @@ resolved (the preflight). Any failure there sends nothing.
 - **Worker pool**: at most `concurrency` (default 5) deliveries run at the
   same time — attempts and waits of one feather count as one slot.
 - **One deadline**: `timeout` (default 10s) is the deadline of the **whole
-  send**, from its start: every attempt, every wait between attempts, of
-  every feather, ends by then. A feather still queued when it passes fails
-  without an attempt (`acceptance: none`, `error.code: deadline`).
+  send**, from the moment its message is read: the credentials (a keychain
+  lookup included), every attempt, every wait between attempts, of every
+  feather, end by then; the deliveries have what the credentials left. A
+  deadline that passes while the credentials are resolved ends the send
+  before anything is sent (exit 2, `error.code: deadline`), and no delivery
+  starts after it. A feather still queued when it passes fails without an
+  attempt (`acceptance: none`, `error.code: deadline`).
+- **Outside the deadline**: reading the command line and the configuration
+  files (local, at most 1 MiB each), reading the message (standard input or
+  a `--json-input` FIFO is paced by its writer, `make test | kjak send
+  --stdin`; SIGINT or SIGTERM ends that wait) and writing the report.
 - **Deterministic order**: results follow the order of the targets, whatever
   the order in which deliveries finish.
 

@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -105,5 +106,69 @@ func TestBinaryClosedStdoutKeepsExitStatus(t *testing.T) {
 		if code != tc.want {
 			t.Fatalf("%v: exit %d (%v), want %d; stderr %q", tc.args, code, err, tc.want, errOut.String())
 		}
+	}
+}
+
+// SIGTERM while kjak reads a --json-input FIFO whose writer is silent: it
+// ends (130), also when every descriptor it opens is 1024 or more (beyond
+// what select(2) can wait for: it inherits 1100 more).
+func TestBinarySIGTERMWhileReadingFIFO(t *testing.T) {
+	t.Run("low descriptors", func(t *testing.T) { testSIGTERMWhileReadingFIFO(t, 0) })
+	t.Run("high descriptors", func(t *testing.T) { testSIGTERMWhileReadingFIFO(t, 1100) })
+}
+
+func testSIGTERMWhileReadingFIFO(t *testing.T, extra int) {
+	if extra > 0 {
+		var rl syscall.Rlimit
+		if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rl); err != nil || rl.Cur < uint64(extra)+256 {
+			if os.Getenv("CI") != "" { // CI must run it
+				t.Fatalf("RLIMIT_NOFILE is %d (%v): kjak cannot inherit %d descriptors", rl.Cur, err, extra)
+			}
+			t.Skipf("RLIMIT_NOFILE is %d (%v): kjak cannot inherit %d descriptors", rl.Cur, err, extra)
+		}
+	}
+	s := newSandbox(t)
+	s.env = append(s.env, "HOOK=http://127.0.0.1:9/never")
+	s.must("feather", "add", "f", "--type", "slack", "--secret-env", "HOOK")
+	fifo := filepath.Join(t.TempDir(), "in")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binary, "send", "--to", "f", "--json-input", fifo)
+	cmd.Dir, cmd.Env = s.dir, s.env
+	if extra > 0 {
+		null, err := os.Open(os.DevNull)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer null.Close()
+		for range extra {
+			cmd.ExtraFiles = append(cmd.ExtraFiles, null) // descriptors 3 to 3+extra-1
+		}
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	// kjak has the FIFO open for reading once a writer can open it; the
+	// writer stays, silent (one that closed would be the end of the input)
+	for start := time.Now(); ; {
+		w, err := os.OpenFile(fifo, os.O_WRONLY|syscall.O_NONBLOCK, 0)
+		if err == nil {
+			defer w.Close()
+			break
+		}
+		if time.Since(start) > 30*time.Second {
+			_ = cmd.Process.Kill()
+			t.Fatalf("kjak never opened the FIFO: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	err := cmd.Wait()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() != 130 {
+		t.Fatalf("exit = %v", err)
 	}
 }
