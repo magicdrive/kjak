@@ -126,6 +126,13 @@ func testSIGTERMWhileReadingFIFO(t *testing.T, extra int) {
 			}
 			t.Skipf("RLIMIT_NOFILE is %d (%v): kjak cannot inherit %d descriptors", rl.Cur, err, extra)
 		}
+		// Go raised the limit of this process and gives a child the one it
+		// started with, unless it was set: with 256 (a macOS terminal), a
+		// child given descriptors beyond its limit aborts before it runs.
+		// A parent that holds them has the limit they need; so has kjak.
+		if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rl); err != nil {
+			t.Fatal(err)
+		}
 	}
 	s := newSandbox(t)
 	s.env = append(s.env, "HOOK=http://127.0.0.1:9/never")
