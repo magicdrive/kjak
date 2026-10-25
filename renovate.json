@@ -1,0 +1,83 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    "group:allNonMajor"
+  ],
+  "timezone": "Asia/Tokyo",
+  "schedule": ["before 10am on monday"],
+  "labels": ["dependencies"],
+  "commitMessagePrefix": "chore(deps):",
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "prCreation": "immediate",
+  "rebaseWhen": "behind-base-branch",
+  "minimumReleaseAge": "3 days",
+  "packageRules": [
+    {
+      "description": "GitHub Actions stay pinned to commit SHAs (magicdrive/hephaestus included)",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions",
+      "pinDigests": true,
+      "automerge": false
+    },
+    {
+      "description": "Hephaestus: the action SHA in the workflows and HEPHAESTUS_VERSION in the Makefile move together",
+      "matchPackageNames": ["magicdrive/hephaestus", "github.com/magicdrive/hephaestus"],
+      "groupName": "Hephaestus",
+      "automerge": false
+    },
+    {
+      "description": "Go major updates monthly",
+      "matchDatasources": ["go"],
+      "matchUpdateTypes": ["major"],
+      "groupName": "Go major dependencies",
+      "schedule": ["before 10am on the first day of the month"]
+    },
+    {
+      "description": "golang.org/x packages grouping",
+      "matchDatasources": ["go"],
+      "matchPackageNames": ["golang.org/x{/,}**"],
+      "groupName": "golang.org/x packages",
+      "automerge": false
+    },
+    {
+      "description": "Vulnerable packages first",
+      "matchDatasources": ["go"],
+      "labels": ["security"],
+      "prPriority": 10
+    }
+  ],
+  "customManagers": [
+    {
+      "description": "Go tools pinned in the Makefile (pkg@version)",
+      "customType": "regex",
+      "managerFilePatterns": ["/^Makefile$/"],
+      "matchStrings": [
+        "(?:STATICCHECK|GOVULNCHECK|ACTIONLINT) := (?<depName>[^@\\s]+?)(?:/cmd/[^@\\s]+)?@(?<currentValue>v[^\\s]+)"
+      ],
+      "datasourceTemplate": "go"
+    },
+    {
+      "description": "Hephaestus CLI version in the Makefile",
+      "customType": "regex",
+      "managerFilePatterns": ["/^Makefile$/"],
+      "matchStrings": ["HEPHAESTUS_VERSION \\?= (?<currentValue>v[^\\s]+)"],
+      "depNameTemplate": "github.com/magicdrive/hephaestus",
+      "datasourceTemplate": "go"
+    },
+    {
+      "description": "Renovate used to validate this file (Makefile)",
+      "customType": "regex",
+      "managerFilePatterns": ["/^Makefile$/"],
+      "matchStrings": ["RENOVATE_VERSION := (?<currentValue>[0-9][^\\s]*)"],
+      "depNameTemplate": "renovate",
+      "datasourceTemplate": "npm"
+    }
+  ],
+  "ignorePaths": ["**/testdata/**"],
+  "postUpdateOptions": ["gomodTidy"],
+  "osvVulnerabilityAlerts": true
+}

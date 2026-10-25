@@ -306,9 +306,10 @@ func TestTrustUsesCanonicalPath(t *testing.T) {
 		t.Fatalf("store = %+v (%v)", ts, err)
 	}
 	// the same file through a relative path is the same entry
-	wd, _ := os.Getwd()
-	t.Cleanup(func() { _ = os.Chdir(wd) })
-	_ = os.Chdir(filepath.Dir(fx.paths.Project))
+	// t.Chdir restores the directory and fails the test (instead of
+	// ignoring the error); it also forbids t.Parallel, as the process-wide
+	// working directory requires.
+	t.Chdir(filepath.Dir(fx.paths.Project))
 	if ok, _ := ts.IsTrusted(ProjectFileName, src.Hash); !ok {
 		t.Fatal("a relative path is not canonicalized")
 	}

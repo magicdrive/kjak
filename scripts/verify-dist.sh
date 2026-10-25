@@ -1,5 +1,6 @@
 #!/bin/sh
-# Checks the archives of a GoReleaser run, without publishing anything:
+# Checks the archives of a Hephaestus run (hephaestus.yaml), without
+# publishing anything:
 #   - kjak_checksums.txt lists exactly the five archives, each matches it;
 #   - each platform has exactly one archive holding kjak (kjak.exe), LICENSE
 #     and README.md, and nothing else;
@@ -7,7 +8,7 @@
 #     exists) and is statically linked (CGO_ENABLED=0);
 #   - the binary for this machine runs and prints the expected version.
 #
-# usage: scripts/verify-dist.sh [DIST] [EXPECTED-VERSION-SUBSTRING]   (e.g. v0.1.0, snapshot)
+# usage: scripts/verify-dist.sh [DIST] [EXPECTED-VERSION-SUBSTRING]   (e.g. v0.1.0, SNAPSHOT)
 set -eu
 
 dist=${1:-dist}
