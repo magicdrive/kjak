@@ -1,0 +1,67 @@
+version: 2
+
+project_name: kjak
+
+release:
+  github:
+    owner: magicdrive
+    name: kjak
+  draft: false
+  prerelease: auto  # a tag like v0.2.0-rc.1 is published as a pre-release
+
+builds:
+  - id: kjak
+    # the five supported platforms (README "Install")
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X "main.version=v{{.Version}}"
+    env:
+      - CGO_ENABLED=0
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    binary: kjak
+    main: ./main.go
+
+archives:
+  - id: tar.gz
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "{{ .ProjectName }}_checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+# As in ark and enma: GoReleaser writes the formula at the root of the tap,
+# where the tap keeps all of its formulas. `brews` is deprecated in GoReleaser
+# v2 (in favour of casks); enma keeps it on purpose, and so does kjak.
+brews:
+  - name: kjak
+    repository:
+      owner: magicdrive
+      name: homebrew-tap
+      branch: main
+    homepage: "https://github.com/magicdrive/kjak"
+    description: "Send one notification to Slack, Discord and e-mail from the command line"
+    license: "MIT"
+    ids: [tar.gz]
+    skip_upload: auto  # a pre-release does not update the Homebrew tap
+    install: |
+      bin.install "kjak"
+    test: |
+      system "#{bin}/kjak", "--version"
+    commit_author:
+      name: magicdrive bot
+      email: hiroshi.ikegami+githubbot@magicdrive.jp
