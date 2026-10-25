@@ -21,7 +21,7 @@ RENOVATE_VERSION := 44.164.1
 # release (hephaestus.yaml). The version is kept in step with the commit SHA
 # of the magicdrive/hephaestus action in .github/workflows (Renovate updates
 # both).
-HEPHAESTUS_VERSION ?= v1.1.1-0.20261025105032-4414722a804d
+HEPHAESTUS_VERSION ?= v1.1.0
 # (no VAR=value prefix: scripts/homebrew-e2e.sh runs it as a plain command)
 HEPHAESTUS ?= go run github.com/magicdrive/hephaestus@$(HEPHAESTUS_VERSION)
 
