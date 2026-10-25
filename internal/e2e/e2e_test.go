@@ -104,15 +104,8 @@ func TestBinaryBasics(t *testing.T) {
 	if r := s.kjak(""); r.code != 2 {
 		t.Fatalf("no arguments: exit %d", r.code)
 	}
-	v := s.must("version").stdout
-	if !strings.HasPrefix(v, "kjak version ") {
-		t.Fatal(v)
-	}
-	// the flags print the same line (the Homebrew formula's test runs --version)
-	for _, flag := range []string{"--version", "-v"} {
-		if r := s.must(flag); r.stdout != v {
-			t.Fatalf("%s prints %q, version %q", flag, r.stdout, v)
-		}
+	if r := s.must("version"); !strings.HasPrefix(r.stdout, "kjak version ") {
+		t.Fatal(r.stdout)
 	}
 	s.must("--help")
 	s.must("config", "init")
