@@ -117,14 +117,11 @@ func TestMakefile_Publish(t *testing.T) {
 // of each (a line-based reading: two-space job keys under `jobs:`).
 func workflowJobs(t *testing.T, path string) (names []string, body map[string]string) {
 	t.Helper()
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	b := readText(t, path)
 	body = map[string]string{}
 	key := regexp.MustCompile(`^  ([A-Za-z0-9_-]+):\s*$`)
 	in, cur := false, ""
-	for _, l := range strings.Split(string(b), "\n") {
+	for _, l := range strings.Split(b, "\n") {
 		if l == "jobs:" {
 			in = true
 			continue
@@ -236,24 +233,16 @@ func TestReleaseWorkflow_TapStepsFollowThePlan(t *testing.T) {
 // the same full commit SHA with the version comment that HEPHAESTUS_VERSION
 // in the Makefile names (Renovate moves them together).
 func TestHephaestusPinsAgree(t *testing.T) {
-	mk, err := os.ReadFile("Makefile")
-	if err != nil {
-		t.Fatal(err)
-	}
-	m := regexp.MustCompile(`(?m)^HEPHAESTUS_VERSION \?= (v\S+)$`).FindSubmatch(mk)
+	m := regexp.MustCompile(`(?m)^HEPHAESTUS_VERSION \?= (v\S+)$`).FindStringSubmatch(readText(t, "Makefile"))
 	if m == nil {
 		t.Fatal("Makefile has no HEPHAESTUS_VERSION ?= vX.Y.Z")
 	}
-	version := string(m[1])
+	version := m[1]
 	use := regexp.MustCompile(`uses: magicdrive/hephaestus@(\S+)(?: # (\S+))?`)
 	sha := regexp.MustCompile(`^[0-9a-f]{40}$`)
 	shas := map[string]bool{}
 	for _, f := range []string{".github/workflows/ci.yml", ".github/workflows/release.yml"} {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, u := range use.FindAllStringSubmatch(string(b), -1) {
+		for _, u := range use.FindAllStringSubmatch(readText(t, f), -1) {
 			if !sha.MatchString(u[1]) || u[2] != version {
 				t.Errorf("%s: %s; want a full commit SHA # %s", f, u[0], version)
 			}
@@ -263,4 +252,15 @@ func TestHephaestusPinsAgree(t *testing.T) {
 	if len(shas) != 1 {
 		t.Errorf("the workflows pin %d different hephaestus commits, want 1", len(shas))
 	}
+}
+
+// readText reads a text file with LF line endings (a Windows checkout may
+// have CRLF).
+func readText(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.ReplaceAll(string(b), "\r\n", "\n")
 }
