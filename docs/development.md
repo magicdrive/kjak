@@ -7,7 +7,10 @@
 - GNU make, a POSIX shell
 - For the race detector: a C compiler (`-race` needs cgo; release binaries do
   not)
-- For `make snapshot`: GoReleaser v2.18.2
+- Nothing else for `make snapshot`: Hephaestus (`HEPHAESTUS_VERSION` in the
+  Makefile) runs with `go run`
+- For `make homebrew-e2e`: Homebrew (it installs into the machine's prefix;
+  meant for CI runners and containers); for `make renovate-check`: Node.js 24
 
 ```sh
 make help          # every target
@@ -86,7 +89,8 @@ Re-evaluate when one of these can report how far a request got.
   tool@version`.
 - Tests next to the code (`_test.go` in the package), end-to-end tests of the
   built binary in `internal/e2e`.
-- GitHub Actions pinned to commit SHAs; GoReleaser v2 for the archives;
+- GitHub Actions pinned to commit SHAs; Hephaestus for the archives and the
+  release (`hephaestus.yaml`, [release.md](release.md));
   `goreg.toml` import order (`make goreg`).
 
 Deliberate differences: kjak's entry point is `cmd/kjak.go` (package `cmd`)
@@ -103,6 +107,8 @@ make race            # the same with -race
 make vet staticcheck vulncheck
 make fuzz            # every fuzz target for FUZZTIME (10s)
 make check           # vet, staticcheck, test, race, gofmt, go mod tidy
+make smoke           # a binary built like a release, run by scripts/smoke.sh
+make snapshot        # the release archives (Hephaestus), verified
 ```
 
 Tests are deterministic: no test waits for real time to pass.
@@ -142,10 +148,16 @@ to main and every pull request:
 
 | job | runs |
 |---|---|
-| test (ubuntu, macos, windows) | gofmt (Linux), `go vet`, `go test -count=1 ./...`, `-race` (not Windows) |
-| lint | `go mod verify`, `go mod tidy -diff`, `make staticcheck`, `GOOS=windows go vet`, shellcheck |
+| test (ubuntu, macos, windows) | gofmt (Linux), `go vet`, `go test -count=1 ./...`, `-race` (not Windows: no cgo there), CLI smoke test of a release-built binary (`scripts/smoke.sh`) |
+| lint | `go mod verify`, `go mod tidy -diff`, `make staticcheck`, `GOOS=windows go vet`, shellcheck, `make actionlint` |
+| renovate | `make renovate-check` (`renovate-config-validator --strict`) |
 | fuzz | `make fuzz` |
-| dist | `make vulncheck`, GoReleaser snapshot, `scripts/verify-dist.sh` |
+| dist | `make vulncheck`, `hephaestus check`, Hephaestus snapshot (build, archive, checksum), `scripts/verify-dist.sh` |
+| homebrew-e2e (ubuntu, macos) | `make homebrew-e2e`: the generated formula with file:// URLs, `brew style`, `brew audit --strict`, install, smoke test, `brew test`, uninstall |
 
-Tool versions are pinned in the Makefile (staticcheck, govulncheck) and the
-workflows (GoReleaser, actions by commit SHA); Go comes from `go.mod`.
+macOS runs on `macos-latest` (arm64); the darwin/amd64 binary is cross-built
+and checked by `scripts/verify-dist.sh` (architecture, static linking), not
+run. Tool versions are pinned in the Makefile (staticcheck, govulncheck,
+actionlint, Renovate, Hephaestus) and the workflows (actions by commit SHA,
+`magicdrive/hephaestus` included); Go comes from `go.mod`. Renovate
+(`renovate.json`) updates all of them.
