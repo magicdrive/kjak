@@ -14,7 +14,7 @@
 # created on exit: meant for CI runners and containers.
 #
 # usage: scripts/homebrew-e2e.sh
-#   HEPHAESTUS          the hephaestus command (default: go run ...@v1.2.0-rc.1)
+#   HEPHAESTUS          the hephaestus command (default: go run ...@v1.2.0)
 #   E2E_TAG             the tag to build (default: v0.0.0)
 #   KJAK_E2E_SKIP_BUILD=1  use the dist/ of an earlier `hephaestus run
 #                       --tag $E2E_TAG --stages build,archive,checksum,formula`
@@ -25,7 +25,7 @@ set -eu
 repo=$(cd "$(dirname "$0")/.." && pwd)
 tag=${E2E_TAG:-v0.0.0}
 version=${tag#v}
-hephaestus=${HEPHAESTUS:-go run github.com/magicdrive/hephaestus@v1.2.0-rc.1}
+hephaestus=${HEPHAESTUS:-go run github.com/magicdrive/hephaestus@v1.2.0}
 tap="kjak-e2e/t$$"
 fail() { echo "homebrew-e2e: $*" >&2; exit 1; }
 step() { printf '\n==> %s\n' "$*"; }

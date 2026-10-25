@@ -120,7 +120,7 @@ Look first, without changing anything:
 ```sh
 make publish-status vX.Y.Z      # tag, run, release, assets, attestations, tap
 make publish-watch vX.Y.Z       # follow the run again, then verify
-go run github.com/magicdrive/hephaestus@v1.2.0-rc.1 status --tag vX.Y.Z
+go run github.com/magicdrive/hephaestus@v1.2.0 status --tag vX.Y.Z
 ```
 
 Then:

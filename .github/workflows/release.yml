@@ -50,7 +50,7 @@ jobs:
           cache: false  # the release is built without a restored cache
 
       - name: Build, archive and checksum
-        uses: magicdrive/hephaestus@bae0e2b3cbf41ad27299e0cfc3517a6affc7e15e # v1.2.0-rc.1
+        uses: magicdrive/hephaestus@160990d32bbc83af702bde8a63f49ffcac32972c # v1.2.0
         with:
           command: run
           stages: build,archive,checksum
@@ -102,7 +102,7 @@ jobs:
       # refuses a prerelease whose plan would update the tap.
       - name: Plan the release
         id: plan
-        uses: magicdrive/hephaestus@bae0e2b3cbf41ad27299e0cfc3517a6affc7e15e # v1.2.0-rc.1
+        uses: magicdrive/hephaestus@160990d32bbc83af702bde8a63f49ffcac32972c # v1.2.0
         with:
           command: plan
 
@@ -119,7 +119,7 @@ jobs:
       # tap's layout, a newer formula on the tap and the pull request branch.
       - name: Rehearse the formula and tap pull request (read-only)
         if: steps.plan.outputs.tap == 'publish'
-        uses: magicdrive/hephaestus@bae0e2b3cbf41ad27299e0cfc3517a6affc7e15e # v1.2.0-rc.1
+        uses: magicdrive/hephaestus@160990d32bbc83af702bde8a63f49ffcac32972c # v1.2.0
         with:
           command: run
           stages: formula,tap
@@ -137,7 +137,7 @@ jobs:
             dist/kjak_checksums.txt
 
       - name: Publish the GitHub release
-        uses: magicdrive/hephaestus@bae0e2b3cbf41ad27299e0cfc3517a6affc7e15e # v1.2.0-rc.1
+        uses: magicdrive/hephaestus@160990d32bbc83af702bde8a63f49ffcac32972c # v1.2.0
         with:
           command: release
 
@@ -145,7 +145,7 @@ jobs:
       # tap=skip (skip_upload: auto), and this step does not run.
       - name: Generate the formula and open a tap pull request
         if: steps.plan.outputs.tap == 'publish'
-        uses: magicdrive/hephaestus@bae0e2b3cbf41ad27299e0cfc3517a6affc7e15e # v1.2.0-rc.1
+        uses: magicdrive/hephaestus@160990d32bbc83af702bde8a63f49ffcac32972c # v1.2.0
         with:
           command: run
           stages: formula,tap
