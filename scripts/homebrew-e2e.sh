@@ -18,7 +18,8 @@
 #   E2E_TAG             the tag to build (default: v0.0.0)
 #   KJAK_E2E_SKIP_BUILD=1  use the dist/ of an earlier `hephaestus run
 #                       --tag $E2E_TAG --stages build,archive,checksum,formula`
-#                       (a container with Homebrew but without Go)
+#                       (a container with Homebrew but without Go; set
+#                       VERIFY_DIST_SKIP_BUILDINFO=1 there too)
 set -eu
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
