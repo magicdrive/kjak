@@ -22,7 +22,8 @@ RENOVATE_VERSION := 44.164.1
 # of the magicdrive/hephaestus action in .github/workflows (Renovate updates
 # both).
 HEPHAESTUS_VERSION ?= v1.1.0
-HEPHAESTUS ?= $(GO) run github.com/magicdrive/hephaestus@$(HEPHAESTUS_VERSION)
+# (no VAR=value prefix: scripts/homebrew-e2e.sh runs it as a plain command)
+HEPHAESTUS ?= go run github.com/magicdrive/hephaestus@$(HEPHAESTUS_VERSION)
 
 # Argments
 tag =

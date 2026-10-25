@@ -16,7 +16,7 @@ bin=$1
 want_version=${2:-}
 fail() { echo "smoke: $*" >&2; exit 1; }
 
-case "$bin" in /*) ;; *) bin="$(pwd)/$bin" ;; esac
+case "$bin" in /* | [A-Za-z]:[\\/]*) ;; *) bin="$(pwd)/$bin" ;; esac
 [ -f "$bin" ] || fail "no binary $bin"
 
 work=$(mktemp -d 2>/dev/null || mktemp -d -t kjak-smoke)

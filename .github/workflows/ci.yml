@@ -72,7 +72,7 @@ jobs:
         env:
           CGO_ENABLED: "0"
         run: |
-          bin="$RUNNER_TEMP/smoke/kjak$(go env GOEXE)"
+          bin="build/smoke/kjak$(go env GOEXE)"  # relative: RUNNER_TEMP is D:\a\_temp on Windows
           go build -trimpath -ldflags "-s -w -X main.version=v0.0.0-smoke" -o "$bin" ./main.go
           sh scripts/smoke.sh "$bin" "kjak version v0.0.0-smoke"
 

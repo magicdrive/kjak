@@ -42,6 +42,10 @@ builds:
       GOOS: "{{ .OS }}"
       GOARCH: "{{ .Arch }}"
       CGO_ENABLED: "0"
+      # The magicdrive/hephaestus action sets up its own Go (1.26) with
+      # GOTOOLCHAIN=local; `auto` lets go use the toolchain go.mod pins
+      # (go1.27.3, as the releases so far), whatever go is on PATH.
+      GOTOOLCHAIN: auto
     output: "dist/bin/{{ .OS }}_{{ .Arch }}/kjak{{ .Ext }}"
 
 archives:
