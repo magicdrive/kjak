@@ -103,7 +103,7 @@ func FuzzCheckHTTPURL(f *testing.F) {
 			}
 			return
 		}
-		if u.User != nil || u.Hostname() == "" || (u.Scheme != "https" && !(allowHTTP && u.Scheme == "http")) {
+		if u.User != nil || u.Hostname() == "" || (u.Scheme != "https" && (!allowHTTP || u.Scheme != "http")) {
 			t.Fatalf("accepted %q", s)
 		}
 	})

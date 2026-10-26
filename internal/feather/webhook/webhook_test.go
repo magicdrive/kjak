@@ -138,7 +138,7 @@ func TestCritical_WebhookAmbiguousAfterRequestSent(t *testing.T) {
 		received <- struct{}{}
 		conn, _, err := w.(http.Hijacker).Hijack()
 		if err == nil {
-			conn.Close()
+			_ = conn.Close()
 		}
 	}))
 	defer srv.Close()
@@ -191,7 +191,7 @@ func closedPortURL(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	addr := l.Addr().String()
-	l.Close()
+	_ = l.Close()
 	return "http://" + addr + path
 }
 

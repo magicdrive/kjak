@@ -185,7 +185,7 @@ func TestCritical_SMTPDeadlineAfterDataTerminator(t *testing.T) {
 func TestCritical_SMTPConnectRefusedIsRetryable(t *testing.T) {
 	l, _ := net.Listen("tcp", "127.0.0.1:0")
 	port := l.Addr().(*net.TCPAddr).Port
-	l.Close()
+	_ = l.Close()
 	f := &email.Feather{Host: "127.0.0.1", Port: port, Security: email.SecurityNone, From: "a@example.com", To: []string{"b@example.com"}, Clock: clock.NewFake(t0)}
 	o := f.Deliver(context.Background(), msg)
 	if o.Acceptance != core.AcceptanceRejected || !o.Retryable || o.Code != core.ErrCodeNetwork {

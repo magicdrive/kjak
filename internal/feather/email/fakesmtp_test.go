@@ -61,7 +61,7 @@ func newFakeSMTP(t *testing.T, configure func(*fakeSMTP)) *fakeSMTP {
 	if configure != nil {
 		configure(s)
 	}
-	t.Cleanup(func() { l.Close() })
+	t.Cleanup(func() { _ = l.Close() })
 	go s.serve()
 	return s
 }
@@ -111,7 +111,7 @@ func (s *fakeSMTP) reply(tp *textproto.Conn, verb, def string) bool {
 }
 
 func (s *fakeSMTP) handle(c net.Conn) {
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	_ = c.SetDeadline(time.Now().Add(30 * time.Second))
 	secure := false
 	if s.implicit {

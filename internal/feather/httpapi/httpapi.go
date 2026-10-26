@@ -221,7 +221,7 @@ func newClient(g *Guard, tlsConfig *tls.Config, fc configure.FeatherConfig, auth
 			if req.URL.User != nil {
 				return &BlockedError{Reason: "a redirect to a URL with user information"}
 			}
-			if req.URL.Scheme != "https" && !(req.URL.Scheme == "http" && allowHTTP) {
+			if req.URL.Scheme != "https" && (req.URL.Scheme != "http" || !allowHTTP) {
 				return &BlockedError{Reason: "a redirect to a URL that is not https"}
 			}
 			// net/http sets Referer to the URL before: it may be a secret
@@ -312,7 +312,7 @@ func (f *Feather) attempt(ctx context.Context, msg core.Message) feather.Outcome
 	if err != nil {
 		return f.transportOutcome(ctx, actx, err, wrote.Load())
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, f.MaxResponse+1))
 	truncated := int64(len(data)) > f.MaxResponse
 	if truncated {

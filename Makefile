@@ -15,6 +15,11 @@ GO := GO111MODULE=on CGO_ENABLED=0 go
 STATICCHECK := honnef.co/go/tools/cmd/staticcheck@v0.8.2
 GOVULNCHECK := golang.org/x/vuln/cmd/govulncheck@v1.9.0
 ACTIONLINT := github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+#   golangci-lint v2.15.0 is built from source with the toolchain (go
+#   install): its release binaries are built with an older Go and cannot
+#   read Go 1.27 export data (v2.5.0 fails so).
+GOLANGCI_LINT := github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
+TOOLS_DIR = $(BUILD_DIR)/tools
 RENOVATE_VERSION := 44.164.1
 
 # Release tooling: Hephaestus builds, archives, checksums and publishes the
@@ -104,9 +109,21 @@ vet:
 staticcheck:
 	@$(GO) run $(STATICCHECK) ./...
 
-# The static analysis of CI: staticcheck, plus shellcheck of the scripts
+# Run the pinned golangci-lint (.golangci.yml) for each OS kjak has code of
+# its own for: the tool is built for the host once, then GOOS selects the
+# files it analyses
+.PHONY: golangci-lint
+golangci-lint:
+	@GOBIN=$(TOOLS_DIR) $(GO) install $(GOLANGCI_LINT)
+	@for goos in linux darwin windows; do \
+		echo "== golangci-lint GOOS=$$goos"; \
+		GOOS=$$goos $(TOOLS_DIR)/golangci-lint run ./... || exit 1; \
+	done
+
+# The static analysis of CI: staticcheck, golangci-lint, plus shellcheck of
+# the scripts
 .PHONY: lint
-lint: staticcheck
+lint: staticcheck golangci-lint
 	@shellcheck -s sh scripts/*.sh
 
 # Lint the GitHub Actions workflows with the pinned actionlint
@@ -136,9 +153,22 @@ fuzz:
 		done; \
 	done; echo "fuzzed $$n targets"; [ $$n -gt 0 ]
 
+# Mutation testing of the security-critical paths (scripts/mutation.sh,
+# scripts/mutants.tsv): every mutant must be killed. MUTANTS=regex selects
+# mutants by id. Slow (minutes): CI runs it weekly (mutation.yml).
+MUTANTS =
+.PHONY: mutation
+mutation:
+	@sh $(CURDIR)/scripts/mutation.sh $(MUTANTS)
+
+# Check that every mutant still applies to the code (fast; runs no test)
+.PHONY: mutation-check
+mutation-check:
+	@sh $(CURDIR)/scripts/mutation.sh --check $(MUTANTS)
+
 # Run the local quality gates (as CI)
 .PHONY: check
-check: vet staticcheck test race
+check: vet staticcheck golangci-lint test race
 	@test -z "$$(gofmt -l .)" || { gofmt -l .; exit 1; }
 	@go mod tidy -diff
 	@echo "check: OK"
@@ -291,12 +321,15 @@ help:
 	@echo "  make fmt               - Format the Go files (fmt-check: fail when one is not formatted)"
 	@echo "  make vet               - Run go vet (host and windows)"
 	@echo "  make staticcheck       - Run the pinned staticcheck"
-	@echo "  make lint              - Run staticcheck and shellcheck"
+	@echo "  make golangci-lint     - Run the pinned golangci-lint for linux, darwin and windows"
+	@echo "  make lint              - Run staticcheck, golangci-lint and shellcheck"
 	@echo "  make vulncheck         - Run the pinned govulncheck"
 	@echo "  make actionlint        - Lint the workflows with the pinned actionlint"
 	@echo "  make renovate-check    - Validate renovate.json with the pinned Renovate"
 	@echo "  make fuzz              - Run every fuzz target for FUZZTIME (10s)"
-	@echo "  make check             - Run the local quality gates (vet, staticcheck, test, race, gofmt, go mod tidy)"
+	@echo "  make mutation          - Mutation testing of the security-critical paths (MUTANTS=regex)"
+	@echo "  make mutation-check    - Check that every mutant still applies (no test run)"
+	@echo "  make check             - Run the local quality gates (vet, staticcheck, golangci-lint, test, race, gofmt, go mod tidy)"
 	@echo "  make hephaestus-check  - Validate hephaestus.yaml"
 	@echo "  make snapshot          - Build and verify the release archives with Hephaestus (nothing is published)"
 	@echo "  make release-check tag=<tag> - Archives and formula of <tag> at HEAD, verified (nothing is published)"
