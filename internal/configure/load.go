@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -187,13 +189,29 @@ func Parse(content []byte) (*File, error) {
 	return &f, nil
 }
 
+// displayKey is a TOML key path as it can be printed: a part that is not a
+// bare key is quoted (with its control characters escaped).
+func displayKey(parts []string) string {
+	shown := make([]string, len(parts))
+	for i, p := range parts {
+		if bareKey.MatchString(p) {
+			shown[i] = p
+		} else {
+			shown[i] = strconv.Quote(p)
+		}
+	}
+	return strings.Join(shown, ".")
+}
+
+var bareKey = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
 func describeTOMLError(err error) error {
 	var sm *toml.StrictMissingError
 	if errors.As(err, &sm) {
 		var keys []string
 		for _, e := range sm.Errors {
 			row, _ := e.Position()
-			keys = append(keys, fmt.Sprintf("%s (line %d)", strings.Join(e.Key(), "."), row))
+			keys = append(keys, fmt.Sprintf("%s (line %d)", displayKey(e.Key()), row))
 		}
 		return fmt.Errorf("%w: unknown key(s): %s", ErrInvalidConfig, strings.Join(keys, ", "))
 	}

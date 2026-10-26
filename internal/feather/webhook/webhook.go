@@ -56,8 +56,21 @@ type Poster struct {
 // NewClient is the HTTP client of the webhook feathers: HTTP/1.1, no
 // redirects (a redirected POST would carry the payload to another URL), TLS
 // 1.2 or later, proxies from the environment.
-func NewClient() *http.Client {
+func NewClient() *http.Client { return newClient(nil) }
+
+// NewGuardedClient is NewClient whose every connection is made by dial (an
+// address policy: httpapi.Guard.DialContext), without a proxy: through a
+// proxy, the policy would check the proxy's address, not the destination's.
+func NewGuardedClient(dial func(ctx context.Context, network, addr string) (net.Conn, error)) *http.Client {
+	return newClient(dial)
+}
+
+func newClient(dial func(ctx context.Context, network, addr string) (net.Conn, error)) *http.Client {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
+	if dial != nil {
+		tr.Proxy = nil
+		tr.DialContext = dial
+	}
 	tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	tr.MaxIdleConnsPerHost = 4
 	// HTTP/1.1 only: the classification relies on when the request was
@@ -126,6 +139,11 @@ func Sanitize(r *credential.Redactor, s string) string { return sanitize(r, s) }
 
 // transportOutcome classifies an error without a response.
 func transportOutcome(ctx context.Context, err error, wrote bool) feather.Outcome {
+	var blocked *feather.BlockedError
+	if errors.As(err, &blocked) {
+		// refused by the address policy before anything was sent
+		return feather.Rejected(core.ErrCodeBlocked, 0, false, fmt.Errorf("the request was not sent: %s", blocked.Reason))
+	}
 	reason := describeTransportError(err)
 	if ctx.Err() != nil {
 		code := feather.ContextCode(ctx)

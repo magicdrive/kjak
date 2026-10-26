@@ -8,6 +8,7 @@ import (
 
 	"github.com/magicdrive/kjak/internal/commandline/option"
 	"github.com/magicdrive/kjak/internal/configure"
+	"github.com/magicdrive/kjak/internal/output"
 	"github.com/magicdrive/kjak/internal/template"
 	"github.com/magicdrive/kjak/internal/textbank"
 )
@@ -71,7 +72,7 @@ func templateList(ctx context.Context, rt *Runtime, args []string) int {
 	tw := tabwriter.NewWriter(rt.Stdout, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tLEVEL\tTITLE\tORIGIN")
 	for _, v := range views {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", v.Name, v.Level, v.Title, v.Origin)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", v.Name, output.Shown(v.Level), output.Shown(v.Title), v.Origin)
 	}
 	_ = tw.Flush()
 	return ExitOK
@@ -96,12 +97,14 @@ func templateShow(ctx context.Context, rt *Runtime, args []string) int {
 		_ = writeJSON(rt.Stdout, v)
 		return ExitOK
 	}
-	fmt.Fprintf(rt.Stdout, "name    %s\norigin  %s\ntitle   %s\nlevel   %s\nurl     %s\nbody\n%s\n", v.Name, v.Origin, v.Title, v.Level, v.URL, indent(v.Body))
+	fmt.Fprintf(rt.Stdout, "name    %s\norigin  %s\ntitle   %s\nlevel   %s\nurl     %s\nbody\n%s\n", v.Name, v.Origin, output.Shown(v.Title), output.Shown(v.Level), output.Shown(v.URL), indent(v.Body))
 	return ExitOK
 }
 
+// indent is a body as it is printed: indented, its control characters
+// (but line breaks and tabs) escaped.
 func indent(s string) string {
-	return "  " + strings.ReplaceAll(s, "\n", "\n  ")
+	return "  " + strings.ReplaceAll(output.EscapeControls(s), "\n", "\n  ")
 }
 
 func templateSet(ctx context.Context, rt *Runtime, args []string) int {
@@ -179,6 +182,6 @@ func templateRender(ctx context.Context, rt *Runtime, args []string) int {
 		_ = writeJSON(rt.Stdout, msg)
 		return ExitOK
 	}
-	fmt.Fprintf(rt.Stdout, "title  %s\nlevel  %s\nurl    %s\nbody\n%s\n", msg.Title, msg.Level, msg.URL, indent(msg.Body))
+	fmt.Fprintf(rt.Stdout, "title  %s\nlevel  %s\nurl    %s\nbody\n%s\n", output.Shown(msg.Title), msg.Level, output.Shown(msg.URL), indent(msg.Body))
 	return ExitOK
 }

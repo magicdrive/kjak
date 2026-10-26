@@ -8,6 +8,7 @@ import (
 
 	"github.com/magicdrive/kjak/internal/commandline/option"
 	"github.com/magicdrive/kjak/internal/configure"
+	"github.com/magicdrive/kjak/internal/output"
 	"github.com/magicdrive/kjak/internal/textbank"
 )
 
@@ -64,7 +65,7 @@ func groupList(ctx context.Context, rt *Runtime, args []string) int {
 	tw := tabwriter.NewWriter(rt.Stdout, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tFEATHERS\tORIGIN")
 	for _, v := range views {
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", v.Name, strings.Join(v.Feathers, ","), v.Origin)
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", v.Name, output.EscapeControls(strings.Join(v.Feathers, ",")), v.Origin)
 	}
 	_ = tw.Flush()
 	return ExitOK
@@ -89,7 +90,7 @@ func groupShow(ctx context.Context, rt *Runtime, args []string) int {
 		_ = writeJSON(rt.Stdout, v)
 		return ExitOK
 	}
-	fmt.Fprintf(rt.Stdout, "name      %s\norigin    %s\nfeathers  %s\n", v.Name, v.Origin, strings.Join(v.Feathers, ", "))
+	fmt.Fprintf(rt.Stdout, "name      %s\norigin    %s\nfeathers  %s\n", v.Name, v.Origin, output.ShownList(v.Feathers))
 	return ExitOK
 }
 
