@@ -310,15 +310,23 @@ func TestPluginTimeoutAndCancellation(t *testing.T) {
 	if d := time.Since(start); d > 10*time.Second {
 		t.Fatalf("the timeout took %s", d)
 	}
-	f = plugin(t, map[string]string{"mode": "sleep"}, nil)
+	// the plugin timeout is long: the cancellation, not the timeout, must
+	// stop the plugin
+	f = plugin(t, map[string]string{"mode": "sleep"}, func(fc *configure.FeatherConfig) {
+		fc.Timeout = &configure.Duration{Duration: time.Minute}
+	})
 	ctx, cancel := context.WithCancelCause(context.Background())
 	go func() {
 		time.Sleep(200 * time.Millisecond)
 		cancel(errors.New("interrupted"))
 	}()
+	start = time.Now()
 	o = f.Deliver(ctx, msg())
 	if o.Acceptance != core.AcceptanceUnknown || o.Code != core.ErrCodeCanceled {
 		t.Fatalf("canceled: %+v", o)
+	}
+	if d := time.Since(start); d > 20*time.Second {
+		t.Fatalf("the cancellation stopped the plugin after %s", d)
 	}
 }
 

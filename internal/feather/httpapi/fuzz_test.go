@@ -43,6 +43,7 @@ func FuzzCheckRedirect(f *testing.F) {
 	f.Add("https://api.example.com/v1", "ftp://api.example.com/", true, uint8(1), uint8(3))
 	f.Add("https://api.example.com/v1", "https://api.example.com/", false, uint8(4), uint8(3))
 	f.Add("http://127.0.0.1:8080/", "http://127.0.0.1/", true, uint8(1), uint8(0))
+	f.Add("https://api.example.com:8443/v1", "http://api.example.com:8443/v2", true, uint8(1), uint8(3))
 	f.Fuzz(func(t *testing.T, from, to string, allowHTTP bool, hops, maxRedirects uint8) {
 		first, err := url.Parse(from)
 		if err != nil || first.Host == "" {

@@ -153,6 +153,19 @@ fuzz:
 		done; \
 	done; echo "fuzzed $$n targets"; [ $$n -gt 0 ]
 
+# Mutation testing of the security-critical paths (scripts/mutation.sh,
+# scripts/mutants.tsv): every mutant must be killed. MUTANTS=regex selects
+# mutants by id. Slow (minutes): CI runs it weekly (mutation.yml).
+MUTANTS =
+.PHONY: mutation
+mutation:
+	@sh $(CURDIR)/scripts/mutation.sh $(MUTANTS)
+
+# Check that every mutant still applies to the code (fast; runs no test)
+.PHONY: mutation-check
+mutation-check:
+	@sh $(CURDIR)/scripts/mutation.sh --check $(MUTANTS)
+
 # Run the local quality gates (as CI)
 .PHONY: check
 check: vet staticcheck golangci-lint test race
@@ -314,6 +327,8 @@ help:
 	@echo "  make actionlint        - Lint the workflows with the pinned actionlint"
 	@echo "  make renovate-check    - Validate renovate.json with the pinned Renovate"
 	@echo "  make fuzz              - Run every fuzz target for FUZZTIME (10s)"
+	@echo "  make mutation          - Mutation testing of the security-critical paths (MUTANTS=regex)"
+	@echo "  make mutation-check    - Check that every mutant still applies (no test run)"
 	@echo "  make check             - Run the local quality gates (vet, staticcheck, golangci-lint, test, race, gofmt, go mod tidy)"
 	@echo "  make hephaestus-check  - Validate hephaestus.yaml"
 	@echo "  make snapshot          - Build and verify the release archives with Hephaestus (nothing is published)"
