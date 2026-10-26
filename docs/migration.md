@@ -104,16 +104,6 @@ kjak send --config ci.toml --secrets ci-secrets.toml ...   # or KJAK_SECRETS=ci-
    --force`.
 4. `kjak config validate --strict`.
 
-## Compatibility
-
-- Nothing changes for configurations without literals; `env` and `keychain`
-  references work as before.
-- The trust store gets new keys (`secrets_path`, `secrets_sha256`,
-  `user_secrets`, `plugins`) only in entries that use them; an earlier kjak refuses a
-  trust store with such an entry ("broken trust store"). Entries without
-  them are written as before.
-- `--secret-stdin` still writes a literal (and warns): prefer `--secret-ref`.
-
 ## Message templates cannot loop
 
 Since 0.0.5 a message template (`[templates.*]`, `--template-file`) refuses
@@ -129,3 +119,13 @@ Since 0.0.5 a configuration file, a `.kjak.toml` or the trust store that is
 a FIFO, a device or a directory (or a link to one) is refused (`it is not a
 regular file`) instead of being read. A symbolic link to a regular file is
 still followed.
+
+## Compatibility
+
+- Nothing changes for configurations without literals; `env` and `keychain`
+  references work as before.
+- The trust store gets new keys (`secrets_path`, `secrets_sha256`,
+  `user_secrets`, `plugins`) only in entries that use them; an earlier kjak refuses a
+  trust store with such an entry ("broken trust store"). Entries without
+  them are written as before.
+- `--secret-stdin` still writes a literal (and warns): prefer `--secret-ref`.
