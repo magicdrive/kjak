@@ -1,0 +1,15 @@
+feathers
+feathers[].enabled
+feathers[].from
+feathers[].host
+feathers[].levels
+feathers[].name
+feathers[].origin
+feathers[].port
+feathers[].security
+feathers[].subject_prefix
+feathers[].to
+feathers[].type
+feathers[].username
+feathers[].webhook_url
+schema_version

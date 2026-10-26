@@ -1,0 +1,2 @@
+POST /services/T000/B000/LITERALSECRET application/json
+{"text":"[INFO] hello","attachments":[{"color":"#439FE0","text":"hello","footer":"kjak · info"}]}

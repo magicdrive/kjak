@@ -1,0 +1,2 @@
+POST /services/T000/B000/LITERALSECRET application/json
+{"text":"[ERROR] CI: tests failed","attachments":[{"color":"#E01E5A","title":"CI","text":"tests failed","footer":"kjak · error"}]}

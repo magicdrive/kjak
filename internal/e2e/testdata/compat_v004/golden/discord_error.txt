@@ -1,0 +1,2 @@
+POST /api/webhooks/1/DISCORDSECRET application/json
+{"username":"kjak-bot","embeds":[{"title":"CI","description":"tests failed","color":14687834,"footer":{"text":"kjak · error"}}],"allowed_mentions":{"parse":[]}}

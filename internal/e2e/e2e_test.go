@@ -57,6 +57,7 @@ type sandbox struct {
 	t   *testing.T
 	dir string
 	env []string
+	exe string // the binary to run; empty: the one TestMain built
 }
 
 func newSandbox(t *testing.T) *sandbox {
@@ -82,7 +83,11 @@ func (s *sandbox) kjak(stdin string, args ...string) run {
 	s.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, binary, args...)
+	exe := s.exe
+	if exe == "" {
+		exe = binary
+	}
+	cmd := exec.CommandContext(ctx, exe, args...)
 	cmd.Dir = s.dir
 	cmd.Env = s.env
 	cmd.Stdin = strings.NewReader(stdin)

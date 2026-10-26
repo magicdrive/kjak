@@ -1,0 +1,42 @@
+[feathers]
+[feathers.dev_slack]
+type = 'slack'
+webhook_url = {literal = '@SLACK_URL@'}
+
+[feathers.kc]
+type = 'slack'
+webhook_url = {keychain = {service = 'svc', account = 'acct'}}
+
+[feathers.keep_off]
+type = 'slack'
+enabled = false
+webhook_url = {env = 'X'}
+
+[feathers.ops_discord]
+type = 'discord'
+levels = ['warning', 'error', 'critical']
+webhook_url = {env = 'KJAK_DISCORD_WEBHOOK'}
+username = 'kjak-bot'
+
+[feathers.ops_mail]
+type = 'email'
+host = '127.0.0.1'
+port = @SMTP_PORT@
+security = 'none'
+from = 'kjak@example.com'
+to = ['ops@example.com', 'oncall@example.com']
+subject_prefix = '[kjak]'
+
+[groups]
+[groups.development]
+feathers = ['dev_slack', 'ops_discord']
+
+[groups.ops]
+feathers = ['ops_discord', 'ops_mail']
+
+[templates]
+[templates.deploy]
+title = 'Deploy {{.service}}'
+body = '{{.service}} {{.version}} deployed'
+level = 'success'
+url = 'https://ci.example.com/{{.service}}'
