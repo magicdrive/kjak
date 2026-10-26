@@ -103,8 +103,11 @@ func configMigrateSecrets(ctx context.Context, rt *Runtime, args []string) int {
 		return rt.fail(ctx, fmt.Errorf("config migrate-secrets: %w (pass --secrets-out NEW_FILE, or move the secrets by hand)", err))
 	}
 	if err := configure.CreateSecretsFile(configOut, configDoc); err != nil {
-		// nothing half done: the secrets file just created goes again
-		os.Remove(secretsPath)
+		// nothing half done: the secrets file just created goes again (and
+		// the user is told when it could not: it holds the secrets)
+		if rerr := os.Remove(secretsPath); rerr != nil {
+			err = fmt.Errorf("%w; the new secrets file %s is left: remove it by hand: %v", err, secretsPath, rerr)
+		}
 		return rt.fail(ctx, fmt.Errorf("config migrate-secrets: %w (pass --config-out NEW_FILE)", err))
 	}
 	fmt.Fprintf(rt.Stdout, "created %s (mode 0600): %d secret(s)\n", secretsPath, len(values))

@@ -273,3 +273,20 @@ func FuzzClassify(f *testing.F) {
 		}
 	})
 }
+
+// allow_networks opens the addresses it contains, and only those: one
+// allowed loopback address does not open the rest of loopback, the private
+// network, link-local addresses or the other IP version.
+func TestCritical_AllowNetworksOpensOnlyTheirAddresses(t *testing.T) {
+	g := &Guard{AllowNetworks: []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32"), netip.MustParsePrefix("10.1.0.0/16")}}
+	for _, s := range []string{"127.0.0.1", "::ffff:127.0.0.1", "10.1.2.3"} {
+		if err := g.Allowed("h", netip.MustParseAddr(s)); err != nil {
+			t.Errorf("%s refused: %v", s, err)
+		}
+	}
+	for _, s := range []string{"127.0.0.2", "::1", "10.2.0.1", "192.168.1.1", "169.254.1.1", "fe80::1", "fc00::1", "64:ff9b::7f00:1"} {
+		if err := g.Allowed("h", netip.MustParseAddr(s)); !errors.Is(err, ErrBlocked) {
+			t.Errorf("%s allowed by %v: %v", s, g.AllowNetworks, err)
+		}
+	}
+}

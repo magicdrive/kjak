@@ -89,13 +89,13 @@ func TestBinaryClosedStdoutKeepsExitStatus(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		r.Close()
+		_ = r.Close()
 		cmd := exec.Command(binary, tc.args...)
 		cmd.Dir, cmd.Env, cmd.Stdout = s.dir, s.env, w
 		var errOut bytes.Buffer
 		cmd.Stderr = &errOut
 		err = cmd.Run()
-		w.Close()
+		_ = w.Close()
 		code := 0
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
@@ -148,7 +148,7 @@ func testSIGTERMWhileReadingFIFO(t *testing.T, extra int) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer null.Close()
+		defer func() { _ = null.Close() }()
 		for range extra {
 			cmd.ExtraFiles = append(cmd.ExtraFiles, null) // descriptors 3 to 3+extra-1
 		}
@@ -161,7 +161,7 @@ func testSIGTERMWhileReadingFIFO(t *testing.T, extra int) {
 	for start := time.Now(); ; {
 		w, err := os.OpenFile(fifo, os.O_WRONLY|syscall.O_NONBLOCK, 0)
 		if err == nil {
-			defer w.Close()
+			defer func() { _ = w.Close() }()
 			break
 		}
 		if time.Since(start) > 30*time.Second {
