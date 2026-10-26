@@ -102,9 +102,11 @@ rules that keep your secrets from it:
 5. `env` and `keychain` references of a project's slack, discord and email
    feathers are, as before, shown by `config trust` and allowed by trusting
    the file: reviewing them is your part. Those of a project's **http**
-   feathers — which send to a URL the project chooses — are allowed by name
-   like the personal secrets above (`env:NAME`, `keychain:SERVICE/ACCOUNT`
-   in `user_secrets`); any other is refused when it is resolved.
+   feathers — which send to a URL the project chooses — and of its external
+   feathers (plugins), with every variable a project gives a plugin
+   (`env = [...]`), are allowed by name like the personal secrets above
+   (`env:NAME`, `keychain:SERVICE/ACCOUNT` in `user_secrets`); any other is
+   refused when it is resolved.
 
 An allowed name means "this project may send this secret to the
 destinations it configures": review those destinations before you allow it.

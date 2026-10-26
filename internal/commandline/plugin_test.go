@@ -1,6 +1,7 @@
 package commandline_test
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -281,4 +282,37 @@ func TestFeatherAddExternalIsInTheFile(t *testing.T) {
 	if r := e.must("feather", "types"); !strings.Contains(r.stdout, "external") {
 		t.Fatal(r.stdout)
 	}
+}
+
+// A project's plugin gets one of the user's environment variables, or an
+// env-sourced secret, only by a name allowed at the trust.
+func TestCritical_ProjectPluginEnvNeedsAGrant(t *testing.T) {
+	e := newEnv(t)
+	e.installPlugin(e.pluginDir(), "pager")
+	e.vars["PATH"] = e.pluginDir()
+	e.vars["AWS_SECRET_ACCESS_KEY"] = "AWS-SECRET"
+	e.vars["TOKEN"] = "TOKEN-SECRET"
+	e.writeProject(externalFeather("pe", "pager", "settings = { mode = \"ok\" }\nenv = [\"AWS_SECRET_ACCESS_KEY\"]") +
+		externalFeather("ps", "pager", "settings = { mode = \"ok\" }\nsecrets = { t = { env = \"TOKEN\" } }"))
+	r := e.run("config", "trust", "--yes")
+	if r.code != 2 || !strings.Contains(r.stdout, "env:AWS_SECRET_ACCESS_KEY") || !strings.Contains(r.stdout, "env:TOKEN") {
+		t.Fatalf("trust: %+v", r)
+	}
+	// trusted without the names: refused
+	src, _ := configure.ReadFile(filepath.Join(e.project, ".kjak.toml"))
+	ts := filepath.Join(e.xdg, "kjak", "trust.toml")
+	exe, _ := filepath.EvalSymlinks(filepath.Join(e.pluginDir(), configure.PluginFile("pager", runtime.GOOS)))
+	b, _ := os.ReadFile(exe)
+	sum := fmt.Sprintf("%x", sha256.Sum256(b))
+	if err := configure.TrustWith(ts, src.Path, src.Hash, time.Now(), configure.TrustGrant{Plugins: []configure.TrustedPlugin{{Name: "pager", Path: exe, SHA256: sum}}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"pe", "ps"} {
+		r = e.run("send", "--to", f, "hi")
+		if r.code != 2 || !strings.Contains(r.stderr, "does not allow") {
+			t.Fatalf("%s ungranted: %+v", f, r)
+		}
+	}
+	e.must("config", "trust", "--yes", "--allow-user-secrets")
+	e.must("send", "--to", "pe,ps", "hi")
 }

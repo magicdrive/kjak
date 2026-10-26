@@ -232,6 +232,24 @@ environment, and kills the plugin at its timeout. `kjak feather plugins`
 lists what `PATH` has without running anything. See the
 [plugin guide](docs/plugins.md), which also covers writing one.
 
+## Security
+
+- Secrets are references (secrets file, environment, keychain), resolved
+  when a send runs, never printed, and removed from every error and report.
+- A repository's `.kjak.toml` (and its `.kjak.secrets.toml`) is used only
+  after `kjak config trust`; any change withdraws the trust. It reads your
+  own secrets, and gives your environment variables to an http feather or a
+  plugin, only by the names you allowed.
+- http feathers: https only, no redirects, no connection to loopback,
+  private, link-local or cloud-metadata addresses unless allowed (checked
+  where the connection is made), no proxy.
+- Plugins run with your rights: kjak controls which executable runs (absolute
+  `PATH` only, checked before every run) and what it gets (a minimal
+  environment, only its own secrets), not what it does.
+
+Details: [docs/security.md](docs/security.md). Report a vulnerability
+privately: [SECURITY.md](SECURITY.md).
+
 ## Known limitations
 
 - Feathers: Slack (incoming webhooks), Discord (webhooks), e-mail (SMTP) and

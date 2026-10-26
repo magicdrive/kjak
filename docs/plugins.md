@@ -97,7 +97,12 @@ records them in the trust entry; the plugin must be installed to trust the
 project. Afterwards a run refuses the feather (`untrusted_project`, exit 2)
 if the plugin resolves to another file or its content changed — an upgrade
 needs a new `kjak config trust`. The trust also shows the secrets, the
-environment variables and the settings the project gives the plugin.
+environment variables and the settings the project gives the plugin; the
+`env` and `keychain` sources of its secrets and every variable of its
+`env` list must be allowed by name (a second question, or
+`--allow-user-secrets` with `--yes`): a project could otherwise hand your
+`AWS_SECRET_ACCESS_KEY` to a plugin that sends it wherever its settings
+say.
 
 ## Protocol v1
 
