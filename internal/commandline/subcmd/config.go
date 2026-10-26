@@ -213,9 +213,9 @@ func configShow(ctx context.Context, rt *Runtime, args []string) int {
 	if err != nil {
 		return rt.fail(ctx, err)
 	}
-	fmt.Fprintf(rt.Stdout, "# effective configuration (literal secrets redacted)\n# global:  %s\n", l.Global.Path)
+	fmt.Fprintf(rt.Stdout, "# effective configuration (literal secrets redacted)\n# global:  %s\n", output.Shown(l.Global.Path))
 	if l.ProjectTrusted {
-		fmt.Fprintf(rt.Stdout, "# project: %s (trusted)\n", l.Project.Path)
+		fmt.Fprintf(rt.Stdout, "# project: %s (trusted)\n", output.Shown(l.Project.Path))
 	}
 	fmt.Fprintf(rt.Stdout, "\n%s", body)
 	return ExitOK

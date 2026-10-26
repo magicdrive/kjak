@@ -73,3 +73,6 @@ redact-json	internal/credential/secret.go	./internal/credential	func (s Secret) 
 redact-report	internal/delivery/delivery.go	./internal/delivery ./internal/commandline ./internal/e2e	Message: opt.Redactor.Redact(err.Error())	Message: err.Error()	a report's error messages are not redacted
 redact-register	internal/feather/builtin/builtin.go	./internal/feather/builtin ./internal/commandline ./internal/e2e	\t\t\td.Redactor.Add(s)\n	\t\t\t_ = s\n	resolved secrets are not registered for redaction
 redact-basic-base64	internal/feather/builtin/builtin.go	./internal/feather/builtin ./internal/commandline	d.Redactor.Add(credential.NewSecret(strings.TrimPrefix(auth.Value.Reveal(), "Basic ")))	_ = auth	the base64 form of basic auth is not redacted
+escape-config-control	internal/configure/validate.go	./internal/configure ./internal/commandline	if HasControl(f.value) {	if false {	a free-text field of a feather may hold a terminal escape sequence
+escape-error-output	internal/commandline/subcmd/runtime.go	./internal/commandline	output.EscapeControls(msg))	msg)	an error quotes untrusted text with its terminal escapes
+escape-shown	internal/output/text.go	./internal/output ./internal/commandline	if !strconv.IsPrint(r) {	if false && r != 0 {	config trust prints a value with its control characters

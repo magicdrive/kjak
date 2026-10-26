@@ -1,6 +1,7 @@
 package commandline_test
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -75,5 +76,27 @@ func TestTemplateTextIsPrintedEscaped(t *testing.T) {
 	}
 	if r := e.must("template", "show", "t", "--no-project"); !strings.Contains(r.stdout, "line one\n") || !strings.Contains(r.stdout, `line \x1b]0;x\x07two`) {
 		t.Fatal(r.stdout)
+	}
+}
+
+// Paths are shown escaped, and every error is printed with its control
+// characters escaped, whatever it quotes (here a path of the command line,
+// in an error of the OS).
+func TestPathsAndErrorsArePrintedEscaped(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a Windows file name cannot hold a control character")
+	}
+	e := newEnv(t)
+	odd := "/\x1b]0;owned\x07"
+	r := e.must("config", "show", "--no-project", "--config", e.project+odd+"/config.toml")
+	noEscapes(t, "config show", r.stdout)
+	e.writeFile(e.project+"/file", "", 0o600)
+	r = e.run("config", "show", "--no-project", "--config", e.project+"/file"+odd+"/config.toml")
+	if r.code == 0 {
+		t.Fatalf("%+v", r)
+	}
+	noEscapes(t, "stderr", r.stderr)
+	if !strings.Contains(r.stderr, `\x1b]0;owned\x07`) {
+		t.Fatalf("not escaped: %q", r.stderr)
 	}
 }
