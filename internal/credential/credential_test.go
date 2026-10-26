@@ -161,7 +161,7 @@ func TestKeychainBackends(t *testing.T) {
 		t.Fatalf("linux missing: %v", err)
 	}
 	if keychainFor("windows", run(0, ""), found) != nil {
-		t.Fatal("windows must have no keychain in v0.1.0")
+		t.Fatal("windows must have no keychain")
 	}
 }
 

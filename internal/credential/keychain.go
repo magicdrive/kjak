@@ -21,7 +21,7 @@ type Keychain interface {
 }
 
 var (
-	ErrKeychainUnsupported = errors.New("the OS keychain is not supported on " + runtime.GOOS + " in kjak v0.1.0")
+	ErrKeychainUnsupported = errors.New("the OS keychain is not supported on " + runtime.GOOS)
 	ErrKeychainNotFound    = errors.New("no such keychain entry")
 	ErrKeychainUnavailable = errors.New("the keychain tool is not available")
 )
@@ -50,7 +50,7 @@ func execRunner(ctx context.Context, name string, args ...string) ([]byte, int, 
 const keychainTimeout = 30 * time.Second
 
 // DefaultKeychain is the keychain of this OS, nil where kjak supports none
-// (Windows in v0.1.0: the Credential Manager API needs either cgo or a
+// (Windows: the Credential Manager API needs either cgo or a
 // syscall binding kjak does not ship yet).
 func DefaultKeychain() Keychain {
 	return keychainFor(runtime.GOOS, execRunner, exec.LookPath)

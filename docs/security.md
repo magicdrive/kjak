@@ -141,7 +141,7 @@ other processes, so creating the entry is left to you.
 |---|---|---|
 | macOS | `/usr/bin/security` (login keychain) | `security add-generic-password -s kjak -a dev_slack -w` (prompts for the secret; do not put it on the command line) |
 | Linux | `secret-tool` (libsecret: GNOME Keyring, KWallet via Secret Service) | `secret-tool store --label "kjak dev_slack" service kjak account dev_slack` (reads the secret from standard input) |
-| Windows | **not supported in v0.1.0** | use `env` |
+| Windows | **not supported** | use `env` |
 
 On Windows a `keychain` reference is a preflight error that says so: it is
 never treated as an empty secret. (The Windows Credential Manager API needs

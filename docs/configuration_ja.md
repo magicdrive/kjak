@@ -314,7 +314,7 @@ feather の秘密情報（Slack や Discord の Webhook URL。URL 自体が認�
 | `env` | `{ env = "KJAK_DEV_SLACK_WEBHOOK" }` | `--secret-env VAR` | 環境変数（設定済みで空でないこと） |
 | `keychain` | `{ keychain = { service = "kjak", account = "dev_slack" } }` | `--secret-keychain SERVICE/ACCOUNT` | OS のキーチェーン（macOS、Linux） |
 | `secret` | `{ secret = "dev_slack.webhook_url" }` | `--secret-ref NAME` | secrets ファイルのエントリー（[7.7](#77-secrets-ファイル)） |
-| `literal` | `{ literal = "https://hooks.slack.com/..." }` | `--secret-stdin` | 設定ファイルの値そのもの（**非推奨**、[7.8](#78-literal-非推奨)） |
+| `literal` | `{ literal = "https://hooks.slack.com/..." }` | `--secret-stdin` | 設定ファイルの値そのもの（**非推奨**、[7.8](#78-literal非推奨)） |
 
 - 参照元が2つ、または1つもない場合はエラーです。単なる文字列（`webhook_url = "https://..."`）もエラーになります。
 - Webhook URL は `https` である必要があります（`http` は `localhost` のみ）。ユーザー情報を含む URL は使えません。

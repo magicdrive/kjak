@@ -398,7 +398,7 @@ func featherTypes(rt *Runtime) int {
 	fmt.Fprintln(rt.Stdout, "http     Any HTTP API: method, headers, auth, body (secrets: url_secret, auth); configured in the file")
 	fmt.Fprintln(rt.Stdout, "external A plugin, the executable kjak-feather-<plugin> on PATH (secrets: the ones it is given); configured in the file")
 	fmt.Fprintln(rt.Stdout, "")
-	fmt.Fprintln(rt.Stdout, "Not supported in v0.1.0: OS-native notifications (a future feather).")
+	fmt.Fprintln(rt.Stdout, "Not supported yet: OS-native notifications (a future feather).")
 	return ExitOK
 }
 
