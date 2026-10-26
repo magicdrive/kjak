@@ -114,7 +114,7 @@ feather は1つの通知先です。Slack の Incoming Webhook、Discord の Web
 
 | キー | CLI | 意味 |
 |---|---|---|
-| `webhook_url` | `--secret-env`、`--secret-keychain`、`--secret-stdin` | Incoming Webhook の URL（[認証情報](#71-認証情報の参照)） |
+| `webhook_url` | `--secret-env`、`--secret-keychain`、`--secret-ref`、`--secret-stdin` | Incoming Webhook の URL（[認証情報](#71-認証情報の参照)） |
 
 ```toml
 [feathers.dev_slack]
@@ -129,7 +129,7 @@ levels = ["warning", "error", "critical"]
 
 | キー | CLI | 意味 |
 |---|---|---|
-| `webhook_url` | `--secret-env`、`--secret-keychain`、`--secret-stdin` | Webhook の URL |
+| `webhook_url` | `--secret-env`、`--secret-keychain`、`--secret-ref`、`--secret-stdin` | Webhook の URL |
 | `username` | `--username` | メッセージの表示名（任意） |
 
 ```toml
@@ -149,7 +149,7 @@ username = "kjak"
 | `port` | `--port` | 587 / 465 / 25 | `security` に応じる：`starttls` / `tls` / `none` |
 | `security` | `--security` | `"starttls"` | `starttls`（必須。平文に戻らない）、`tls`（最初から TLS）、`none` |
 | `user` | `--user` | — | SMTP ユーザー。`password` と組で使う |
-| `password` | `--secret-env`、`--secret-keychain`、`--secret-stdin` | — | 認証情報 |
+| `password` | `--secret-env`、`--secret-keychain`、`--secret-ref`、`--secret-stdin` | — | 認証情報 |
 | `from` | `--from` | 必須 | 送信元（アドレスのみ） |
 | `to` | `--mail-to` | 必須 | 宛先（アドレスのみ） |
 | `subject_prefix` | `--subject-prefix` | — | すべての件名の先頭に付ける文字列 |
@@ -244,7 +244,7 @@ feather の秘密情報（Slack や Discord の Webhook URL。URL 自体が認�
 - 参照元が2つ、または1つもない場合はエラーです。単なる文字列（`webhook_url = "https://..."`）もエラーになります。
 - Webhook URL は `https` である必要があります（`http` は `localhost` のみ）。ユーザー情報を含む URL は使えません。
 - 解決できない認証情報があると、何も送信せずに終了します（exit 2）。
-- `feather add` は秘密情報を引数として受け取りません。参照で指定するか、`--secret-stdin` で標準入力から渡します。
+- `feather add` は秘密情報を引数として受け取りません。参照で指定するか、`--secret-stdin` で標準入力から渡します（literal になるため非推奨）。
 
 **どれを使うか**
 

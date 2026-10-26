@@ -141,7 +141,7 @@ A key that does not belong to the type is an error.
 
 | key | CLI | meaning |
 |---|---|---|
-| `webhook_url` | `--secret-env`, `--secret-keychain`, `--secret-stdin` | the incoming webhook URL (a [credential](#71-credential-references)) |
+| `webhook_url` | `--secret-env`, `--secret-keychain`, `--secret-ref`, `--secret-stdin` | the incoming webhook URL (a [credential](#71-credential-references)) |
 
 ```toml
 [feathers.dev_slack]
@@ -160,7 +160,7 @@ it was created for.
 
 | key | CLI | meaning |
 |---|---|---|
-| `webhook_url` | `--secret-env`, `--secret-keychain`, `--secret-stdin` | the webhook URL |
+| `webhook_url` | `--secret-env`, `--secret-keychain`, `--secret-ref`, `--secret-stdin` | the webhook URL |
 | `username` | `--username` | display name of the messages (optional) |
 
 ```toml
@@ -183,7 +183,7 @@ longer than 4096 characters is cut and ends with `…`.
 | `port` | `--port` | 587 / 465 / 25 | by `security`: `starttls` / `tls` / `none` |
 | `security` | `--security` | `"starttls"` | `starttls` (required, never falls back), `tls` (implicit TLS), `none` |
 | `user` | `--user` | — | SMTP user; goes with `password` |
-| `password` | `--secret-env`, `--secret-keychain`, `--secret-stdin` | — | a credential |
+| `password` | `--secret-env`, `--secret-keychain`, `--secret-ref`, `--secret-stdin` | — | a credential |
 | `from` | `--from` | required | sender, a bare address |
 | `to` | `--mail-to` | required | recipients, bare addresses |
 | `subject_prefix` | `--subject-prefix` | — | put before every subject |
@@ -295,7 +295,7 @@ resolved when a send runs:
 - A credential that does not resolve stops the send before anything is sent
   (exit 2).
 - `feather add` never takes the secret as an argument: by reference, or on
-  standard input with `--secret-stdin`.
+  standard input with `--secret-stdin` (a literal: deprecated).
 
 **Which source to use**
 
