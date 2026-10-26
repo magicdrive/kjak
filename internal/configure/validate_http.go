@@ -205,7 +205,18 @@ func checkBodyTemplate(format, src string) error {
 // BodyTemplateProblem refuses what a body template cannot use: range (its
 // data are strings; a range over a number could run without end), and
 // template/define/block.
-func BodyTemplateProblem(t *template.Template) error {
+func BodyTemplateProblem(t *template.Template) error { return loopProblem(t, "a body template") }
+
+// MessageTemplateProblem refuses what a message template ([templates.*])
+// cannot use, for the same reasons: range (a range over a number runs as
+// long as the number says, without output to bound it) and
+// template/define/block (a recursion that branches runs for an
+// exponential time).
+func MessageTemplateProblem(t *template.Template) error {
+	return loopProblem(t, "a message template")
+}
+
+func loopProblem(t *template.Template, kind string) error {
 	var walk func(n parse.Node) error
 	walk = func(n parse.Node) error {
 		switch x := n.(type) {
@@ -219,9 +230,9 @@ func BodyTemplateProblem(t *template.Template) error {
 				}
 			}
 		case *parse.RangeNode:
-			return errors.New("range is not available in a body template")
+			return fmt.Errorf("range is not available in %s", kind)
 		case *parse.TemplateNode:
-			return errors.New("template is not available in a body template")
+			return fmt.Errorf("template is not available in %s", kind)
 		case *parse.IfNode:
 			if err := walk(x.List); err != nil {
 				return err
@@ -237,7 +248,7 @@ func BodyTemplateProblem(t *template.Template) error {
 	}
 	for _, tt := range t.Templates() {
 		if tt.Name() != t.Name() {
-			return errors.New("define and block are not available in a body template")
+			return fmt.Errorf("define and block are not available in %s", kind)
 		}
 		if tt.Tree != nil {
 			if err := walk(tt.Root); err != nil {
