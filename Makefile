@@ -14,6 +14,16 @@ GO := GO111MODULE=on CGO_ENABLED=0 go
 #   staticcheck 2026.2.2 (v0.8.2): verified with Go 1.27.3 (go.mod toolchain).
 STATICCHECK := honnef.co/go/tools/cmd/staticcheck@v0.8.2
 GOVULNCHECK := golang.org/x/vuln/cmd/govulncheck@v1.9.0
+ACTIONLINT := github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+RENOVATE_VERSION := 44.164.1
+
+# Release tooling: Hephaestus builds, archives, checksums and publishes the
+# release (hephaestus.yaml). The version is kept in step with the commit SHA
+# of the magicdrive/hephaestus action in .github/workflows (Renovate updates
+# both).
+HEPHAESTUS_VERSION ?= v1.2.0
+# (no VAR=value prefix: scripts/homebrew-e2e.sh runs it as a plain command)
+HEPHAESTUS ?= go run github.com/magicdrive/hephaestus@$(HEPHAESTUS_VERSION)
 
 # Argments
 tag =
@@ -59,6 +69,30 @@ test-verbose:
 race:
 	@GO111MODULE=on CGO_ENABLED=1 go test -race -count=1 $(CURDIR)/...
 
+# Same as `race` (the name the other magicdrive repositories use)
+.PHONY: test-race
+test-race: race
+
+# Run the CLI smoke test against a binary built like a release
+# (-trimpath -s -w, main.version=v$(SMOKE_VERSION)); see scripts/smoke.sh
+SMOKE_VERSION = 0.0.0-smoke
+SMOKE_BIN = $(BUILD_DIR)/smoke/$(BINARY_NAME)$(if $(filter windows,$(shell go env GOOS)),.exe)
+.PHONY: smoke
+smoke:
+	@mkdir -p $(BUILD_DIR)/smoke
+	@$(GO) build -trimpath -ldflags "-s -w -X main.version=v$(SMOKE_VERSION)" -o $(SMOKE_BIN) ./main.go
+	@sh $(CURDIR)/scripts/smoke.sh $(SMOKE_BIN) "kjak version v$(SMOKE_VERSION)"
+
+# Format every Go file / fail when one is not formatted
+.PHONY: fmt
+fmt:
+	@gofmt -w $$(git ls-files '*.go')
+
+.PHONY: fmt-check
+fmt-check:
+	@out=$$(gofmt -l $$(git ls-files '*.go')); \
+	if [ -n "$$out" ]; then echo "not gofmt-ed:"; echo "$$out"; exit 1; fi
+
 # Run go vet (also for windows: its own files)
 .PHONY: vet
 vet:
@@ -69,6 +103,21 @@ vet:
 .PHONY: staticcheck
 staticcheck:
 	@$(GO) run $(STATICCHECK) ./...
+
+# The static analysis of CI: staticcheck, plus shellcheck of the scripts
+.PHONY: lint
+lint: staticcheck
+	@shellcheck -s sh scripts/*.sh
+
+# Lint the GitHub Actions workflows with the pinned actionlint
+.PHONY: actionlint
+actionlint:
+	@$(GO) run $(ACTIONLINT)
+
+# Validate renovate.json with the pinned Renovate (needs Node.js / npx)
+.PHONY: renovate-check
+renovate-check:
+	@npx --yes --package renovate@$(RENOVATE_VERSION) -- renovate-config-validator --strict renovate.json
 
 # Run the pinned govulncheck (the standard library of the toolchain included)
 .PHONY: vulncheck
@@ -94,11 +143,43 @@ check: vet staticcheck test race
 	@go mod tidy -diff
 	@echo "check: OK"
 
-# Build and verify the release archives locally; nothing is published
+# Validate hephaestus.yaml (runs nothing)
+.PHONY: hephaestus-check
+hephaestus-check:
+	@$(HEPHAESTUS) check
+
+# Build and verify the release archives locally (version 0.0.0-SNAPSHOT);
+# nothing is published
 .PHONY: snapshot
 snapshot:
-	@goreleaser release --snapshot --clean --skip=publish
-	@sh $(CURDIR)/scripts/verify-dist.sh dist snapshot
+	@rm -rf $(CURDIR)/dist  # as goreleaser --clean: only this run's files
+	@$(HEPHAESTUS) run --snapshot --stages build,archive,checksum --fresh
+	@sh $(CURDIR)/scripts/verify-dist.sh dist SNAPSHOT
+
+# The release archives of tag=vX.Y.Z at HEAD, verified, and the formula
+# (dist/homebrew/kjak.rb), without publishing anything
+.PHONY: release-check
+release-check:
+	@if [ -z "$(tag)" ]; then echo "usage: make release-check tag=vX.Y.Z"; exit 1; fi
+	@$(HEPHAESTUS) check
+	@rm -rf $(CURDIR)/dist
+	@$(HEPHAESTUS) run --tag $(tag) --stages build,archive,checksum,formula --fresh
+	@sh $(CURDIR)/scripts/verify-dist.sh dist "$(tag)"
+
+# Read-only release safety checks before tag=vX.Y.Z is pushed; WARN and
+# UNKNOWN fail too (docs/release.md). Needs GITHUB_TOKEN (e.g. $$(gh auth token)).
+.PHONY: preflight
+preflight:
+	@if [ -z "$(tag)" ]; then echo "usage: make preflight tag=vX.Y.Z"; exit 1; fi
+	@$(HEPHAESTUS) preflight --tag $(tag) --strict
+
+# Archives -> formula with file:// URLs -> brew style, audit --strict,
+# install, test, uninstall in a throw-away tap (scripts/homebrew-e2e.sh).
+# It installs into this machine's Homebrew prefix and removes what it made:
+# meant for CI runners and containers.
+.PHONY: homebrew-e2e
+homebrew-e2e:
+	@HEPHAESTUS="$(HEPHAESTUS)" sh $(CURDIR)/scripts/homebrew-e2e.sh
 
 # Install application. Use `go install`
 .PHONY: install
@@ -122,18 +203,79 @@ dev-tools:
 goreg:
 	git ls-files | grep -e '.go$$' | xargs -I GOFILE goreg -w GOFILE
 
-# Publish to github.com
+# Release kjak with Hephaestus's publish (docs/release.md,
+# https://github.com/magicdrive/hephaestus/blob/main/docs/publish.md):
+#   make publish v1.2.3          (or VERSION=v1.2.3, or tag=v1.2.3 as before)
+#   make publish-check v1.2.3    preflight only
+#   make publish-status v1.2.3   what exists for a version
+#   make publish-watch v1.2.3    follow an already pushed tag
+#   make publish-help
+# publish checks the version can be released (CI of the commit, rulesets,
+# the `release` environment, the workflow conventions), asks, pushes one
+# annotated tag, follows the release run and verifies the release; it never
+# publishes anything itself. The version given as a goal is a no-op goal
+# (.DEFAULT). It reaches hephaestus through the environment, never through a
+# shell command line, and hephaestus validates it. YES=1 on the command line
+# skips the prompt. PUBLISH can be replaced (makefile_publish_test.go).
+PUBLISH ?= $(HEPHAESTUS) publish
+PUBLISH_TARGETS = publish publish-check publish-status publish-watch publish-help
+
+ifneq ($(filter $(PUBLISH_TARGETS),$(MAKECMDGOALS)),)
+PUBLISH_GOAL := $(firstword $(MAKECMDGOALS))
+PUBLISH_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+ifeq ($(filter $(PUBLISH_TARGETS),$(PUBLISH_GOAL)),)
+$(error publish targets come first and alone: make publish v1.2.3)
+endif
+ifneq ($(filter $(PUBLISH_TARGETS),$(PUBLISH_ARGS)),)
+$(error give one publish target at a time)
+endif
+ifneq ($(word 2,$(PUBLISH_ARGS)),)
+$(error one version is expected, got: $(PUBLISH_ARGS))
+endif
+ifeq ($(PUBLISH_GOAL),publish-help)
+ifneq ($(PUBLISH_ARGS),)
+$(error publish-help takes no version)
+endif
+endif
+export HEPHAESTUS_PUBLISH_ARGS := $(PUBLISH_ARGS)
+export HEPHAESTUS_PUBLISH_VERSION := $(if $(filter command line,$(origin VERSION)),$(VERSION))
+export HEPHAESTUS_PUBLISH_TAG := $(if $(filter command line,$(origin tag)),$(tag))
+PUBLISH_YES := $(if $(and $(filter command line,$(origin YES)),$(filter 1,$(YES))),-yes)
+ifneq ($(PUBLISH_ARGS),)
+ifeq ($(filter v0% v1% v2% v3% v4% v5% v6% v7% v8% v9% 0% 1% 2% 3% 4% 5% 6% 7% 8% 9%,$(PUBLISH_ARGS)),)
+$(error "$(PUBLISH_ARGS)" is not a version: make $(PUBLISH_GOAL) v1.2.3)
+endif
+# The version goal has no rule of its own: it is the publish target's
+# argument. (No other target starts with v<digit>, so none is shadowed.)
+.DEFAULT:
+	@:
+endif
+endif
+
+# Check, tag, push and follow a release (the only target that pushes a tag)
 .PHONY: publish
-publish: test-verbose
-	@if [ -z "$(tag)" ]; then \
-		echo "Error: version is not set. Please set it and try again."; \
-		echo "ex) make publish tag=v0.0.1"; \
-		echo ; \
-		echo ; \
-		exit 1; \
-		fi
-	git tag $(tag)
-	git push origin $(tag)
+publish:
+	@$(PUBLISH) publish -from-make $(PUBLISH_YES)
+
+# Release preflight only (no tag, no push, no GitHub writes)
+.PHONY: publish-check
+publish-check:
+	@$(PUBLISH) check -from-make
+
+# Show what exists for a version (read-only)
+.PHONY: publish-status
+publish-status:
+	@$(PUBLISH) status -from-make
+
+# Follow the release run of an already pushed tag and verify the release
+.PHONY: publish-watch
+publish-watch:
+	@$(PUBLISH) watch -from-make
+
+# Show how releasing works and its safety rules
+.PHONY: publish-help
+publish-help:
+	@$(PUBLISH) help
 
 # Show help
 .PHONY: help
@@ -144,15 +286,28 @@ help:
 	@echo "  make install           - Install application with go install"
 	@echo "  make test              - Run go test"
 	@echo "  make test-verbose      - Run go test -v with go clean -testcache"
-	@echo "  make race              - Run go test -race"
+	@echo "  make race              - Run go test -race (also: make test-race)"
+	@echo "  make smoke             - Build like a release and smoke-test the binary (scripts/smoke.sh)"
+	@echo "  make fmt               - Format the Go files (fmt-check: fail when one is not formatted)"
 	@echo "  make vet               - Run go vet (host and windows)"
 	@echo "  make staticcheck       - Run the pinned staticcheck"
+	@echo "  make lint              - Run staticcheck and shellcheck"
 	@echo "  make vulncheck         - Run the pinned govulncheck"
+	@echo "  make actionlint        - Lint the workflows with the pinned actionlint"
+	@echo "  make renovate-check    - Validate renovate.json with the pinned Renovate"
 	@echo "  make fuzz              - Run every fuzz target for FUZZTIME (10s)"
 	@echo "  make check             - Run the local quality gates (vet, staticcheck, test, race, gofmt, go mod tidy)"
-	@echo "  make snapshot          - Build and verify the release archives (nothing is published)"
+	@echo "  make hephaestus-check  - Validate hephaestus.yaml"
+	@echo "  make snapshot          - Build and verify the release archives with Hephaestus (nothing is published)"
+	@echo "  make release-check tag=<tag> - Archives and formula of <tag> at HEAD, verified (nothing is published)"
+	@echo "  make preflight tag=<tag>     - Strict read-only release checks before pushing <tag>"
+	@echo "  make homebrew-e2e      - Install the snapshot formula with Homebrew and test it (CI, containers)"
 	@echo "  make clean             - Remove build artifacts"
 	@echo "  make dev-tools         - Install dev tools"
 	@echo "  make goreg             - Execute goreg -w to entire gofile"
-	@echo "  make publish tag=<tag> - Publish to github.com"
+	@echo "  make publish vX.Y.Z        - Release: preflight, confirm, tag, push, follow, verify (also tag=vX.Y.Z)"
+	@echo "  make publish-check vX.Y.Z  - Release preflight only"
+	@echo "  make publish-status vX.Y.Z - Show the release state of a version"
+	@echo "  make publish-watch vX.Y.Z  - Follow an already pushed release tag"
+	@echo "  make publish-help          - How releasing works"
 	@echo "  make help              - Show this message"
