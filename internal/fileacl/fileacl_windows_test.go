@@ -85,8 +85,10 @@ func TestCritical_WindowsFileDACL(t *testing.T) {
 	if err := checkOpened(t, p, Private); err != nil {
 		t.Fatalf("SYSTEM and Administrators: %v", err)
 	}
-	// a deny ACE takes rights away: nothing to refuse
-	icacls(t, p, "/deny", "*"+sidWorld+":(W)")
+	// a deny ACE takes rights away: nothing to refuse (specific rights:
+	// "(W)" would deny SYNCHRONIZE and READ_CONTROL, which every open
+	// asks for, to the user too)
+	icacls(t, p, "/deny", "*"+sidWorld+":(WD,AD)")
 	if err := checkOpened(t, p, Private); err != nil {
 		t.Fatalf("a deny ACE: %v", err)
 	}

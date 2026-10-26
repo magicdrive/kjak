@@ -126,7 +126,7 @@ func TestWindowsPluginRunsDoNotLeakHandles(t *testing.T) {
 // A plugin that could not be put in a job never runs: newContainment's
 // job is closed before the start.
 func TestWindowsContainmentClosedJob(t *testing.T) {
-	cmd := exec.Command(built)
+	cmd := exec.CommandContext(context.Background(), built) // newContainment sets Cancel
 	c, err := newContainment(cmd)
 	if err != nil {
 		t.Fatal(err)
@@ -134,7 +134,9 @@ func TestWindowsContainmentClosedJob(t *testing.T) {
 	c.close() // as if the job had gone
 	cmd.Stdin = strings.NewReader("{}")
 	if err := c.start(); err == nil || !strings.Contains(err.Error(), "job") {
-		_ = cmd.Process.Kill()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
 		t.Fatalf("a plugin ran outside a job: %v", err)
 	}
 	if cmd.ProcessState == nil {
