@@ -3,6 +3,8 @@ package configure
 import (
 	"strings"
 	"testing"
+
+	"github.com/magicdrive/kjak/internal/credential"
 )
 
 // Any document either fails, or parses into a configuration that encodes
@@ -45,6 +47,43 @@ func FuzzCheckWebhookURL(f *testing.F) {
 		lower := strings.ToLower(s)
 		if !strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "http://") {
 			t.Fatalf("accepted %q", s)
+		}
+	})
+}
+
+// A secrets document either fails without quoting a value, or every name
+// it yields is a valid secret name that encodes and parses back.
+func FuzzParseSecrets(f *testing.F) {
+	f.Add([]byte("[slack]\nbot_token = \"xoxb-1\"\n"))
+	f.Add([]byte("a = \"b\"\n[c.d]\ne = \"f\"\n"))
+	f.Add([]byte("\"a.b\" = \"zzzzzz\"\n"))
+	f.Fuzz(func(t *testing.T, doc []byte) {
+		values, err := ParseSecrets(doc)
+		if err != nil {
+			for _, line := range strings.Split(string(doc), "\n") {
+				if _, v, ok := strings.Cut(line, "= \""); ok && len(v) > 12 && strings.Contains(err.Error(), strings.TrimSuffix(v, "\"")) {
+					t.Fatalf("the error quotes a value: %v", err)
+				}
+			}
+			return
+		}
+		for name := range values {
+			if credential.ValidSecretName(name) != nil {
+				t.Fatalf("invalid name %q accepted", name)
+			}
+		}
+		b, err := EncodeSecrets(values)
+		if err != nil {
+			t.Fatalf("encode: %v", err)
+		}
+		back, err := ParseSecrets(b)
+		if err != nil || len(back) != len(values) {
+			t.Fatalf("round trip: %v", err)
+		}
+		for k, v := range values {
+			if back[k] != v {
+				t.Fatalf("%s changed in the round trip", k)
+			}
 		}
 	})
 }

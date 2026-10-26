@@ -188,6 +188,9 @@ func featherAdd(ctx context.Context, rt *Runtime, args []string) int {
 	case opt.Secret.Keychain != "":
 		svc, acct, _ := strings.Cut(opt.Secret.Keychain, "/")
 		ref = &credential.Ref{Keychain: &credential.KeychainRef{Service: svc, Account: acct}}
+	case opt.Secret.Ref != "":
+		v := opt.Secret.Ref
+		ref = &credential.Ref{Secret: &v}
 	case opt.Secret.Stdin:
 		b, err := readLimited(rt.Stdin, "standard input")
 		if err != nil {
@@ -195,6 +198,7 @@ func featherAdd(ctx context.Context, rt *Runtime, args []string) int {
 		}
 		v := strings.TrimRight(string(b), "\r\n")
 		ref = &credential.Ref{Literal: &v}
+		fmt.Fprintln(rt.Stderr, "kjak: warning: --secret-stdin keeps the secret in the configuration file as a literal (deprecated); prefer a secrets file and --secret-ref NAME")
 	}
 	switch opt.Type {
 	case configure.TypeSlack, configure.TypeDiscord:

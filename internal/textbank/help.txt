@@ -22,7 +22,9 @@ Feather types: slack, discord, email
 
 Configuration:
   global   $XDG_CONFIG_HOME/kjak/config.toml (default ~/.config/kjak/config.toml)
-  project  ./.kjak.toml, used only after `kjak config trust`
+  secrets  $XDG_CONFIG_HOME/kjak/secrets.toml (--secrets, $KJAK_SECRETS)
+  project  ./.kjak.toml and ./.kjak.secrets.toml, used only after
+           `kjak config trust`
 
 Exit status:
   0    success

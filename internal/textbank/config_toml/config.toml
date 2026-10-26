@@ -1,9 +1,15 @@
 # kjak configuration (https://github.com/magicdrive/kjak/blob/main/docs/configuration.md)
 #
-# Secrets are references, never plain values here, unless you choose literal:
+# Secrets are references, never plain values here:
 #   webhook_url = { env = "KJAK_DEV_SLACK_WEBHOOK" }
 #   webhook_url = { keychain = { service = "kjak", account = "dev_slack" } }
-#   webhook_url = { literal = "https://hooks.slack.com/services/..." }
+#   webhook_url = { secret = "dev_slack.webhook_url" }
+# A secret reference names an entry of secrets.toml next to this file
+# (mode 0600; --secrets FILE or $KJAK_SECRETS choose another file):
+#   [dev_slack]
+#   webhook_url = "https://hooks.slack.com/services/..."
+# { literal = "..." } keeps the secret in this file and is deprecated
+# (kjak config migrate-secrets moves literals to a secrets file).
 
 [defaults]
 # timeout = "10s"      # deadline of a whole send, retries included

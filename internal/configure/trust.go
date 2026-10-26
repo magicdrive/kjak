@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"sort"
 	"time"
 
@@ -23,6 +24,36 @@ type TrustEntry struct {
 	Path      string    `toml:"path"`
 	SHA256    string    `toml:"sha256"`
 	TrustedAt time.Time `toml:"trusted_at"`
+
+	// The project secrets file (./.kjak.secrets.toml) trusted with the
+	// project file: its canonical path and the SHA-256 of its content
+	// (empty: there was none). A project secrets file the entry does not
+	// name, or a changed one, withdraws the trust of the project.
+	SecretsPath   string `toml:"secrets_path,omitempty"`
+	SecretsSHA256 string `toml:"secrets_sha256,omitempty"`
+	// UserSecrets are the secret names the project configuration may read
+	// from the personal secrets file (explicit or user), as the user
+	// allowed them. Any other name it refers to must be in the project
+	// secrets file.
+	UserSecrets []string `toml:"user_secrets,omitempty"`
+}
+
+// TrustGrant is what a trust covers besides the project file itself.
+type TrustGrant struct {
+	SecretsPath   string // canonical; "" when there is no project secrets file
+	SecretsSHA256 string
+	UserSecrets   []string
+}
+
+// AllowsUserSecret reports whether the project may read name from the
+// personal secrets file.
+func (e TrustEntry) AllowsUserSecret(name string) bool {
+	for _, n := range e.UserSecrets {
+		if n == name {
+			return true
+		}
+	}
+	return false
 }
 
 // TrustStore is the list of trusted project files.
@@ -100,8 +131,38 @@ func (ts *TrustStore) Entry(path string) (TrustEntry, bool) {
 }
 
 // Trust records the file at path with content hash as trusted (replacing an
-// earlier entry of that path).
+// earlier entry of that path), with no project secrets file and no personal
+// secret allowed.
 func Trust(storePath, path, hash string, now time.Time) error {
+	return TrustWith(storePath, path, hash, now, TrustGrant{})
+}
+
+// TrustWith records the file at path with content hash as trusted, with the
+// project secrets file and the personal secrets of g.
+func TrustWith(storePath, path, hash string, now time.Time, g TrustGrant) error {
+	return trust(storePath, path, hash, now, func(TrustEntry, bool) TrustGrant { return g })
+}
+
+// retrust moves the trust of path to new content kjak itself wrote,
+// keeping the grant of the earlier entry (only for names the new content
+// still refers to: a new reference to a personal secret needs a new
+// `kjak config trust`).
+func retrust(storePath, path, hash string, now time.Time, refs []string) error {
+	return trust(storePath, path, hash, now, func(old TrustEntry, ok bool) TrustGrant {
+		if !ok {
+			return TrustGrant{}
+		}
+		g := TrustGrant{SecretsPath: old.SecretsPath, SecretsSHA256: old.SecretsSHA256}
+		for _, n := range old.UserSecrets {
+			if slices.Contains(refs, n) {
+				g.UserSecrets = append(g.UserSecrets, n)
+			}
+		}
+		return g
+	})
+}
+
+func trust(storePath, path, hash string, now time.Time, grant func(old TrustEntry, ok bool) TrustGrant) error {
 	canon, err := CanonicalPath(path)
 	if err != nil {
 		return err
@@ -112,12 +173,22 @@ func Trust(storePath, path, hash string, now time.Time) error {
 			return nil, err
 		}
 		kept := ts.Projects[:0]
+		var old TrustEntry
+		found := false
 		for _, e := range ts.Projects {
 			if e.Path != canon {
 				kept = append(kept, e)
+			} else {
+				old, found = e, true
 			}
 		}
-		ts.Projects = append(kept, TrustEntry{Path: canon, SHA256: hash, TrustedAt: now.UTC().Truncate(time.Second)})
+		g := grant(old, found)
+		users := append([]string(nil), g.UserSecrets...)
+		sort.Strings(users)
+		ts.Projects = append(kept, TrustEntry{
+			Path: canon, SHA256: hash, TrustedAt: now.UTC().Truncate(time.Second),
+			SecretsPath: g.SecretsPath, SecretsSHA256: g.SecretsSHA256, UserSecrets: slices.Compact(users),
+		})
 		sort.Slice(ts.Projects, func(i, j int) bool { return ts.Projects[i].Path < ts.Projects[j].Path })
 		return encodeTrustStore(ts)
 	})

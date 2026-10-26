@@ -195,3 +195,58 @@ func TestExecRunnerDoesNotWaitForOrphans(t *testing.T) {
 		t.Fatalf("the lookup returned after %s", d)
 	}
 }
+
+type mapSecrets map[string]string
+
+func (m mapSecrets) LookupSecret(_ context.Context, name string) (Secret, error) {
+	v, ok := m[name]
+	if !ok {
+		return Secret{}, errors.New("no such secret")
+	}
+	return NewSecret(v), nil
+}
+
+func TestResolveSecretReference(t *testing.T) {
+	ref := &Ref{Secret: strp("slack.bot_token")}
+	if err := ref.Validate(); err != nil || ref.Describe() != "secret:slack.bot_token" {
+		t.Fatalf("%v %s", err, ref.Describe())
+	}
+	base := NewResolver(func(string) (string, bool) { return "", false }, nil)
+	if _, err := base.Resolve(context.Background(), ref); !errors.Is(err, ErrCredential) {
+		t.Fatalf("no secrets source: %v", err)
+	}
+	res := base.WithSecrets(mapSecrets{"slack.bot_token": "xoxb-1", "empty": ""})
+	if s, err := res.Resolve(context.Background(), ref); err != nil || s.Reveal() != "xoxb-1" {
+		t.Fatalf("%q %v", s.Reveal(), err)
+	}
+	if _, err := res.Resolve(context.Background(), &Ref{Secret: strp("empty")}); !errors.Is(err, ErrCredential) {
+		t.Fatalf("an empty secret: %v", err)
+	}
+	if _, err := res.Resolve(context.Background(), &Ref{Secret: strp("missing")}); !errors.Is(err, ErrCredential) {
+		t.Fatalf("a missing secret: %v", err)
+	}
+	// the copy does not change the base resolver
+	if _, err := base.Resolve(context.Background(), ref); err == nil {
+		t.Fatal("WithSecrets changed its receiver")
+	}
+	// a value that looks like a reference stays a value: nothing is expanded
+	res = base.WithSecrets(mapSecrets{"x": "{ env = \"HOME\" }", "y": "${HOME}"})
+	for _, n := range []string{"x", "y"} {
+		if s, err := res.Resolve(context.Background(), &Ref{Secret: strp(n)}); err != nil || !strings.ContainsAny(s.Reveal(), "{$") {
+			t.Fatalf("%s: %q %v", n, s.Reveal(), err)
+		}
+	}
+}
+
+func TestValidSecretName(t *testing.T) {
+	for _, ok := range []string{"a", "slack.bot_token", "a-b.c_d.0", strings.Repeat("a.", 7) + "a"} {
+		if err := ValidSecretName(ok); err != nil {
+			t.Errorf("%q: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"", ".", "a.", ".a", "a..b", "_a", "-a", "a/b", "a b", "ü", "a.$b", strings.Repeat("a.", 8) + "a", strings.Repeat("a", 65), strings.Repeat("abc.", 64)} {
+		if err := ValidSecretName(bad); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}

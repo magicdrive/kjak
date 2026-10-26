@@ -64,13 +64,15 @@ func newFlagSet(command string) *flag.FlagSet {
 
 // ConfigOption are the flags of every command that reads the configuration.
 type ConfigOption struct {
-	ConfigPath string // --config: the global configuration file
-	NoProject  bool   // --no-project: ignore ./.kjak.toml
+	ConfigPath  string // --config: the global configuration file
+	SecretsPath string // --secrets: the personal secrets file
+	NoProject   bool   // --no-project: ignore ./.kjak.toml (and ./.kjak.secrets.toml)
 }
 
 func (c *ConfigOption) register(fs *flag.FlagSet) {
 	fs.StringVar(&c.ConfigPath, "config", "", "")
 	fs.StringVar(&c.ConfigPath, "c", "", "")
+	fs.StringVar(&c.SecretsPath, "secrets", "", "")
 	fs.BoolVar(&c.NoProject, "no-project", false, "")
 }
 

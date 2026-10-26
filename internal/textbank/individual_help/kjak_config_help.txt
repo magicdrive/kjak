@@ -1,22 +1,51 @@
 Usage:
   kjak config path [-o text|json]
   kjak config show [-o text|json]
-  kjak config validate
+  kjak config validate [--strict]
   kjak config init [--force]
-  kjak config trust [--yes]
+  kjak config trust [--yes [--allow-user-secrets]]
   kjak config untrust
+  kjak config migrate-secrets [--scope global|project] [--dry-run]
+                              [--secrets-out FILE] [--config-out FILE]
 
-  path      Show the configuration files and the trust state of ./.kjak.toml
+  path      Show the configuration and secrets files kjak uses, how each
+            was chosen (explicit, user, current) and their state (trust,
+            permissions); never a secret
   show      Show the effective configuration (literal secrets redacted)
-  validate  Check the global and the project file (trusted or not)
+  validate  Check the global and the project file (trusted or not) and the
+            secrets files; --strict refuses literal secrets
   init      Create the global configuration file
-  trust     Trust ./.kjak.toml: its canonical path and the SHA-256 of its
-            content. A changed file needs a new trust. Without a terminal,
-            --yes is required (review the file first)
+  trust     Trust ./.kjak.toml with ./.kjak.secrets.toml: their canonical
+            paths and the SHA-256 of their content. A changed file needs a
+            new trust. The secrets the project reads from your own secrets
+            file are listed and allowed by name. Without a terminal, --yes
+            is required, and --allow-user-secrets for those names
   untrust   Withdraw the trust of ./.kjak.toml
+  migrate-secrets
+            Move the literal secrets of a configuration file to a new
+            secrets file (mode 0600) and write the configuration that
+            refers to them to <file>.migrated. No existing file is changed
+
+Files:
+  configuration  --config, else $KJAK_CONFIG (explicit), else
+                 $XDG_CONFIG_HOME/kjak/config.toml (user)
+  secrets        --secrets, else $KJAK_SECRETS (explicit), else
+                 $XDG_CONFIG_HOME/kjak/secrets.toml (user): for the global
+                 configuration, and for the names a trusted project may read
+  project        ./.kjak.toml and ./.kjak.secrets.toml (current): used once
+                 trusted; the project secrets serve the project file only
 
 Options:
-  -c, --config FILE   The global configuration file
-      --no-project    Ignore ./.kjak.toml
-  -y, --yes           (trust) Do not ask
-  -h, --help          Show this help
+  -c, --config FILE      The global configuration file
+      --secrets FILE     The personal secrets file
+      --no-project       Ignore ./.kjak.toml and ./.kjak.secrets.toml
+  -y, --yes              (trust) Do not ask
+      --allow-user-secrets
+                         (trust, with --yes) Allow the project to read the
+                         secrets it names from your secrets file
+      --strict           (validate) A literal secret is an error
+  -s, --scope SCOPE      (migrate-secrets) global (default) or project
+      --dry-run          (migrate-secrets) Show what would move, write nothing
+      --secrets-out FILE (migrate-secrets) The new secrets file
+      --config-out FILE  (migrate-secrets) The new configuration file
+  -h, --help             Show this help

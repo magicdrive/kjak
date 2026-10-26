@@ -19,7 +19,9 @@ Options of add:
   The secret (webhook_url of slack and discord, password of email), one of:
       --secret-env VAR         Read it from the environment variable VAR
       --secret-keychain S/A    Read it from the OS keychain (service/account)
+      --secret-ref NAME        Read it from a secrets file (kjak config --help)
       --secret-stdin           Store it in the file, read from standard input
+                               (a literal: deprecated)
 
   discord:
       --username NAME          Display name of the messages
@@ -34,6 +36,7 @@ Options of add:
 
 Common options:
   -c, --config FILE            The global configuration file
+      --secrets FILE           The personal secrets file
       --no-project             Ignore ./.kjak.toml
   -h, --help                   Show this help
 

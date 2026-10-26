@@ -24,6 +24,57 @@ type Paths struct {
 	Global     string // the global configuration
 	Project    string // the project configuration ("" when disabled)
 	TrustStore string // the trusted project configurations
+
+	// GlobalFrom tells how Global was chosen: FromFlag (--config), FromEnv
+	// ($KJAK_CONFIG) or FromUser (the configuration directory).
+	GlobalFrom Selection
+	// Secrets is the personal secrets file: --secrets, else $KJAK_SECRETS,
+	// else <ConfigDir>/secrets.toml (SecretsFrom tells which). It serves the
+	// global configuration, and the project configuration only for the
+	// names its trust allows.
+	Secrets     string
+	SecretsFrom Selection
+	// ProjectSecrets is ./.kjak.secrets.toml ("" when the project is
+	// disabled). It serves the project configuration only, and is part of
+	// its trust.
+	ProjectSecrets string
+}
+
+// Selection tells how a file was chosen.
+type Selection string
+
+const (
+	FromFlag    Selection = "flag"    // explicit: a command-line option
+	FromEnv     Selection = "env"     // explicit: an environment variable
+	FromUser    Selection = "user"    // the user's configuration directory
+	FromCurrent Selection = "current" // the current directory (project)
+)
+
+// Kind is the class of the selection: explicit, user or current.
+func (s Selection) Kind() string {
+	switch s {
+	case FromFlag, FromEnv:
+		return "explicit"
+	}
+	return string(s)
+}
+
+// Describe names the selection for a person: "explicit (--secrets)".
+func (s Selection) Describe(flag, env string) string {
+	switch s {
+	case FromFlag:
+		return "explicit (" + flag + ")"
+	case FromEnv:
+		return "explicit ($" + env + ")"
+	}
+	return string(s)
+}
+
+// SetExplicitSecrets makes path (--secrets) the personal secrets file.
+func (p *Paths) SetExplicitSecrets(path string) {
+	if path != "" {
+		p.Secrets, p.SecretsFrom = path, FromFlag
+	}
 }
 
 // Env is what DefaultPaths reads from the environment.
@@ -59,18 +110,28 @@ func ConfigDir(env Env) (string, error) {
 
 // DefaultPaths resolves the paths: the global file is configPath, else
 // $KJAK_CONFIG, else <ConfigDir>/config.toml; the trust store is
-// <ConfigDir>/trust.toml; the project file is ./.kjak.toml unless noProject.
+// <ConfigDir>/trust.toml; the personal secrets file is $KJAK_SECRETS, else
+// <ConfigDir>/secrets.toml (SetExplicitSecrets: --secrets); the project
+// file and the project secrets file are ./.kjak.toml and
+// ./.kjak.secrets.toml unless noProject.
 func DefaultPaths(env Env, configPath string, noProject bool) (Paths, error) {
 	dir, err := ConfigDir(env)
 	if err != nil {
 		return Paths{}, err
 	}
-	p := Paths{Global: filepath.Join(dir, "config.toml"), TrustStore: filepath.Join(dir, "trust.toml")}
+	p := Paths{
+		Global: filepath.Join(dir, "config.toml"), GlobalFrom: FromUser,
+		TrustStore: filepath.Join(dir, "trust.toml"),
+		Secrets:    filepath.Join(dir, SecretsFileName), SecretsFrom: FromUser,
+	}
 	if v := env.Getenv("KJAK_CONFIG"); v != "" {
-		p.Global = v
+		p.Global, p.GlobalFrom = v, FromEnv
 	}
 	if configPath != "" {
-		p.Global = configPath
+		p.Global, p.GlobalFrom = configPath, FromFlag
+	}
+	if v := env.Getenv("KJAK_SECRETS"); v != "" {
+		p.Secrets, p.SecretsFrom = v, FromEnv
 	}
 	if !noProject {
 		wd, err := env.Getwd()
@@ -78,6 +139,7 @@ func DefaultPaths(env Env, configPath string, noProject bool) (Paths, error) {
 			return Paths{}, fmt.Errorf("cannot find the current directory: %w", err)
 		}
 		p.Project = filepath.Join(wd, ProjectFileName)
+		p.ProjectSecrets = filepath.Join(wd, ProjectSecretsFileName)
 	}
 	return p, nil
 }
@@ -140,7 +202,7 @@ func describeTOMLError(err error) error {
 		row, col := de.Position()
 		msg := de.Error()
 		if strings.Contains(msg, "credential.Ref") {
-			msg = `a credential is a table naming one source: { env = "VAR" }, { keychain = { service = "...", account = "..." } } or { literal = "..." }`
+			msg = `a credential is a table naming one source: { env = "VAR" }, { keychain = { service = "...", account = "..." } }, { secret = "name" } or { literal = "..." }`
 		}
 		return fmt.Errorf("%w: line %d, column %d: %s", ErrInvalidConfig, row, col, msg)
 	}
@@ -170,6 +232,13 @@ type Loaded struct {
 	Effective *File
 	// ProjectTrusted: the project file exists and is trusted (and used).
 	ProjectTrusted bool
+	// ProjectTrust is the trust entry of the project file (when trusted).
+	ProjectTrust TrustEntry
+	// ProjectSecrets is the project secrets file as trusted (when the
+	// project is trusted; Exists false when there is none).
+	ProjectSecrets *SecretsFile
+
+	personal *lazySecrets
 }
 
 // Origin tells which file defines a feather, group or template name.
@@ -225,9 +294,14 @@ func Load(p Paths) (*Loaded, error) {
 			if !ok {
 				return nil, fmt.Errorf("%w: %s\n  review it, then run `kjak config trust` (or pass --no-project to ignore it)", ErrUntrustedProject, l.Project.Path)
 			}
+			l.ProjectTrust, _ = ts.Entry(l.Project.Path)
+			if l.ProjectSecrets, err = CheckProjectSecrets(p, l.ProjectTrust); err != nil {
+				return nil, err
+			}
 			l.ProjectTrusted = true
 		}
 	}
+	l.personal = &lazySecrets{path: p.Secrets}
 	var project *File
 	if l.ProjectTrusted {
 		project = l.Project.File

@@ -43,6 +43,7 @@ func Send(ctx context.Context, rt *Runtime, args []string) int {
 	if err != nil {
 		return rt.fail(ctx, err)
 	}
+	rt.warnLoadedLiterals(l)
 	settings := l.Effective.Settings()
 	msg, err := buildMessage(ctx, rt, opt, l.Effective, settings)
 	if err != nil {
@@ -90,8 +91,8 @@ func Send(ctx context.Context, rt *Runtime, args []string) int {
 		httpClient = webhook.NewClient()
 		defer httpClient.CloseIdleConnections()
 	}
+	resolver := credential.NewResolver(rt.LookupEnv, rt.Keychain)
 	deps := builtin.Deps{
-		Resolver:   credential.NewResolver(rt.LookupEnv, rt.Keychain),
 		Redactor:   redactor,
 		Clock:      rt.Clock,
 		HTTPClient: httpClient,
@@ -100,7 +101,11 @@ func Send(ctx context.Context, rt *Runtime, args []string) int {
 	for _, e := range plan.Entries {
 		t := delivery.Target{Name: e.Name, Type: e.Config.Type, Groups: e.Groups, Skip: e.Skip}
 		if e.Skip == nil {
-			f, err := builtin.Build(preflight, e.Name, e.Config, deps)
+			// a secret reference reads the secrets files of the file that
+			// defines the feather (configure.Loaded.SecretSource)
+			d := deps
+			d.Resolver = resolver.WithSecrets(l.SecretSource(l.Origin("feather", e.Name)))
+			f, err := builtin.Build(preflight, e.Name, e.Config, d)
 			if err != nil {
 				if ctx.Err() == nil && preflight.Err() != nil {
 					err = pastDeadline(err)
