@@ -22,7 +22,7 @@ func FuzzParseResponse(f *testing.F) {
 		f.Add([]byte(s))
 	}
 	f.Fuzz(func(t *testing.T, b []byte) {
-		o, err := parseResponse(b, time.Now())
+		o, err := parseResponse(nil, b, time.Now())
 		if err != nil {
 			return
 		}

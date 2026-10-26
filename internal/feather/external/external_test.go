@@ -412,17 +412,17 @@ func TestParseResponse(t *testing.T) {
 		`{"protocol_version":1,"status":"failed","acceptance":"unknown","retryable":true}`: core.AcceptanceUnknown,
 	}
 	for in, want := range good {
-		o, err := parseResponse([]byte(in), now)
+		o, err := parseResponse(nil, []byte(in), now)
 		if err != nil || o.Acceptance != want || (want == core.AcceptanceUnknown && o.Retryable) {
 			t.Errorf("%s: %+v %v", in, o, err)
 		}
 	}
 	for _, bad := range []string{``, `null`, `[]`, `"x"`, `{"protocol_version":1}`, `{"protocol_version":"1","status":"delivered"}`, `{"protocol_version":1,"status":"ok"}`, `{"protocol_version":1,"status":"failed","acceptance":"confirmed"}`, `{"protocol_version":1,"status":"delivered"} x`} {
-		if _, err := parseResponse([]byte(bad), now); err == nil {
+		if _, err := parseResponse(nil, []byte(bad), now); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
 	}
-	o, _ := parseResponse([]byte(`{"protocol_version":1,"status":"failed","acceptance":"rejected","retryable":true,"retry_after_ms":99999999999}`), now)
+	o, _ := parseResponse(nil, []byte(`{"protocol_version":1,"status":"failed","acceptance":"rejected","retryable":true,"retry_after_ms":99999999999}`), now)
 	if o.RetryAfter != 24*time.Hour {
 		t.Fatalf("retry after %s", o.RetryAfter)
 	}

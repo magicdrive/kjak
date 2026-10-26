@@ -32,7 +32,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"unicode"
 
 	"github.com/magicdrive/kjak/internal/clock"
 	"github.com/magicdrive/kjak/internal/core"
@@ -49,6 +48,9 @@ type Poster struct {
 	RetryAfterBody func(body []byte) (time.Duration, bool)
 	// Detail extracts a short error text from a refusal body.
 	Detail func(body []byte) string
+	// Redactor redacts the secrets of the feather from a refusal body
+	// before it is shortened (a body may echo the webhook URL).
+	Redactor *credential.Redactor
 }
 
 // NewClient is the HTTP client of the webhook feathers: HTTP/1.1, no
@@ -118,8 +120,9 @@ func TransportOutcome(ctx context.Context, err error, wrote bool) feather.Outcom
 // DescribeTransportError describes err without the URL.
 func DescribeTransportError(err error) string { return describeTransportError(err) }
 
-// Sanitize keeps a provider's error text short and printable.
-func Sanitize(s string) string { return sanitize(s) }
+// Sanitize keeps a provider's error text short and printable, without the
+// secrets of r (nil: none), even one the shortening cuts.
+func Sanitize(r *credential.Redactor, s string) string { return sanitize(r, s) }
 
 // transportOutcome classifies an error without a response.
 func transportOutcome(ctx context.Context, err error, wrote bool) feather.Outcome {
@@ -198,7 +201,7 @@ func (p *Poster) statusErr(status int, body []byte) error {
 	} else {
 		detail = string(body)
 	}
-	detail = sanitize(detail)
+	detail = sanitize(p.Redactor, detail)
 	if detail == "" {
 		return fmt.Errorf("HTTP %d", status)
 	}
@@ -250,17 +253,8 @@ func ParseRetryAfter(v string, now time.Time) (time.Duration, bool) {
 	return 0, false
 }
 
-// sanitize keeps a provider's error text short and printable.
-func sanitize(s string) string {
-	s = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return ' '
-		}
-		return r
-	}, s)
-	s = strings.TrimSpace(s)
-	if r := []rune(s); len(r) > 200 {
-		s = string(r[:200]) + "..."
-	}
-	return s
+// sanitize keeps a provider's error text short and printable. The secrets
+// of r are redacted before it is changed (credential.Redactor.Clip).
+func sanitize(r *credential.Redactor, s string) string {
+	return r.Clip(s, func(s string) string { return strings.TrimSpace(credential.Printable(s)) }, 200, false)
 }
