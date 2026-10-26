@@ -79,3 +79,8 @@ escape-shown	internal/output/text.go	./internal/output ./internal/commandline	if
 ssrf-project-webhook	internal/feather/builtin/builtin.go	./internal/feather/builtin ./internal/commandline	httpClient = webhook.NewGuardedClient(guard.DialContext)	_ = guard.DialContext	a project slack or discord feather connects without the address policy
 ssrf-project-email	internal/feather/builtin/builtin.go	./internal/feather/builtin ./internal/commandline	f.Dial = guard.DialContext	_ = f	a project email feather connects without the address policy
 ssrf-guarded-proxy	internal/feather/webhook/webhook.go	./internal/feather/webhook ./internal/commandline	tr.Proxy = nil	_ = tr	a guarded webhook client goes through the proxy of the environment
+acl-win-trusted	internal/fileacl/winacl.go	./internal/fileacl	if ace.Mask&refused == 0 || (p.Trusted != nil && p.Trusted(ace.SID)) {	if true {	a Windows DACL that gives Everyone read access is accepted
+acl-win-inherit-only	internal/fileacl/winacl.go	./internal/fileacl	if ace.Flags&winInheritOnlyACE != 0 {	if ace.Flags&winInheritOnlyACE != 0 || ace.Flags&winInheritedACE != 0 {	an inherited Windows ACE is ignored
+acl-darwin-permit	internal/fileacl/filesec.go	./internal/fileacl	if ace.Rights&refused == 0 {	if ace.Rights&refused == 0 || true {	a macOS ACL allow entry for everyone is accepted
+acl-posix-effective	internal/fileacl/posixacl.go	./internal/fileacl	if perm&refused != 0 {	if perm&refused != 0 && false {	a POSIX ACL entry that grants access is accepted
+plugin-tree-final-kill	internal/feather/external/proc_unix.go	./internal/feather/external	func (c *containment) close() { _ = c.kill() }	func (c *containment) close() {}	a plugin's children outlive it after it exited

@@ -539,10 +539,17 @@ webhook_url = { secret = "dev_slack.webhook_url" }
 | names | dot-separated segments, each a letter or digit then letters, digits, `_`, `-` (at most 64); at most 8 segments and 255 bytes. A key that contains a dot is an error |
 | values | strings only; an empty value is an error when it is used. Values are used as they are: nothing in them is expanded (`${...}`, `{ env = ... }` and `{{...}}` stay text) |
 | size | at most 1 MiB; unknown or non-string entries are errors that name the key, never the value |
-| permissions (Unix) | a regular file of the user running kjak, with no permission for group or others (`chmod 600`); otherwise refused before it is parsed. The check is made on the opened file (`fstat`), not on the path |
+| permissions | a regular file of the user running kjak that nobody else can read or change; otherwise refused before it is parsed, with the reason (also in `kjak config path`). The checks are made on the opened file, not on the path, and a file whose safety cannot be established is refused. Per OS: see the table below |
 | links | the personal file may be a symbolic link (dotfiles): the file it leads to is checked. The project file must not be a symbolic link (opened with `O_NOFOLLOW`), must have one name only (no hard link), and must not be the personal file: a repository, or another user, could otherwise present your personal file as the project's |
 | FIFOs, devices | refused without waiting (`--secrets <(...)` does not work: use `env`) |
-| Windows | the file must be a regular file; its access control list is **not checked** (kjak does not read ACLs yet). A file under `%AppData%` is private by the profile's default ACL; keep it there. A project secrets file that is a reparse point is refused (checked on the path, before the open) |
+
+| OS | what makes a secrets file private | fix a refused file |
+|---|---|---|
+| Linux | owned by you; no mode bit for group or others (`chmod 600`); no POSIX ACL entry that gives anyone else a permission (after the mask) | `chmod 600 FILE`, `setfacl -b FILE` |
+| macOS | owned by you; `chmod 600`; **no ACL allow entry** other than for reading attributes, whoever it names (`ls -le` shows them; kjak cannot tell an entry for you from one for someone else) | `chmod 600 FILE; chmod -N FILE` |
+| Windows | owned by you (or by `Administrators` when your elevated session creates files that way); its DACL (inherited and explicit ACEs) gives access to nobody but you, `SYSTEM` and `Administrators`; not a link or reparse point and one name only (project file). A file under `%AppData%` is private by the profile's default ACL; a file in a folder made under `C:\` inherits `Authenticated Users` and is refused | `icacls FILE /inheritance:r /grant:r "%USERNAME%:F"` |
+
+[docs/security.md](security.md) has what each model does and does not cover.
 
 **Which file a reference reads.** Two files are read, each on its own:
 

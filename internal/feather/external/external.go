@@ -9,8 +9,8 @@
 //     0; standard error is diagnostics (kept short, redacted);
 //   - no argument, a minimal environment (an allow list), the temporary
 //     directory as its working directory, no secret in either;
-//   - its own process group (Unix), killed with it at a timeout, the
-//     deadline or SIGINT.
+//   - its own process group (Unix) or Job Object (Windows), killed with it
+//     at a timeout, the deadline or SIGINT, and when it ends.
 //
 // A plugin runs with the user's rights: it can do anything the user can.
 // kjak decides which one runs and what it gets, not what it does.
@@ -255,14 +255,16 @@ func (f *Feather) run(ctx context.Context, msg core.Message, attempt int) feathe
 	stdout := &cappedBuffer{max: MaxStdout, fail: true}
 	stderr := &cappedBuffer{max: MaxStderr}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
-	setProcessGroup(cmd)
 	cmd.WaitDelay = stopGrace
-
-	if err := cmd.Start(); err != nil {
+	box, err := newContainment(cmd)
+	if err != nil {
+		return feather.Rejected(core.ErrCodeInternal, 0, false, fmt.Errorf("the plugin was not run: %v", err))
+	}
+	if err := box.start(); err != nil {
 		return feather.Rejected(core.ErrCodeInternal, 0, false, fmt.Errorf("the plugin could not be started: %s", describeStart(err)))
 	}
 	werr := cmd.Wait()
-	_ = killGroup(cmd) // nothing the plugin started stays behind
+	box.close() // nothing the plugin started stays behind
 
 	out, overflow := stdout.bytes()
 	diag, _ := stderr.bytes()

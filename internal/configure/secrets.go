@@ -35,10 +35,13 @@ import (
 //     (TrustEntry.SecretsSHA256): a secrets file a repository brings along
 //     can neither redirect a global feather nor change after its review.
 //
-// A secrets file must be a regular file of the user, readable and writable
-// by the owner only (Unix), at most MaxConfigSize bytes; the project file
-// must not be a symbolic link (a repository could link it to the personal
-// file). The checks run on the opened file (fstat), not on its path.
+// A secrets file must be a regular file of the user that nobody else can
+// read or change (the mode bits and the ACL on Unix, the owner and the
+// DACL on Windows: internal/fileacl), at most MaxConfigSize bytes; the
+// project file must be neither a symbolic link nor a hard link (a
+// repository could link it to the personal file). The checks run on the
+// opened file (fstat, GetSecurityInfo), not on its path; a file whose
+// safety cannot be established is refused (fail closed).
 
 const (
 	// SecretsFileName is the personal secrets file in the configuration
@@ -105,12 +108,12 @@ func ReadSecretsFile(path string, noFollow bool) (*SecretsFile, error) {
 	if err != nil {
 		return nil, secretsErr(path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	st, err := f.Stat() // the opened file, not the path: no check-then-use race
 	if err != nil {
 		return nil, secretsErr(path, err)
 	}
-	if err := checkSecretsInfo(path, st, noFollow); err != nil {
+	if err := checkPrivateFile(f, path, st, noFollow); err != nil {
 		return nil, secretsErr(path, err)
 	}
 	content, err := io.ReadAll(io.LimitReader(f, MaxConfigSize+1))
@@ -236,11 +239,12 @@ func CreateSecretsFile(path string, content []byte) error {
 	return createExclusive(path, content)
 }
 
-// createExclusive creates path (O_EXCL: never an existing file, never
-// through a link) with mode 0600, writes and syncs content. A failed write
-// removes the file it created.
+// createExclusive creates path (never an existing file, never through a
+// link) private to the user (mode 0600; on Windows a protected DACL of the
+// user, SYSTEM and Administrators), writes and syncs content. A failed
+// write removes the file it created.
 func createExclusive(path string, content []byte) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	f, err := createPrivate(path)
 	if errors.Is(err, fs.ErrExist) {
 		return fmt.Errorf("%s exists: kjak does not overwrite it", path)
 	}
@@ -255,7 +259,7 @@ func createExclusive(path string, content []byte) error {
 		werr = cerr
 	}
 	if werr != nil {
-		os.Remove(path)
+		_ = os.Remove(path)
 		return werr
 	}
 	syncDir(filepath.Dir(path))
