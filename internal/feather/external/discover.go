@@ -30,7 +30,8 @@ import (
 //     left to the order of PATH;
 //   - the file (symbolic links resolved) must be a regular, executable file
 //     of root or the user, not writable by group or others, in a directory
-//     others cannot write to (unless sticky);
+//     others cannot write to (unless sticky); the ACLs too (internal/fileacl:
+//     the POSIX ACL, the macOS ACL, the Windows owner and DACL);
 //   - its identity (device, inode, size, modification time) and SHA-256 are
 //     recorded, and checked again just before each run.
 
@@ -142,12 +143,12 @@ func check(name, path string) (*Executable, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	st, err := f.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, path, err)
 	}
-	if err := checkFile(real, st); err != nil {
+	if err := checkFile(f, real, st); err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, path, err)
 	}
 	sum, err := digest(f)
@@ -177,7 +178,7 @@ func (e *Executable) Verify(rehash bool) error {
 	if err != nil {
 		return fmt.Errorf("%w: %s: %v", ErrPlugin, e.Real, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	st, err := f.Stat()
 	if err != nil {
 		return fmt.Errorf("%w: %s: %v", ErrPlugin, e.Real, err)
@@ -185,7 +186,7 @@ func (e *Executable) Verify(rehash bool) error {
 	if !identityOf(st).same(e.id) || st.Size() != e.id.size || !st.ModTime().Equal(e.id.mtime) {
 		return fmt.Errorf("%w: %s changed since it was checked", ErrPlugin, e.Real)
 	}
-	if err := checkFile(e.Real, st); err != nil {
+	if err := checkFile(f, e.Real, st); err != nil {
 		return fmt.Errorf("%w: %s: %v", ErrPlugin, e.Real, err)
 	}
 	if rehash {

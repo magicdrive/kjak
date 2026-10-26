@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -42,17 +43,34 @@ func TestBinarySecretsFiles(t *testing.T) {
 		t.Fatalf("config path: %s %v", r.stdout, err)
 	}
 	s.must("send", "--to", "dev", "hi")
+	// others can read it: the mode bits (Unix), an ACE for Everyone
+	// (Windows)
+	want := "group or others"
 	if runtime.GOOS == "windows" {
-		return // no permission check there (docs/security.md)
-	}
-	if err := os.Chmod(explicit, 0o644); err != nil {
+		want = "Everyone"
+		if out, err := exec.Command("icacls", explicit, "/grant", "*S-1-1-0:(R)").CombinedOutput(); err != nil {
+			t.Fatalf("icacls: %v %s", err, out)
+		}
+	} else if err := os.Chmod(explicit, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	r = s.kjak("", "send", "--to", "dev", "hi")
-	if r.code != 2 || !strings.Contains(r.stderr, "group or others") || hits.Load() != 2 {
+	if r.code != 2 || !strings.Contains(r.stderr, want) || hits.Load() != 2 {
 		t.Fatalf("a readable secrets file: %+v", r)
 	}
 	if strings.Contains(r.stdout+r.stderr, "services/T/B") {
 		t.Fatal("the secret was printed")
+	}
+	// config path says why it is refused
+	r = s.must("config", "path", "-o", "json")
+	doc = nil
+	if err := json.Unmarshal([]byte(r.stdout), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := doc["secrets_state"].(string); !strings.HasPrefix(st, "refused") || !strings.Contains(st, want) || doc["secrets_permissions_checked"] != true {
+		t.Fatalf("config path: %s", r.stdout)
+	}
+	if r = s.must("config", "path"); !strings.Contains(r.stdout, "refused") || !strings.Contains(r.stdout, want) || strings.Contains(r.stdout, "not checked") {
+		t.Fatalf("config path: %s", r.stdout)
 	}
 }
