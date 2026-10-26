@@ -70,3 +70,17 @@ func ContextErr(ctx context.Context) error {
 	}
 	return ErrInterrupted
 }
+
+// ErrBlocked is the error of a destination an address policy refused
+// (httpapi.Guard): nothing was sent, and a retry meets the same policy.
+var ErrBlocked = errors.New("refused by the address policy")
+
+// BlockedError: the address policy refused every address of a host, or a
+// redirect (the request was not sent). Its Reason never holds a URL.
+type BlockedError struct {
+	Reason string
+}
+
+func (e *BlockedError) Error() string { return e.Reason }
+
+func (e *BlockedError) Unwrap() error { return ErrBlocked }

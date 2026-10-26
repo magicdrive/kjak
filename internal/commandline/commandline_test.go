@@ -180,6 +180,10 @@ func (p *provider) count() int {
 	return p.hits
 }
 
+// allowLoopback lets a project's slack, discord or email feather reach the
+// test servers (a project's feathers reach public addresses only).
+const allowLoopback = "allow_networks = [\"127.0.0.1/32\"]\n"
+
 func featherConfig(name, typ, url string) string {
 	return fmt.Sprintf("[feathers.%s]\ntype = %q\nwebhook_url = { literal = %q }\n\n", name, typ, url)
 }
@@ -395,7 +399,7 @@ func TestCritical_ProjectTrustFlow(t *testing.T) {
 	p := newProvider(t, 200, "ok")
 	e := newEnv(t)
 	e.writeGlobal(featherConfig("global_one", "slack", p.URL))
-	e.writeProject(featherConfig("proj", "slack", p.URL))
+	e.writeProject(featherConfig("proj", "slack", p.URL) + allowLoopback)
 
 	r := e.run("send", "--to", "global_one", "hi")
 	if r.code != 2 || !strings.Contains(r.stderr, "not trusted") || p.count() != 0 {
@@ -425,7 +429,7 @@ func TestCritical_ProjectTrustFlow(t *testing.T) {
 	}
 
 	// a change withdraws the trust
-	e.writeProject(featherConfig("proj", "slack", p.URL) + "# edited\n")
+	e.writeProject(featherConfig("proj", "slack", p.URL) + allowLoopback + "# edited\n")
 	if r := e.run("send", "--to", "proj", "hi"); r.code != 2 {
 		t.Fatalf("changed project used: %+v", r)
 	}

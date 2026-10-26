@@ -263,6 +263,24 @@ Limits: a host name allowed with `allow_hosts` is trusted for every private
 address its DNS returns. The guard cannot see through an HTTP proxy, which
 is why none is used. Responses are read up to `max_response_bytes`.
 
+### A project's slack, discord and email feathers
+
+A project chooses the webhook URL of its slack and discord feathers and the
+SMTP host of its email feathers as freely as the URL of an http feather.
+Their connections go through the same guard (same address categories, same
+`allow_networks` / `allow_hosts`, metadata never), and `config trust` shows
+the host of a literal webhook URL and the address policy of each. They use
+no proxy: with `HTTPS_PROXY` set, a project's webhook feather still connects
+directly (the guard cannot check a destination behind a proxy); if your
+network only reaches the internet through a proxy, define that feather in
+your global file. A refused destination is the error code `blocked`, not
+retried.
+
+Your global file's feathers are not restricted: their destinations are
+yours, local relays and private SMTP servers are common there, and they keep
+the proxy environment variables. Moving a feather to the global file is
+the explicit way to give it the network access of your own configuration.
+
 ## External plugins
 
 A plugin (`type = "external"`) is an executable that runs with the user's

@@ -156,7 +156,7 @@ func TestCritical_ProjectSecretsReplacementAndLinks(t *testing.T) {
 	p := newProvider(t, 200, "ok")
 	evil := newProvider(t, 200, "ok")
 	e := newEnv(t)
-	e.writeProject(secretFeather("proj", "proj.hook"))
+	e.writeProject(secretFeather("proj", "proj.hook") + allowLoopback)
 	e.writeFile(e.projectSecrets(), "[proj]\nhook = \""+p.URL+"\"\n", 0o600)
 	r := e.must("config", "trust", "--yes")
 	if !strings.Contains(r.stdout, "project secrets ") || strings.Contains(r.stdout, p.URL) {
@@ -280,7 +280,7 @@ func TestMigrateSecrets(t *testing.T) {
 func TestMigrateProjectSecrets(t *testing.T) {
 	p := newProvider(t, 200, "ok")
 	e := newEnv(t)
-	e.writeProject(featherConfig("proj", "slack", p.URL))
+	e.writeProject(featherConfig("proj", "slack", p.URL) + allowLoopback)
 	r := e.must("config", "migrate-secrets", "--scope", "project")
 	if !strings.Contains(r.stdout, ".gitignore") {
 		t.Fatalf("no reminder: %s", r.stdout)

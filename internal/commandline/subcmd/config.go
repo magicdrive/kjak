@@ -479,6 +479,7 @@ func describeProject(rt *Runtime, f *configure.File) {
 				secret = "password from " + output.Shown(fc.Password.Describe())
 			}
 			fmt.Fprintf(rt.Stdout, "  feather %s: email via %s, %s, to %s\n", output.Shown(name), output.Shown(fc.Host), secret, output.ShownList(fc.To))
+			fmt.Fprintf(rt.Stdout, "    address policy: %s\n", addressPolicy(fc))
 		default:
 			src := "(none)"
 			if fc.WebhookURL != nil {
@@ -490,6 +491,7 @@ func describeProject(rt *Runtime, f *configure.File) {
 				}
 			}
 			fmt.Fprintf(rt.Stdout, "  feather %s: %s, webhook URL from %s\n", output.Shown(name), output.Shown(fc.Type), src)
+			fmt.Fprintf(rt.Stdout, "    address policy: %s\n", addressPolicy(fc))
 		}
 	}
 	for _, name := range sortedNames(f.Groups) {
@@ -498,6 +500,22 @@ func describeProject(rt *Runtime, f *configure.File) {
 	for _, name := range sortedNames(f.Templates) {
 		fmt.Fprintf(rt.Stdout, "  template %s\n", output.Shown(name))
 	}
+}
+
+// addressPolicy describes where a project's slack, discord or email
+// feather may connect (the address policy of the http feathers).
+func addressPolicy(fc configure.FeatherConfig) string {
+	var p []string
+	if len(fc.AllowNetworks) > 0 {
+		p = append(p, "allows networks "+output.ShownList(fc.AllowNetworks))
+	}
+	if len(fc.AllowHosts) > 0 {
+		p = append(p, "allows private hosts "+output.ShownList(fc.AllowHosts))
+	}
+	if len(p) == 0 {
+		return "public addresses only"
+	}
+	return "public addresses; " + strings.Join(p, "; ")
 }
 
 // webhookHost is the host (and port) of a literal webhook URL, for the
