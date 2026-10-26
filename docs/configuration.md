@@ -353,8 +353,11 @@ url = "https://ci.example.com/runs/{{.run}}"
 ```
 
 `body` is required. Variables are given with `--var KEY=VALUE`; a missing one
-is an error. Only `text/template`'s built-in actions are available. A
-template file (`--template-file FILE`) holds the same keys at the top level.
+is an error. Only `text/template`'s built-in actions are available, except
+the ones that loop: `range` and `define`/`template`/`block` are refused (the
+variables are strings, so a loop has nothing to iterate; a range over a
+number or a recursion could keep kjak busy without end). A template file
+(`--template-file FILE`) holds the same keys at the top level.
 
 ## 7. Credentials and security
 

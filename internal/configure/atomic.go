@@ -129,10 +129,12 @@ func rewrite(path string, expect Expect, fn func(current []byte) ([]byte, error)
 	return oldHash, Hash(next), nil
 }
 
-// readOptional reads a file of at most MaxConfigSize bytes (nil, false: no
-// file).
+// readOptional reads a regular file of at most MaxConfigSize bytes (nil,
+// false: no file). Anything else at path — a FIFO, a device, a directory,
+// or a link to one — is refused without being read: a repository could
+// otherwise make kjak wait forever (a FIFO) or read without end (a device).
 func readOptional(path string) ([]byte, bool, error) {
-	f, err := os.Open(path)
+	f, err := openConfig(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, false, nil
 	}
@@ -140,6 +142,13 @@ func readOptional(path string) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	defer func() { _ = f.Close() }()
+	st, err := f.Stat()
+	if err != nil {
+		return nil, false, err
+	}
+	if !st.Mode().IsRegular() {
+		return nil, false, fmt.Errorf("it is not a regular file (%s)", fileKind(st.Mode()))
+	}
 	b, err := io.ReadAll(io.LimitReader(f, MaxConfigSize+1))
 	if err != nil {
 		return nil, false, err
@@ -215,4 +224,19 @@ func WriteNew(path string, content []byte, force bool) error {
 		return fmt.Errorf("%s exists (--force replaces it)", path)
 	}
 	return err
+}
+
+// fileKind names the type of a file that is not a regular one.
+func fileKind(m fs.FileMode) string {
+	switch {
+	case m.IsDir():
+		return "a directory"
+	case m&fs.ModeNamedPipe != 0:
+		return "a FIFO"
+	case m&fs.ModeCharDevice != 0, m&fs.ModeDevice != 0:
+		return "a device"
+	case m&fs.ModeSocket != 0:
+		return "a socket"
+	}
+	return "an irregular file"
 }

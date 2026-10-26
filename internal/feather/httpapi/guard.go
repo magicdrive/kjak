@@ -43,8 +43,12 @@ const (
 
 // metadata are the instance metadata endpoints of cloud providers (AWS,
 // GCP, Azure, OpenStack: 169.254.169.254; AWS IPv6: fd00:ec2::254; ECS task
-// metadata: 169.254.170.2; Alibaba: 100.100.100.200; Oracle: 192.0.0.192).
+// metadata: 169.254.170.2; Alibaba: 100.100.100.200; Oracle: 192.0.0.192;
+// Azure WireServer: 168.63.129.16, a public address that hands out the
+// VM's configuration; Tencent Cloud: 169.254.0.23).
 var metadata = []netip.Addr{
+	netip.MustParseAddr("168.63.129.16"),
+	netip.MustParseAddr("169.254.0.23"),
 	netip.MustParseAddr("169.254.169.254"),
 	netip.MustParseAddr("169.254.170.2"),
 	netip.MustParseAddr("169.254.170.23"),
@@ -134,7 +138,7 @@ func Classify(a netip.Addr) Category {
 		return worse(CatTunnel, Classify(netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]})))
 	}
 	if nat64Local.Contains(a) {
-		return CatTunnel
+		return localNAT64(b)
 	}
 	if sixToFour.Contains(a) {
 		return worse(CatTunnel, Classify(netip.AddrFrom4([4]byte{b[2], b[3], b[4], b[5]})))
@@ -154,6 +158,26 @@ func Classify(a netip.Addr) Category {
 		return CatReserved
 	}
 	return CatPublic
+}
+
+// localNAT64 classifies a local-use NAT64 address (64:ff9b:1::/48, RFC
+// 8215). Its network may use any prefix length of RFC 6052 (48, 56, 64 or
+// 96 bits; the u octet, byte 8, is skipped), so the IPv4 address it carries
+// is not at a fixed place: each place is read, and the worst of a metadata,
+// loopback or link-local address found makes the class (conservatively: a
+// place that is not the actual one may match by chance). Unspecified,
+// reserved or multicast readings are ignored (the zero bytes of a shorter
+// embedding would always read as one).
+func localNAT64(b [16]byte) Category {
+	c := CatTunnel
+	for _, at := range [][4]int{{6, 7, 9, 10}, {7, 9, 10, 11}, {9, 10, 11, 12}, {12, 13, 14, 15}} {
+		v4 := Classify(netip.AddrFrom4([4]byte{b[at[0]], b[at[1]], b[at[2]], b[at[3]]}))
+		switch v4 {
+		case CatMetadata, CatLoopback, CatLinkLocal:
+			c = worse(c, v4)
+		}
+	}
+	return c
 }
 
 // rank orders the categories from the most to the least allowed.

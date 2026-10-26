@@ -199,8 +199,8 @@ feather, redirects included, goes through a guard:
 | private: 10/8, 172.16/12, 192.168/16, 100.64/10 (CGNAT), fc00::/7 (ULA), fec0::/10, 192.0.0/24, 198.18/15, documentation ranges | refused | `allow_networks` (CIDR) or `allow_hosts` (that host name) |
 | loopback: 127/8, ::1 | refused | `allow_networks` only |
 | link-local: 169.254/16, fe80::/10 | refused | `allow_networks` only |
-| IPv6 transition: NAT64 (64:ff9b::/96, 64:ff9b:1::/48), IPv4-translated (::ffff:0:0:0/96), 6to4 (2002::/16), Teredo | refused | `allow_networks` only; classified by the IPv4 address they carry when it is at a fixed place |
-| cloud metadata: 169.254.169.254, 169.254.170.2, fd00:ec2::254, fd20:ce::254, 100.100.100.200, 192.0.0.192 | **never** | — |
+| IPv6 transition: NAT64 (64:ff9b::/96, 64:ff9b:1::/48), IPv4-translated (::ffff:0:0:0/96), 6to4 (2002::/16), Teredo | refused | `allow_networks` only; classified by the IPv4 address they carry when it is at a fixed place; a local-use NAT64 address (64:ff9b:1::/48) is read at every place RFC 6052 allows, and the worst metadata, loopback or link-local reading counts |
+| cloud metadata: 169.254.169.254, 169.254.170.2, fd00:ec2::254, fd20:ce::254, 100.100.100.200, 192.0.0.192, 168.63.129.16 (Azure WireServer), 169.254.0.23 (Tencent) | **never** | — |
 | unspecified (0.0.0.0, ::), multicast, broadcast, reserved (0/8, 240/4, 192.88.99/24, IPv4-compatible ::/96) | **never** | — |
 
 - IPv4-mapped IPv6 (`::ffff:127.0.0.1`) is checked as the IPv4 address.

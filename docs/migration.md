@@ -113,3 +113,19 @@ kjak send --config ci.toml --secrets ci-secrets.toml ...   # or KJAK_SECRETS=ci-
   trust store with such an entry ("broken trust store"). Entries without
   them are written as before.
 - `--secret-stdin` still writes a literal (and warns): prefer `--secret-ref`.
+
+## Message templates cannot loop
+
+Since 0.0.5 a message template (`[templates.*]`, `--template-file`) refuses
+`range` and `define`/`template`/`block`, like an http body template. Their
+variables are strings, which `range` cannot iterate, so the only loops were
+over numbers (`{{range 1000000000}}`), which could keep kjak busy without
+end. A template that uses one is refused by `kjak template set` and by its
+render; write the text out instead.
+
+## Configuration files must be regular files
+
+Since 0.0.5 a configuration file, a `.kjak.toml` or the trust store that is
+a FIFO, a device or a directory (or a link to one) is refused (`it is not a
+regular file`) instead of being read. A symbolic link to a regular file is
+still followed.
