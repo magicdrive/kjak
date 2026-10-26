@@ -131,6 +131,20 @@ rules that keep your secrets from it:
 An allowed name means "this project may send this secret to the
 destinations it configures": review those destinations before you allow it.
 
+### Terminal output
+
+What `config trust` shows must be what the file says: a project file cannot
+write terminal escape sequences through kjak. The free-text fields of a
+feather (`host`, `user`, `from`, `to`, `subject_prefix`, `username`,
+`plugin`, `path`, plugin `settings`, http `query` keys, `allow_hosts`,
+`auth.username`, a keychain `service`/`account`) refuse control characters
+(C0 including ESC, BEL, tab and line breaks; DEL; C1). Values are printed
+as they are when every character is printable, and quoted (Go `%q`
+syntax, which also escapes bidirectional overrides) otherwise; plugin
+settings and http headers are always quoted. Unknown keys are quoted in
+errors, every error is printed with its control characters escaped, and a
+template's text keeps only its line breaks and tabs.
+
 ## OS keychain
 
 kjak **reads** the keychain; it never writes it. The tools that would write

@@ -206,7 +206,7 @@ func featherShow(ctx context.Context, rt *Runtime, args []string) int {
 	tw := tabwriter.NewWriter(rt.Stdout, 0, 4, 2, ' ', 0)
 	row := func(k string, val any) {
 		if s := fmt.Sprint(val); s != "" && s != "0" && s != "[]" {
-			fmt.Fprintf(tw, "%s\t%s\n", k, s)
+			fmt.Fprintf(tw, "%s\t%s\n", k, output.EscapeControls(s))
 		}
 	}
 	row("name", v.Name)
