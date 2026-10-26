@@ -16,8 +16,10 @@ kjak send --to development --level error --title "nightly build" "tests failed o
 - Honest results: a delivery is **confirmed** only when the provider says so; a
   message that may have arrived but got no answer is **unknown** and is never
   retried (no duplicates)
-- Secrets from environment variables or the OS keychain, never printed
-- A project configuration (`.kjak.toml`) is used only after you trust it
+- Secrets from environment variables, the OS keychain or a private secrets
+  file, never printed and never kept in the configuration
+- A project configuration (`.kjak.toml`) is used only after you trust it, and
+  reads your own secrets only by the names you allowed
 - Text or JSON output (`schema_version: 1`), and a stable exit code contract
 - One static Go binary (`CGO_ENABLED=0`) for macOS, Linux and Windows
 
@@ -125,7 +127,7 @@ targets = ["development"]
 [feathers.development_slack]
 type = "slack"
 enabled = true
-webhook_url = { env = "KJAK_DEV_SLACK_WEBHOOK" }
+webhook_url = { secret = "development_slack.webhook_url" }
 
 [feathers.oncall_mail]
 type = "email"
@@ -140,6 +142,35 @@ levels = ["error", "critical"]
 feathers = ["development_slack"]
 ```
 
+### Secrets
+
+Secrets go in a secrets file of their own, private to you (mode 0600:
+kjak refuses one that group or others can read), and the configuration
+names them:
+
+```toml
+# ~/.config/kjak/secrets.toml
+[development_slack]
+webhook_url = "https://hooks.slack.com/services/..."
+```
+
+`{ env = "VAR" }` and `{ keychain = { service = "...", account = "..." } }`
+work as well. A `{ literal = "..." }` secret in the configuration still works
+but is deprecated: `kjak config migrate-secrets` moves literals to a new
+secrets file ([migration guide](docs/migration.md)).
+
+### User, current and explicit files
+
+| | configuration | secrets |
+|---|---|---|
+| explicit | `--config FILE`, `$KJAK_CONFIG` | `--secrets FILE`, `$KJAK_SECRETS` |
+| user | `~/.config/kjak/config.toml` | `~/.config/kjak/secrets.toml` |
+| current | `./.kjak.toml` (once trusted) | `./.kjak.secrets.toml` (trusted with `.kjak.toml`, for it only) |
+
+An explicit file replaces the user file of its kind; each kind is chosen on
+its own. `kjak config path` shows which files are used, how each was chosen
+and its state.
+
 A `.kjak.toml` in the current directory adds to (and overrides) the global
 file once it is trusted:
 
@@ -147,8 +178,10 @@ file once it is trusted:
 kjak config trust      # shows the file's path, SHA-256 and what it sends where
 ```
 
-Any change to the file withdraws the trust. See
-[docs/configuration.md](docs/configuration.md) and
+Any change to the file (or to its `.kjak.secrets.toml`) withdraws the
+trust. The project's secret references read its own secrets file; a name it
+wants from **your** secrets file must be allowed, name by name, when you
+trust it. See [docs/configuration.md](docs/configuration.md) and
 [docs/security.md](docs/security.md).
 
 ## Known limitations
@@ -171,6 +204,7 @@ More in [docs/troubleshooting.md](docs/troubleshooting.md).
 - [Configuration reference](docs/configuration.md) ([日本語](docs/configuration_ja.md)): every key, CLI management, credentials, trust, delivery behavior
 - [CLI usage](docs/cli.md)
 - [Credentials, trust and security](docs/security.md)
+- [Migrating literal secrets](docs/migration.md)
 - [Delivery, retry and acceptance semantics](docs/delivery.md)
 - [Development guide](docs/development.md)
 - [Release runbook](docs/release.md)
