@@ -25,13 +25,17 @@ concurrency:
 
 jobs:
   # Windows is tested on every change: kjak has Windows code of its own (the
-  # configuration lock, paths), which broke there once already. macOS is
-  # macos-latest (arm64); darwin/amd64 is cross-built only (dist).
+  # configuration lock, paths), which broke there once already. Every
+  # release platform runs natively (hephaestus.yaml): linux amd64
+  # (ubuntu-latest) and arm64 (ubuntu-24.04-arm), darwin arm64
+  # (macos-latest) and amd64 (macos-15-intel), windows amd64
+  # (windows-latest). windows/arm64 is not released: it is cross-compiled
+  # with its tests only (lint job), not run.
   test:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -98,8 +102,29 @@ jobs:
       - name: Staticcheck
         run: make staticcheck  # version pinned in the Makefile (STATICCHECK)
 
+      # .golangci.yml, for linux, darwin and windows (GOOS)
+      - name: golangci-lint
+        run: make golangci-lint  # version pinned in the Makefile (GOLANGCI_LINT)
+
       - name: Go vet for windows
         run: GOOS=windows go vet ./...
+
+      # windows/arm64 has no release and no runner here: its build, vet
+      # and test binaries must still compile (the tests are not run)
+      - name: Cross-compile windows/arm64 (build, vet, tests)
+        env:
+          GOOS: windows
+          GOARCH: arm64
+          CGO_ENABLED: "0"
+        run: |
+          go build -o /dev/null .
+          go vet ./...
+          go test -count=1 -exec /bin/true ./...
+
+      # every mutant of scripts/mutants.tsv still applies to the code (the
+      # mutation run itself is mutation.yml: weekly and on demand)
+      - name: Mutants apply
+        run: make mutation-check
 
       - name: Shell scripts
         run: shellcheck -s sh scripts/*.sh

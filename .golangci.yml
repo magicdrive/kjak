@@ -1,0 +1,137 @@
+# golangci-lint v2 (version pinned in the Makefile: GOLANGCI_LINT).
+# A conservative set: correctness and security linters only, no style
+# linters. Every exclusion below names the finding it covers and why it is a
+# false positive here; anything else fails `make golangci-lint` and CI.
+version: "2"
+
+run:
+  timeout: 10m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - gosec
+    - bodyclose
+    - misspell
+
+  settings:
+    errcheck:
+      exclude-functions:
+        # Human-readable CLI output (help, notes, `config show`, tables) is
+        # written to rt.Stdout/rt.Stderr with fmt.Fprint*. A failed write of
+        # such a line has no recovery: the exit code already tells the
+        # outcome, and the machine-readable report checks its own write
+        # error (commandline/mod.go, out.err: broken pipe vs. other). The
+        # same holds for Secret.Format, which writes the fixed "[REDACTED]".
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+
+  exclusions:
+    # generated code is not lint-ed
+    generated: strict
+    rules:
+      # ---- production code ------------------------------------------------
+
+      # G304 (file inclusion via variable): kjak is a CLI that opens the
+      # files its user names: the configuration, secrets and lock files,
+      # --json-input, template files, plugin candidates on PATH. There is no
+      # fixed base directory to confine them to; the protections are kjak's
+      # own and tested (the project trust boundary, O_NOFOLLOW, ownership and
+      # mode checks of secrets files, plugin location checks).
+      - linters: [gosec]
+        text: "G304:"
+      # G703 (path traversal via taint analysis): the same paths as G304
+      # (configuration and lock files the user names), reached through
+      # filepath.Join in the Windows lock and in tests.
+      - linters: [gosec]
+        text: "G703:"
+
+      # G204: the external feather starts the plugin binary that discover.go
+      # resolved and checked (name pattern kjak-feather-<name>, a regular
+      # executable file, location and ownership); argv is fixed to the
+      # binary alone and the request goes on stdin (docs/plugins.md). Running
+      # a variable program is the feature.
+      - path: internal/feather/external/external\.go
+        linters: [gosec]
+        text: "G204:"
+      # G204: the keychain runner executes the OS keychain tool chosen by
+      # keychain.go from fixed names (security, secret-tool), with arguments
+      # passed as argv (no shell).
+      - path: internal/credential/keychain\.go
+        linters: [gosec]
+        text: "G204:"
+
+      # G103 (unsafe): fcntl(F_GETPATH) on macOS takes the address of the
+      # buffer it fills; the buffer is a heap slice kept alive across the
+      # call (runtime.KeepAlive). x/sys has no typed wrapper for it.
+      - path: internal/commandline/subcmd/input_darwin\.go
+        linters: [gosec]
+        text: "G103:"
+
+      # G101 (hardcoded credentials): SecretsFileName/ProjectSecretsFileName
+      # are file names ("secrets.toml"), not credentials.
+      - path: internal/configure/secrets\.go
+        linters: [gosec]
+        text: "G101:"
+
+      # errcheck, best-effort cleanup on paths that already return the error
+      # that matters (the files are owned by the OS-security work, kept
+      # unchanged here): closing a temporary file or a lock file after a
+      # failed write/lock, os.Remove of the temporary file that was not
+      # committed, and deferred Close of files opened read-only (atomic.go
+      # readOptional, secrets.go read, discover.go plugin stat). Close of a
+      # read-only descriptor reports nothing actionable; the write path
+      # checks Close (atomic.go and secrets.go keep `cerr := f.Close()`).
+      - path: internal/configure/(atomic|secrets)\.go
+        linters: [errcheck]
+        text: "Error return value of `(tmp\\.Close|f\\.Close|os\\.Remove)` is not checked"
+      # gosec G104 is the same finding as errcheck above (the same calls).
+      - path: internal/configure/(atomic|secrets)\.go
+        linters: [gosec]
+        text: "G104:"
+      - path: internal/feather/external/discover\.go
+        linters: [errcheck]
+        text: "Error return value of `f\\.Close` is not checked"
+
+      # ---- tests -----------------------------------------------------------
+
+      # G204/G702: tests run `go build`, the kjak binary they built and the
+      # helper processes of the test binary itself (os.Args[0]).
+      - path: _test\.go
+        linters: [gosec]
+        text: "G(204|702):"
+      # G301/G302/G306: tests create the files and directories whose modes
+      # kjak checks: executable plugins (0755), group/world readable or
+      # writable files and directories that must be refused, read-only
+      # directories (0500) for write-failure tests.
+      - path: _test\.go
+        linters: [gosec]
+        text: "G30[126]:"
+      # G101: fake tokens and webhook URLs that the tests assert are never
+      # printed (redaction tests); none is a real credential.
+      - path: _test\.go
+        linters: [gosec]
+        text: "G101:"
+      # G115: conversions of small test constants (pool sizes <= 20) and of
+      # os.Geteuid() into syscall.Stat_t.Uid, the type the kernel uses.
+      - path: _test\.go
+        linters: [gosec]
+        text: "G115:"
+      # G705 (XSS): httptest servers that echo a request header or path in
+      # a plain-text error body on purpose, to prove kjak redacts what a
+      # provider reflects back.
+      - path: _test\.go
+        linters: [gosec]
+        text: "G705:"
+
+issues:
+  # report everything (the defaults hide all but 3 of the same finding)
+  max-issues-per-linter: 0
+  max-same-issues: 0

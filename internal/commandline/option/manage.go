@@ -38,7 +38,7 @@ func ParseList(command string, args []string) (*ListOption, error) {
 	if err := exactArgs(command, pos, 0, "no argument"); err != nil {
 		return opt, err
 	}
-	return opt, opt.OutputOption.check(command)
+	return opt, opt.check(command)
 }
 
 // NameOption: kjak <noun> show NAME (and other read-only commands of one
@@ -75,7 +75,7 @@ func parseName(command string, args []string, withVars bool) (*NameOption, error
 		return opt, err
 	}
 	opt.Name, opt.Vars = pos[0], vars
-	return opt, opt.OutputOption.check(command)
+	return opt, opt.check(command)
 }
 
 // ScopedNameOption: kjak <noun> remove|enable|disable NAME.
@@ -103,7 +103,7 @@ func checkScope(command, scope string) error {
 func ParseScopedName(command string, args []string) (*ScopedNameOption, error) {
 	opt := &ScopedNameOption{}
 	fs := newFlagSet(command)
-	opt.ConfigOption.register(fs)
+	opt.register(fs)
 	registerScope(fs, &opt.Scope)
 	pos, err := parse(command, fs, args)
 	if err != nil {
@@ -162,7 +162,7 @@ func ParseFeatherAdd(args []string) (*FeatherAddOption, error) {
 	const cmd = "feather add"
 	opt := &FeatherAddOption{}
 	fs := newFlagSet(cmd)
-	opt.ConfigOption.register(fs)
+	opt.register(fs)
 	registerScope(fs, &opt.Scope)
 	var levels, mailTo list
 	fs.BoolVar(&opt.Force, "force", false, "")
@@ -216,7 +216,7 @@ func ParseGroupSet(args []string) (*GroupSetOption, error) {
 	const cmd = "group set"
 	opt := &GroupSetOption{}
 	fs := newFlagSet(cmd)
-	opt.ConfigOption.register(fs)
+	opt.register(fs)
 	registerScope(fs, &opt.Scope)
 	pos, err := parse(cmd, fs, args)
 	if err != nil {
@@ -247,7 +247,7 @@ func ParseTemplateSet(args []string) (*TemplateSetOption, error) {
 	const cmd = "template set"
 	opt := &TemplateSetOption{}
 	fs := newFlagSet(cmd)
-	opt.ConfigOption.register(fs)
+	opt.register(fs)
 	registerScope(fs, &opt.Scope)
 	fs.StringVar(&opt.Title, "title", "", "")
 	fs.StringVar(&opt.Body, "body", "", "")
@@ -278,7 +278,7 @@ func ParseConfigInit(args []string) (*ConfigInitOption, error) {
 	const cmd = "config init"
 	opt := &ConfigInitOption{}
 	fs := newFlagSet(cmd)
-	opt.ConfigOption.register(fs)
+	opt.register(fs)
 	fs.BoolVar(&opt.Force, "force", false, "")
 	pos, err := parse(cmd, fs, args)
 	if err != nil {
@@ -299,7 +299,7 @@ type ConfigTrustOption struct {
 func ParseConfigTrust(command string, args []string) (*ConfigTrustOption, error) {
 	opt := &ConfigTrustOption{}
 	fs := newFlagSet(command)
-	opt.ConfigOption.register(fs)
+	opt.register(fs)
 	fs.BoolVar(&opt.Yes, "yes", false, "")
 	fs.BoolVar(&opt.Yes, "y", false, "")
 	if command == "config trust" {
@@ -342,7 +342,7 @@ func ParseConfigValidate(args []string) (*ConfigValidateOption, error) {
 	if err := exactArgs(cmd, pos, 0, "no argument"); err != nil {
 		return opt, err
 	}
-	return opt, opt.OutputOption.check(cmd)
+	return opt, opt.check(cmd)
 }
 
 // ConfigMigrateOption: kjak config migrate-secrets.
@@ -358,7 +358,7 @@ func ParseConfigMigrate(args []string) (*ConfigMigrateOption, error) {
 	const cmd = "config migrate-secrets"
 	opt := &ConfigMigrateOption{}
 	fs := newFlagSet(cmd)
-	opt.ConfigOption.register(fs)
+	opt.register(fs)
 	registerScope(fs, &opt.Scope)
 	fs.StringVar(&opt.SecretsOut, "secrets-out", "", "")
 	fs.StringVar(&opt.ConfigOut, "config-out", "", "")

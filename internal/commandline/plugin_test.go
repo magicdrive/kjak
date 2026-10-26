@@ -30,11 +30,11 @@ func TestMain(m *testing.M) {
 	build := exec.Command("go", "build", "-o", testPlugin, "../feather/external/testdata/plugin")
 	build.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, err := build.CombinedOutput(); err != nil {
-		os.Stderr.Write(out)
+		_, _ = os.Stderr.Write(out)
 		panic(err)
 	}
 	code := m.Run()
-	os.RemoveAll(dir)
+	_ = os.RemoveAll(dir)
 	os.Exit(code)
 }
 

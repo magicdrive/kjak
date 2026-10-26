@@ -109,8 +109,11 @@ whole command line is testable in-process; CI tests Windows on every change
 make test            # unit + integration + e2e, no cache (go test -count=1 ./...)
 make race            # the same with -race
 make vet staticcheck vulncheck
+make golangci-lint   # .golangci.yml, for linux, darwin and windows
+make lint            # staticcheck, golangci-lint, shellcheck
 make fuzz            # every fuzz target for FUZZTIME (10s)
-make check           # vet, staticcheck, test, race, gofmt, go mod tidy
+make mutation        # mutation testing of the security-critical paths (minutes)
+make check           # vet, staticcheck, golangci-lint, test, race, gofmt, go mod tidy
 make smoke           # a binary built like a release, run by scripts/smoke.sh
 make snapshot        # the release archives (Hephaestus), verified
 ```
@@ -129,7 +132,13 @@ Tests are deterministic: no test waits for real time to pass.
 - The CLI is tested in-process with a fake `Runtime`
   (`internal/commandline/commandline_test.go`) and as a binary
   (`internal/e2e`, including SIGINT, SIGTERM and a closed stdout on Unix).
-- No test sends anything outside the machine.
+  The end-to-end delivery tests (`internal/e2e/delivery_test.go`) send a
+  group to local `httptest` APIs and to the test plugin built with `go
+  build`: success, failure, skipped members, a retry, the send deadline,
+  SIGINT (Unix), the exit status, the JSON contract, and no secret in the
+  output.
+- No test sends anything outside the machine. The check against the real
+  Discord is manual: [discord-e2e.md](discord-e2e.md).
 
 A flaky test is a bug: fix it, never skip it.
 
@@ -141,12 +150,49 @@ named `TestCritical_<Name>`; they run with every other test.
 
 The fuzz targets cover message validation, TOML parsing (round trip), secrets
 files (round trip, no value in an error), http feather URLs, address
-classification (IPv4-mapped / NAT64 / 6to4 consistency), JSON body templates
-(no structure change), plugin responses and names, webhook
-URL checks, the JSON input object, the webhook classification and
-`Retry-After`, SMTP dot stuffing and reply parsing. `make fuzz` finds them
+classification (IPv4-mapped / NAT64 / 6to4 consistency), the address policy
+(never-allowed categories, allow_hosts), redirects (credentials kept at their
+origin, Referer, schemes), static headers (no header injection), JSON body
+templates (no structure change), plugin responses, names and file names, the
+PATH search of plugins, the trust store (round trip of the grant), redaction
+of secrets, webhook URL checks, the JSON input object, the webhook
+classification and `Retry-After`, SMTP dot stuffing and reply parsing. `make fuzz` finds them
 with `go test -list`; a failing input is written to the package's
 `testdata/fuzz` and then runs as a regular test.
+
+### Mutation testing
+
+`scripts/mutation.sh` applies each mutant of `scripts/mutants.tsv` — a
+negated condition, a dropped check, a replaced return in the secret file
+permissions, the trust, the SSRF guard, redirects, plugin authorization,
+cancellation, retries and redaction — to a copy of the module, runs the
+tests of the packages that guard that code, and restores the copy (checked
+with `cmp`) before the next one. Every mutant must be killed: a surviving
+mutant is a missing test. `make mutation` runs them all (minutes;
+`MUTANTS=regex` selects by id); CI runs it weekly and on demand
+(`mutation.yml`), and checks on every change that each mutant still applies
+to the code (`make mutation-check`). When the code of a mutant changes,
+update its line in `scripts/mutants.tsv`.
+
+### Static analysis
+
+`.golangci.yml` enables a conservative set: `govet`, `staticcheck`,
+`errcheck`, `ineffassign`, `unused`, `gosec`, `bodyclose`, `misspell`. Each
+exclusion names the finding and why it is a false positive here. golangci-lint
+is built from source with the toolchain of `go.mod` (`go install`, pinned in
+the Makefile): release binaries built with an older Go cannot read the
+export data of Go 1.27.
+
+## Platforms
+
+| platform | released | CI |
+|---|---|---|
+| linux/amd64 | yes | native: `ubuntu-latest` (test, race, smoke) |
+| linux/arm64 | yes | native: `ubuntu-24.04-arm` (test, race, smoke) |
+| darwin/arm64 | yes | native: `macos-latest` (test, race, smoke) |
+| darwin/amd64 | yes | native: `macos-15-intel` (test, race, smoke) |
+| windows/amd64 | yes | native: `windows-latest` (test, smoke; no race: no cgo) |
+| windows/arm64 | no | cross-compiled: build, vet and the test binaries (lint job); not run |
 
 ## CI
 
@@ -155,16 +201,16 @@ to main and every pull request:
 
 | job | runs |
 |---|---|
-| test (ubuntu, macos, windows) | gofmt (Linux), `go vet`, `go test -count=1 ./...`, `-race` (not Windows: no cgo there), CLI smoke test of a release-built binary (`scripts/smoke.sh`) |
-| lint | `go mod verify`, `go mod tidy -diff`, `make staticcheck`, `GOOS=windows go vet`, shellcheck, `make actionlint` |
+| test (ubuntu x64/arm64, macos arm64/intel, windows) | gofmt (Linux), `go vet`, `go test -count=1 ./...`, `-race` (not Windows: no cgo there), CLI smoke test of a release-built binary (`scripts/smoke.sh`) |
+| lint | `go mod verify`, `go mod tidy -diff`, `make staticcheck`, `make golangci-lint`, `GOOS=windows go vet`, windows/arm64 cross-compile, shellcheck, `make actionlint`, `make mutation-check` |
 | renovate | `make renovate-check` (`renovate-config-validator --strict`) |
 | fuzz | `make fuzz` |
 | dist | `make vulncheck`, `hephaestus check`, Hephaestus snapshot (build, archive, checksum), `scripts/verify-dist.sh` |
 | homebrew-e2e (ubuntu, macos) | `make homebrew-e2e`: the generated formula with file:// URLs, `brew style`, `brew audit --strict`, install, smoke test, `brew test`, uninstall |
 
-macOS runs on `macos-latest` (arm64); the darwin/amd64 binary is cross-built
-and checked by `scripts/verify-dist.sh` (architecture, static linking), not
-run. Tool versions are pinned in the Makefile (staticcheck, govulncheck,
-actionlint, Renovate, Hephaestus) and the workflows (actions by commit SHA,
+Every released platform runs its tests natively (see Platforms). The
+weekly `mutation.yml` runs `make mutation`. Tool versions are pinned in the
+Makefile (staticcheck, golangci-lint, govulncheck, actionlint, Renovate,
+Hephaestus) and the workflows (actions by commit SHA,
 `magicdrive/hephaestus` included); Go comes from `go.mod`. Renovate
 (`renovate.json`) updates all of them.

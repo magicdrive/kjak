@@ -42,7 +42,7 @@ func TestCritical_FIFOInputIsCancelable(t *testing.T) {
 			done := make(chan result, 1)
 			go func() { done <- e.runCtx(ctx, "send", "--to", "a", "--json-input", fifo) }()
 			if w := tc.writer(t, fifo); w != nil {
-				defer w.Close()
+				defer func() { _ = w.Close() }()
 			}
 			cancel()
 			r := waitResult(t, done, "the FIFO kept kjak after SIGINT")
@@ -68,7 +68,7 @@ func TestFIFOInputDelivers(t *testing.T) {
 	if _, err := w.WriteString(`{"body": "from a fifo"}`); err != nil {
 		t.Fatal(err)
 	}
-	w.Close()
+	_ = w.Close()
 	if r := waitResult(t, done, "the FIFO was not read to its end"); r.code != 0 || p.count() != 1 {
 		t.Fatalf("exit %d, %d sent: %s", r.code, p.count(), r.stderr)
 	}
@@ -86,7 +86,7 @@ func TestFIFOEmptyWriterIsAnInputError(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() { done <- e.run("send", "--to", "a", "--json-input", fifo) }()
-	openFIFOWriter(t, fifo).Close()
+	_ = openFIFOWriter(t, fifo).Close()
 	if r := waitResult(t, done, "the end of an empty writer was not seen"); r.code != 2 || p.count() != 0 {
 		t.Fatalf("exit %d, %d sent: %s", r.code, p.count(), r.stderr)
 	}
@@ -118,7 +118,7 @@ func highFDs(t *testing.T) {
 	var held []int
 	t.Cleanup(func() {
 		for _, fd := range held {
-			syscall.Close(fd)
+			_ = syscall.Close(fd)
 		}
 	})
 	for {
@@ -127,7 +127,7 @@ func highFDs(t *testing.T) {
 			t.Fatal(err)
 		}
 		if fd >= 1024 {
-			syscall.Close(fd)
+			_ = syscall.Close(fd)
 			return
 		}
 		held = append(held, fd)
@@ -165,8 +165,8 @@ func TestCritical_InputIsCancelableAtHighDescriptors(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				defer stdin.Close()
-				defer w.Close()
+				defer func() { _ = stdin.Close() }()
+				defer func() { _ = w.Close() }()
 				if stdin.Fd() < 1024 {
 					t.Fatalf("standard input is descriptor %d", stdin.Fd())
 				}
@@ -180,7 +180,7 @@ func TestCritical_InputIsCancelableAtHighDescriptors(t *testing.T) {
 				}
 				go func() { done <- e.runCtx(ctx, "send", "--to", "a", "--json-input", fifo) }()
 				if w := tc.writer(t, fifo); w != nil {
-					defer w.Close()
+					defer func() { _ = w.Close() }()
 					if w.Fd() < 1024 {
 						t.Fatalf("the writer is descriptor %d", w.Fd())
 					}

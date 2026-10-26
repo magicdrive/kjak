@@ -56,7 +56,7 @@
       "customType": "regex",
       "managerFilePatterns": ["/^Makefile$/"],
       "matchStrings": [
-        "(?:STATICCHECK|GOVULNCHECK|ACTIONLINT) := (?<depName>[^@\\s]+?)(?:/cmd/[^@\\s]+)?@(?<currentValue>v[^\\s]+)"
+        "(?:STATICCHECK|GOVULNCHECK|ACTIONLINT|GOLANGCI_LINT) := (?<depName>[^@\\s]+?)(?:/cmd/[^@\\s]+)?@(?<currentValue>v[^\\s]+)"
       ],
       "datasourceTemplate": "go"
     },
