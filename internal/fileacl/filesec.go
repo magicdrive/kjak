@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -80,13 +81,15 @@ func ParseAttrlistFilesec(buf []byte) ([]byte, error) {
 		return nil, fmt.Errorf("getattrlist: length %d out of bounds", total)
 	}
 	buf = buf[:total]
-	off := int64(int32(binary.LittleEndian.Uint32(buf[4:])))
+	// attr_dataoffset is signed: one above MaxInt32 is a negative offset
+	rawOff := binary.LittleEndian.Uint32(buf[4:])
 	n := int64(binary.LittleEndian.Uint32(buf[8:]))
 	if n == 0 {
 		return nil, nil
 	}
+	off := int64(rawOff)
 	start := 4 + off
-	if off < 0 || start+n > int64(len(buf)) {
+	if rawOff > math.MaxInt32 || start+n > int64(len(buf)) {
 		return nil, fmt.Errorf("getattrlist: extended security at %d+%d out of bounds", start, n)
 	}
 	return buf[start : start+n], nil

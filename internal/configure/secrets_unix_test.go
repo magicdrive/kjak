@@ -61,7 +61,7 @@ func TestSecretsFileOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if err := checkPrivateFile(f, "x", fakeInfo{mode: 0o600, uid: me}, true); err != nil {
 		t.Fatal(err)
 	}

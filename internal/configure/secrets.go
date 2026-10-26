@@ -108,7 +108,7 @@ func ReadSecretsFile(path string, noFollow bool) (*SecretsFile, error) {
 	if err != nil {
 		return nil, secretsErr(path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	st, err := f.Stat() // the opened file, not the path: no check-then-use race
 	if err != nil {
 		return nil, secretsErr(path, err)
@@ -259,7 +259,7 @@ func createExclusive(path string, content []byte) error {
 		werr = cerr
 	}
 	if werr != nil {
-		os.Remove(path)
+		_ = os.Remove(path)
 		return werr
 	}
 	syncDir(filepath.Dir(path))

@@ -5,6 +5,7 @@ package external
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -104,7 +105,12 @@ func (c *containment) start() error {
 		c.close()
 		return err
 	}
-	if err := c.assignAndResume(uint32(c.cmd.Process.Pid)); err != nil {
+	pid := c.cmd.Process.Pid
+	err := errors.New("the plugin's pid is out of range")
+	if pid > 0 && pid <= math.MaxUint32 {
+		err = c.assignAndResume(uint32(pid))
+	}
+	if err != nil {
 		_ = c.cmd.Process.Kill()
 		_ = c.cmd.Wait()
 		c.close()
@@ -120,7 +126,7 @@ func (c *containment) assignAndResume(pid uint32) error {
 	if err != nil {
 		return fmt.Errorf("OpenProcess: %w", err)
 	}
-	defer windows.CloseHandle(h)
+	defer func() { _ = windows.CloseHandle(h) }()
 	c.mu.Lock()
 	job := c.job
 	c.mu.Unlock()
@@ -140,7 +146,7 @@ func resumeThreads(pid uint32) error {
 	if err != nil {
 		return fmt.Errorf("CreateToolhelp32Snapshot: %w", err)
 	}
-	defer windows.CloseHandle(snap)
+	defer func() { _ = windows.CloseHandle(snap) }()
 	te := windows.ThreadEntry32{Size: uint32(unsafe.Sizeof(windows.ThreadEntry32{}))}
 	resumed := 0
 	for err = windows.Thread32First(snap, &te); err == nil; err = windows.Thread32Next(snap, &te) {

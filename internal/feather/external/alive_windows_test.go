@@ -13,7 +13,7 @@ func processAlive(pid int) bool {
 	if err != nil {
 		return false
 	}
-	defer windows.CloseHandle(h)
+	defer func() { _ = windows.CloseHandle(h) }()
 	ev, err := windows.WaitForSingleObject(h, 0)
 	return err == nil && ev == uint32(windows.WAIT_TIMEOUT)
 }
@@ -24,5 +24,5 @@ func killProcess(pid int) {
 		return
 	}
 	_ = windows.TerminateProcess(h, 1)
-	windows.CloseHandle(h)
+	_ = windows.CloseHandle(h)
 }

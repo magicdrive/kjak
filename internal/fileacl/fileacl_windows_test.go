@@ -43,7 +43,7 @@ func checkOpened(t *testing.T, path string, a Access) error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return CheckFile(f, a)
 }
 
@@ -184,7 +184,7 @@ func enablePrivilege(name string) bool {
 	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_ADJUST_PRIVILEGES|windows.TOKEN_QUERY, &tok); err != nil {
 		return false
 	}
-	defer tok.Close()
+	defer func() { _ = tok.Close() }()
 	var luid windows.LUID
 	if err := windows.LookupPrivilegeValue(nil, windows.StringToUTF16Ptr(name), &luid); err != nil {
 		return false
@@ -215,7 +215,7 @@ func TestWindowsPrivateSDDL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	windows.CloseHandle(h)
+	_ = windows.CloseHandle(h)
 	if err := checkOpened(t, p, Private); err != nil {
 		t.Fatalf("a file made with PrivateSDDL: %v", err)
 	}

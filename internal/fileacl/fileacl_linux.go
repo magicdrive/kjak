@@ -5,6 +5,7 @@ package fileacl
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 
 	"golang.org/x/sys/unix"
@@ -52,5 +53,9 @@ func checkXattr(get func([]byte) (int, error), a Access, sticky bool) error {
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrNotPrivate, err)
 	}
-	return CheckPOSIXACL(aces, POSIXPolicy{Access: a, UID: uint32(os.Geteuid()), RootTrusted: a != Private, Sticky: sticky})
+	euid := os.Geteuid()
+	if euid < 0 || euid > math.MaxUint32 {
+		return fmt.Errorf("%w: the effective uid %d is out of range", ErrNotPrivate, euid)
+	}
+	return CheckPOSIXACL(aces, POSIXPolicy{Access: a, UID: uint32(euid), RootTrusted: a != Private, Sticky: sticky})
 }

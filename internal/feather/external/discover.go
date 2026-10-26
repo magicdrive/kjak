@@ -143,7 +143,7 @@ func check(name, path string) (*Executable, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	st, err := f.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, path, err)
@@ -178,7 +178,7 @@ func (e *Executable) Verify(rehash bool) error {
 	if err != nil {
 		return fmt.Errorf("%w: %s: %v", ErrPlugin, e.Real, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	st, err := f.Stat()
 	if err != nil {
 		return fmt.Errorf("%w: %s: %v", ErrPlugin, e.Real, err)

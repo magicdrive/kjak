@@ -152,13 +152,10 @@ func sidLen(b []byte) (int, error) {
 // SIDString renders a binary SID as S-1-....
 func SIDString(sid []byte) string {
 	n, err := sidLen(sid)
-	if err != nil {
+	if err != nil || len(sid) < 8 {
 		return "(invalid SID)"
 	}
-	var auth uint64
-	for _, c := range sid[2:8] {
-		auth = auth<<8 | uint64(c)
-	}
+	auth := uint64(binary.BigEndian.Uint16(sid[2:4]))<<32 | uint64(binary.BigEndian.Uint32(sid[4:8]))
 	var sb strings.Builder
 	sb.WriteString("S-1-")
 	sb.WriteString(strconv.FormatUint(auth, 10))

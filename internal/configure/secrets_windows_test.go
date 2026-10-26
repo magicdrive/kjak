@@ -111,7 +111,7 @@ func TestWindowsSecretsFileLockedWhileRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	other := filepath.Join(dir, "other.toml")
 	write(t, other, "a = \"evil\"\n")
 	if err := os.Rename(other, path); err == nil {
