@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"runtime"
 	"strings"
 	"text/tabwriter"
@@ -389,10 +390,11 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 			fmt.Fprintf(rt.Stdout, "  secret %s\n", name)
 		}
 	}
-	// the environment variables and keychain entries its http feathers
-	// send to a URL of the project's choosing
+	// the environment variables and keychain entries its feathers send to
+	// a destination of the project's choosing (a URL, an SMTP host, a
+	// plugin)
 	if gated := configure.GatedNames(src.File); len(gated) > 0 {
-		fmt.Fprintln(rt.Stdout, "The project asks to give these to destinations it chooses (http feathers, plugins):")
+		fmt.Fprintln(rt.Stdout, "The project asks to give these of YOUR environment variables and keychain entries to destinations it chooses (its webhook URLs, SMTP hosts, http URLs, plugins):")
 		for _, name := range gated {
 			fmt.Fprintf(rt.Stdout, "  %s\n", name)
 		}
@@ -480,6 +482,11 @@ func describeProject(rt *Runtime, f *configure.File) {
 			src := "(none)"
 			if fc.WebhookURL != nil {
 				src = fc.WebhookURL.Describe()
+				if h := webhookHost(fc.WebhookURL); h != "" {
+					// where it sends: the host only (the path and the
+					// query of a webhook URL are its secret)
+					src += fmt.Sprintf(", to host %q", h)
+				}
 			}
 			fmt.Fprintf(rt.Stdout, "  feather %s: %s, webhook URL from %s\n", name, fc.Type, src)
 		}
@@ -490,6 +497,20 @@ func describeProject(rt *Runtime, f *configure.File) {
 	for _, name := range sortedNames(f.Templates) {
 		fmt.Fprintf(rt.Stdout, "  template %s\n", name)
 	}
+}
+
+// webhookHost is the host (and port) of a literal webhook URL, for the
+// trust to show where a project's feather sends; "" when the URL is not in
+// the file or is not a URL.
+func webhookHost(r *credential.Ref) string {
+	if r == nil || r.Literal == nil {
+		return ""
+	}
+	u, err := url.Parse(*r.Literal)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return u.Host
 }
 
 func configUntrust(ctx context.Context, rt *Runtime, args []string) int {

@@ -35,7 +35,7 @@ type TrustEntry struct {
 	// from the personal secrets file (explicit or user), as the user
 	// allowed them; any other name it refers to must be in the project
 	// secrets file. They also hold the env and keychain references of its
-	// http and external feathers, and the variables of its plugins, the
+	// feathers (GatedType), and the variables of its plugins, the
 	// user allowed ("env:NAME", "keychain:S/A", GatedNames).
 	UserSecrets []string `toml:"user_secrets,omitempty"`
 	// Plugins are the executables of the project's external feathers as
