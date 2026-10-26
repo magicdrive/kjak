@@ -81,8 +81,19 @@ must be:
 | a `PATH` entry that is a symbolic link: the link owned by root or the user | |
 | a FIFO or a device named like a plugin is refused without waiting | |
 
-On Windows: a regular `.exe` file; ACLs of the file and the directories
-are not checked. A distribution whose `/usr/local/bin` is group-writable
+The ACLs are checked too (internal/fileacl): on Linux the POSIX ACL and on
+macOS the ACL of the file and of those directories must not let anyone else
+change them (macOS: no allow entry with a write right, whoever it names),
+nor remove an entry of a directory above them.
+
+On Windows: a regular `.exe` file owned by you, SYSTEM, Administrators or
+TrustedInstaller, that no other principal may change (its DACL); the
+directories that hold it likewise (no other principal may add, change or
+delete an entry); every directory above them owned the same way, and no
+other principal may delete an entry or change its DACL or owner (adding an
+entry is allowed: `Users` may create folders in `C:\`). A plugin in a
+folder made directly under `C:\` inherits `Authenticated Users: Modify` and
+is refused: install it under your profile or `Program Files`. A distribution whose `/usr/local/bin` is group-writable
 (the old Debian `staff` setup) needs `path =` to a plugin elsewhere, or a
 directory without group write.
 
@@ -196,7 +207,7 @@ never retries it, so nothing is delivered twice.
 | environment | only `PATH`, `HOME`, `TMPDIR`, `TEMP`, `TMP`, `LANG`, `LC_ALL`, `LC_CTYPE`, `TZ`, `SYSTEMROOT`, `USERPROFILE` (those that are set), the names in the feather's `env`, and `KJAK_PLUGIN_PROTOCOL=1`. kjak puts no secret there. `env` cannot name `KJAK_*`, `LD_*`, `DYLD_*`, `GODEBUG`, `GOTRACEBACK`, nor a variable that is the source of one of the feather's secrets (it is in the request) |
 | working directory | the temporary directory (not the project) |
 | standard input | the request, then closed |
-| timeout | the feather's `timeout` (default 10s) and the send's deadline; then kjak kills the plugin. Unix: the plugin runs in its own process group and the whole group is killed — at a timeout, at the deadline, at SIGINT, and after the plugin exits (nothing it started stays). **Windows: only the plugin's own process is killed** (no Job Object in this version): a child it started may survive |
+| timeout | the feather's `timeout` (default 10s) and the send's deadline; then kjak kills the plugin. Unix: the plugin runs in its own process group and the whole group is killed — at a timeout, at the deadline, at SIGINT, and after the plugin exits (nothing it started stays). Windows: the plugin runs in a Job Object of its own (created suspended, put in the job, then resumed; no breakaway) and the whole job is terminated in the same cases ([security](security.md#plugin-processes-and-files-per-os)) |
 | after a kill | a plugin killed after it started has acceptance `unknown` |
 | concurrency | feathers run at the same time (`--concurrency`), so a plugin may run several times at once (for several feathers); one feather's attempts never overlap |
 
@@ -283,8 +294,8 @@ Guidelines:
   attempt does not deliver twice.
 - Never print a secret, on stdout or stderr. kjak redacts the secrets it
   passed, but not what you derive from them.
-- Do not leave processes behind: kjak kills the process group on Unix, not
-  on Windows. (kjak kills the group once more after the plugin exited; if
+- Do not leave processes behind: kjak kills the process group on Unix and
+  the Job Object on Windows. (kjak kills the group once more after the plugin exited; if
   the group is gone by then, the kill finds nothing — the identifier of a
   group that ended could in theory have been reused in that instant.)
 - Treat `settings` as input you validate: on a project, they come from the

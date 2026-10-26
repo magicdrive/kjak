@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -28,8 +29,20 @@ func respond(v any) {
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "child" {
-		// a child that outlives its parent unless its group is killed
-		_ = os.WriteFile(os.Args[2], []byte(fmt.Sprint(os.Getpid())), 0o600)
+		// a child that outlives its parent unless its group is killed;
+		// "child PIDFILE N" (N > 1) starts a child of its own first: a
+		// tree N deep, each writing its pid to PIDFILE.N
+		pidfile := os.Args[2]
+		if len(os.Args) > 3 {
+			n, _ := strconv.Atoi(os.Args[3])
+			if n > 1 {
+				self, _ := os.Executable()
+				_ = exec.Command(self, "child", pidfile, strconv.Itoa(n-1)).Start()
+			}
+			pidfile += "." + os.Args[3]
+		}
+		_ = os.WriteFile(pidfile+".tmp", []byte(fmt.Sprint(os.Getpid())), 0o600)
+		_ = os.Rename(pidfile+".tmp", pidfile)
 		time.Sleep(time.Hour)
 		return
 	}
@@ -118,6 +131,35 @@ func main() {
 			time.Sleep(10 * time.Millisecond)
 		}
 		time.Sleep(time.Hour)
+	case "tree":
+		// a child and a grandchild (pidfile.2, pidfile.1), then: sleep,
+		// crash, or answer and exit, leaving them behind
+		self, _ := os.Executable()
+		_ = exec.Command(self, "child", s["pidfile"], "2").Start()
+		for i := 0; i < 1000; i++ {
+			_, err1 := os.Stat(s["pidfile"] + ".1")
+			_, err2 := os.Stat(s["pidfile"] + ".2")
+			if err1 == nil && err2 == nil {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		switch s["then"] {
+		case "crash":
+			panic("plugin crashed")
+		case "exit":
+			respond(map[string]any{"protocol_version": 1, "status": "delivered"})
+		default:
+			time.Sleep(time.Hour)
+		}
+	case "breakaway":
+		self, _ := os.Executable()
+		result := "started"
+		if err := startBreakaway(self, s["pidfile"]); err != nil {
+			result = "refused: " + err.Error()
+		}
+		_ = os.WriteFile(s["result"], []byte(result), 0o600)
+		respond(map[string]any{"protocol_version": 1, "status": "delivered"})
 	default:
 		fmt.Fprintln(os.Stderr, "unknown mode", s["mode"])
 		os.Exit(5)
