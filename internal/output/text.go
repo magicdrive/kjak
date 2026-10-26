@@ -8,12 +8,12 @@ import (
 )
 
 // Shown is a value of a configuration as kjak prints it: as it is when
-// every character is printable and it holds no quote or backslash, else
-// quoted (Go syntax: %q), so a value cannot write a terminal escape
+// every character is printable (a Windows path keeps its backslashes),
+// else quoted (Go syntax: %q), so a value cannot write a terminal escape
 // sequence, break a line, or hide text with a bidirectional override.
 func Shown(s string) string {
 	for _, r := range s {
-		if !strconv.IsPrint(r) || r == '"' || r == '\\' {
+		if !strconv.IsPrint(r) {
 			return strconv.Quote(s)
 		}
 	}

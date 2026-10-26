@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"syscall"
 	"time"
@@ -24,7 +25,7 @@ func readFileInput(ctx context.Context, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if !fifoEndPolled && isFIFO(f) {
 		return readFIFO(ctx, f, path)
 	}
@@ -47,7 +48,7 @@ func readInput(ctx context.Context, f *os.File, what string) ([]byte, error) {
 			if err != nil {
 				return nil, fmt.Errorf("cannot read %s: its FIFO is no longer at %s", what, path)
 			}
-			defer g.Close()
+			defer func() { _ = g.Close() }()
 			if a, b := statOf(f), statOf(g); a == nil || b == nil || !os.SameFile(a, b) {
 				return nil, fmt.Errorf("cannot read %s: its FIFO is no longer at %s", what, path)
 			}
@@ -67,7 +68,10 @@ func readPolled(ctx context.Context, f *os.File, what string) ([]byte, error) {
 	defer release()
 
 	// Fd: blocking reads, made once poll tells
-	fds := []unix.PollFd{{Fd: int32(f.Fd()), Events: unix.POLLIN}, {Fd: int32(canceled), Events: unix.POLLIN}}
+	fds, err := pollIn(int(f.Fd()), canceled)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read %s: %w", what, err)
+	}
 	var b []byte
 	buf := make([]byte, 32<<10)
 	for {
@@ -128,7 +132,10 @@ func readFIFO(ctx context.Context, f *os.File, what string) ([]byte, error) {
 		return nil, fmt.Errorf("cannot read %s: %w", what, err)
 	}
 
-	fds := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}, {Fd: int32(canceled), Events: unix.POLLIN}}
+	fds, err := pollIn(fd, canceled)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read %s: %w", what, err)
+	}
 	var b []byte
 	buf := make([]byte, 32<<10)
 	writer := false
@@ -174,6 +181,20 @@ func readFIFO(ctx context.Context, f *os.File, what string) ([]byte, error) {
 	}
 }
 
+// pollIn is the poll(2) set that waits for input on each descriptor. poll
+// takes a descriptor as a C int: one out of that range is an error, never
+// truncated into another descriptor.
+func pollIn(fds ...int) ([]unix.PollFd, error) {
+	set := make([]unix.PollFd, len(fds))
+	for i, fd := range fds {
+		if fd < 0 || fd > math.MaxInt32 {
+			return nil, fmt.Errorf("file descriptor %d out of range", fd)
+		}
+		set[i] = unix.PollFd{Fd: int32(fd), Events: unix.POLLIN}
+	}
+	return set, nil
+}
+
 // cancelPipe is a descriptor that becomes readable when ctx is done (a
 // byte written by context.AfterFunc), and the release that waits for that
 // write, if it started, then closes the pipe.
@@ -191,8 +212,8 @@ func cancelPipe(ctx context.Context) (int, func(), error) {
 		if !stop() {
 			<-woke
 		}
-		w.Close()
-		r.Close()
+		_ = w.Close()
+		_ = r.Close()
 	}, nil
 }
 

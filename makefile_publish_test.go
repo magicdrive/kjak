@@ -34,7 +34,7 @@ func TestMakefile_Publish(t *testing.T) {
 		t.Fatal(err)
 	}
 	mk := func(env []string, args ...string) (string, []string, error) {
-		os.Remove(log)
+		_ = os.Remove(log)
 		cmd := exec.Command("make", append([]string{"--no-print-directory", "PUBLISH=" + stub}, args...)...)
 		// A clean make environment: no MAKEFLAGS or jobserver from a parent
 		// make, and no VERSION/YES/tag unless the case sets them.

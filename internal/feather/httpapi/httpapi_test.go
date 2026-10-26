@@ -352,10 +352,16 @@ func TestTimeoutAndCancellation(t *testing.T) {
 		<-arrived // the whole request was read: cancel while waiting for the answer
 		cancel()
 	}()
-	fc.Timeout = nil
+	// the attempt timeout is long: the cancellation, not the timeout,
+	// must end the wait
+	fc.Timeout = &configure.Duration{Duration: time.Minute}
+	start := time.Now()
 	o = mustFeather(t, fc, Options{}).Deliver(ctx, msg())
 	if o.Acceptance != core.AcceptanceUnknown || o.Retryable {
 		t.Fatalf("canceled after sending: %+v", o)
+	}
+	if d := time.Since(start); d > 20*time.Second {
+		t.Fatalf("the cancellation ended the request after %s", d)
 	}
 	// before anything was sent: a connection that never comes
 	blockDial := func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -373,6 +379,27 @@ func TestTimeoutAndCancellation(t *testing.T) {
 	o = mustFeather(t, fc, Options{dial: blockDial}).Deliver(ctx, msg())
 	if o.Acceptance != core.AcceptanceRejected || o.Retryable || o.Code != core.ErrCodeCanceled {
 		t.Fatalf("canceled before sending: %+v", o)
+	}
+}
+
+// A downgrade from https to http on the same host and port (allow_http) is
+// another origin: the credentials and the Referer are not sent on.
+func TestCritical_RedirectDowngradeDropsCredentials(t *testing.T) {
+	auth := Auth{Header: "X-Api-Key", Value: credential.NewSecret("key-SECRET")}
+	fc := configure.FeatherConfig{MaxRedirects: 3, AllowHTTP: true}
+	c := newClient(&Guard{}, nil, fc, auth)
+	first, _ := url.Parse("https://api.example.com:8443/v1")
+	next, _ := url.Parse("http://api.example.com:8443/v1")
+	req := &http.Request{URL: next, Header: http.Header{
+		"Authorization": {"Bearer b-SECRET"}, "Cookie": {"c-SECRET"}, "X-Api-Key": {"key-SECRET"}, "Referer": {first.String()},
+	}}
+	if err := c.CheckRedirect(req, []*http.Request{{URL: first}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range []string{"Authorization", "Cookie", "X-Api-Key", "Referer"} {
+		if v := req.Header.Get(h); v != "" {
+			t.Errorf("%s sent on after a downgrade: %q", h, v)
+		}
 	}
 }
 
