@@ -29,6 +29,10 @@ func TestCritical_ClipRedactsBeforeItCuts(t *testing.T) {
 		{"cut at the end", pad + tok + " tail", oneLine, 25, false, []string{"tok-0"}},
 		{"cut at the end, 4 bytes left", pad[:16] + tok, oneLine, 20, false, []string{"tok-"}},
 		{"cut at the start", "head " + tok + pad, oneLine, 30, true, []string{"cdef", "89ab"}},
+		// text an earlier limit already cut (a capped body, a capped stderr):
+		// only a part of the secret is in it, which the cut must not keep
+		{"partial secret cut at the end", pad + tok[:12], oneLine, 26, false, []string{"tok-01"}},
+		{"partial secret cut at the start", tok[len(tok)-12:] + pad, oneLine, 26, true, []string{"bcdef", "9abc"}},
 		{"line breaks made spaces", "key: " + pem + " end", oneLine, 1000, false, []string{"AAAABBBB", "DDDD", "BEGIN K", "END K"}},
 		{"whitespace collapsed", "key: " + pem + " end", collapse, 1000, false, []string{"AAAABBBB", "DDDD", "BEGIN K"}},
 		{"line breaks of the text", strings.ReplaceAll(pem, "\n", "\r\n"), collapse, 1000, false, []string{"AAAABBBB", "DDDD"}},
