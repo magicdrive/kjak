@@ -21,7 +21,8 @@ func contractTable(t *testing.T, name string) [][]string {
 		t.Fatal(err)
 	}
 	marker := "<!-- contract: " + name + " -->"
-	_, rest, ok := strings.Cut(string(b), marker)
+	// a checkout with CRLF line ends (Windows) reads the same
+	_, rest, ok := strings.Cut(strings.ReplaceAll(string(b), "\r\n", "\n"), marker)
 	if !ok {
 		t.Fatalf("docs/stability.md has no %s", marker)
 	}
