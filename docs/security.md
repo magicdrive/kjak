@@ -65,14 +65,27 @@ What kjak checks, and why:
   personal file itself (checked with the file's identity). The personal
   file may be a symbolic link (dotfiles); the file it leads to is checked. kjak does
   not check the directories above a secrets file: keep them yours.
-- **macOS ACLs** on a secrets file are not read (only the mode bits and
-  the owner); do not add ACL entries that grant others access.
-- **Windows.** The access control list is not read (not implemented in this
-  version): only "a regular file" and the size are checked, and a project
-  file that is a link or reparse point is refused by a check of the path
-  made before the open (a link created in between is not seen). Keep the
-  personal file under `%AppData%`, whose default ACL is private to the user.
-  `kjak config path` says when permissions are not checked.
+- **ACLs.** The mode bits are not the whole story: kjak reads the access
+  control list of a secrets file too, on the opened file, and refuses a file
+  whose safety it cannot establish (fail closed). Each OS has its own model;
+  the table below says what is and is not covered. `kjak config path` shows
+  the model of the OS (`secrets checks`, `secrets_permission_model`) and,
+  for a refused file, why.
+
+| OS | what is checked (on the opened file) | protected against | not covered | verified by |
+|---|---|---|---|---|
+| Linux | owner = the user; no mode bit for group or others; the POSIX ACL (`system.posix_acl_access`): no named user (other than you), owning group, named group or others with any permission once limited by the mask; an ACL kjak cannot parse is refused | another local user reading the file through the mode bits or a POSIX ACL entry; a hard link or symbolic link as the project file | NFSv4 ACLs (`system.nfs4_acl`), SELinux/AppArmor labels, root, a file system that ignores the mode (some FUSE/CIFS mounts are refused only if they report the bits) | real files in CI (ubuntu; the ACL written with `setxattr`) |
+| macOS | owner = the user; no mode bit for group or others; the ACL (`ls -le`), read without cgo by `fgetattrlist(ATTR_CMN_EXTENDED_SECURITY)`: **no allow entry** that grants more than reading attributes or the ACL, **whoever it names** (kjak cannot map an entry's GUID to a user without the directory services, so an entry for yourself is refused too: remove it with `chmod -N`); deny entries are ignored; inherited entries count as explicit ones | another user reading the file through the mode bits or an ACL entry (`chmod +a "everyone allow read"`), explicit or inherited | root, admin users with Full Disk Access, Time Machine/backups, iCloud sync of the directory | real files in CI (macos-latest) and locally, ACLs set with `chmod +a` |
+| Windows | a disk file, not a reparse point (project file: opened with `FILE_FLAG_OPEN_REPARSE_POINT`, so a link is seen on the handle), one name only (project file); the **owner** must be you (or `Administrators` when your elevated token makes it the default owner); the **DACL**, read with `GetSecurityInfo` on the handle: every allow ACE that applies to the file (explicit or inherited; inherit-only ACEs do not apply) must give **nothing but reading attributes / the security descriptor** to anyone except you, `SYSTEM` and `Administrators`; a null DACL, an object/callback/compound allow ACE or an unknown ACE type is refused; deny ACEs are ignored (not credited) | `Everyone`, `Users`, `Authenticated Users`, another user or any group (even one you are in) reading the file; a file owned by someone else; a symbolic link, junction or hard link as the project file; replacing or writing the file while kjak reads it (opened with share mode read only); a named pipe impersonating you (`SECURITY_IDENTIFICATION`) | Administrators and SYSTEM (trusted: they can read any file through backup privileges); a file safe only thanks to a deny ACE is refused; integrity labels, EFS | real files in CI (windows-latest), ACLs changed with `icacls` and `SetNamedSecurityInfo` |
+
+  Fixing a refused file: `chmod 600 FILE` (Unix), `chmod -N FILE` (macOS),
+  `setfacl -b FILE` (Linux), `icacls FILE /inheritance:r /grant:r
+  "%USERNAME%:F"` (Windows). A file kjak makes (`config migrate-secrets`)
+  is created private: mode 0600, and on Windows a protected DACL of the
+  user, `SYSTEM` and `Administrators`, whatever the directory passes on. A
+  file under `%AppData%` is private by the profile's default ACL; a file
+  under `C:\` (outside the profiles) inherits `Authenticated Users` and is
+  refused until fixed as above.
 - **Nothing is expanded.** A secret is used as it is: `${VAR}`,
   `{ env = ... }`, `{{...}}` in a value, in a message or in a template are
   text. A secret is never substituted into a string.
@@ -256,7 +269,13 @@ controls which executable runs and what it is given ([plugins.md](plugins.md)):
   again before every run; the SHA-256 too when it is pinned (`sha256`, or a
   project's trust). **TOCTOU limit:** the file is executed by path after the
   check; replacing it in between needs write access the checks keep to root
-  and the user. Windows: ACLs are not checked.
+  and the user. The ACLs are checked as well (macOS, Linux: no ACL entry
+  that lets anyone else change the file or its directories, nor remove or
+  replace an entry of a directory above them; Windows: the file, its
+  directories and every directory above them must be owned by you,
+  `SYSTEM`, `Administrators` or `TrustedInstaller`, and no other principal
+  may change the file or what its directories hold — in a directory above,
+  adding new entries is allowed, as `Users` may on `C:\`).
 - **Projects.** `config trust` records each plugin's resolved path and
   SHA-256; another or a changed executable makes the project untrusted. The
   trust shows the secrets, environment variables and settings the project
@@ -273,10 +292,28 @@ controls which executable runs and what it is given ([plugins.md](plugins.md)):
   characters, shortened, and redacted of every secret kjak resolved.
 - **Lifetime.** A timeout (default 10s), the send's deadline and SIGINT kill
   the plugin — on Unix its whole process group (`Setpgid`), also after it
-  exits; **on Windows only its own process** (no Job Object yet).
+  exits; on Windows its whole Job Object (see below).
 - **Acceptance.** A plugin that ran and then failed, crashed, timed out or
   answered wrong has acceptance `unknown` and is never retried; plugins are
   run once per send unless `retry.policy = "plugin"`.
+
+### Plugin processes and files, per OS
+
+| OS | containment of the plugin's processes | the plugin's file and directories | verified by |
+|---|---|---|---|
+| Linux | its own process group (`Setpgid`, set by the child before the exec: no window outside the group); `SIGKILL` to the group at a timeout, the deadline, SIGINT, and once the plugin exited | owner root or you; mode bits; POSIX ACL (no write for anyone else, after the mask) | CI (ubuntu): child and grandchild killed after a timeout, a cancel, a crash and a normal exit; concurrent plugins |
+| macOS | as Linux | owner root or you; mode bits; ACL (no allow entry that grants a write, delete or ACL right, whoever it names) | CI (macos-latest) and locally, as Linux, ACLs set with `chmod +a` |
+| Windows | a Job Object per run with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` and no breakaway right. `os/exec` cannot create a process in a job (`SysProcAttr` has no `PROC_THREAD_ATTRIBUTE_JOB_LIST`), so the plugin is created **suspended** (`CREATE_SUSPENDED`), assigned to the job, then resumed: it runs no instruction outside the job; if the assignment fails it is killed, never run. The job is terminated at a timeout, the deadline, Ctrl+C and once the plugin exited, and its handle closed (a crash of kjak closes it too, which kills the tree) | owner you, SYSTEM, Administrators or TrustedInstaller; DACL of the file and its directories (no change by anyone else), of every directory above (no delete-child, delete, DACL or owner change) | CI (windows-latest): child and grandchild killed in every case above, `CREATE_BREAKAWAY_FROM_JOB` refused, no handle leak over 20 runs; ACLs changed with `icacls` |
+
+Not covered: on Unix, a descendant that leaves the group (`setsid`,
+`setpgid`) or a process started for the plugin by another service
+(`launchd`, `systemd --user`, `at`) survives; after the plugin was reaped,
+the final kill of an empty group could in principle reach a new group that
+reused the id (pids are allocated in sequence; not seen in practice). On
+Windows, a process started on the plugin's behalf by a service (the task
+scheduler, WMI, a COM server) is not in the job. In every case a plugin runs
+with your rights and can do anything you can; containment only keeps it
+from outliving its run.
 
 ## Reporting a vulnerability
 

@@ -78,6 +78,37 @@ func plugin(t *testing.T, settings map[string]string, change func(*configure.Fea
 	t.Helper()
 	dir := filepath.Join(tempDir(t), "bin")
 	install(t, dir, "test")
+	return pluginIn(t, dir, settings, change)
+}
+
+// sharedDir holds one installed copy of the test plugin for the tests that
+// run it many times: the first run of every new copy of an executable is
+// scanned on macOS (about half a second, one at a time machine-wide).
+var sharedDir = sync.OnceValues(func() (string, error) {
+	dir := filepath.Join(filepath.Dir(built), "shared-bin")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	b, err := os.ReadFile(built)
+	if err != nil {
+		return "", err
+	}
+	return dir, os.WriteFile(filepath.Join(dir, configure.PluginFile("test", runtime.GOOS)), b, 0o755)
+})
+
+// sharedPlugin is plugin with the shared copy of the test plugin.
+func sharedPlugin(t *testing.T, settings map[string]string, change func(*configure.FeatherConfig)) *Feather {
+	t.Helper()
+	dir, err := sharedDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pluginIn(t, dir, settings, change)
+}
+
+// pluginIn builds a feather of the test plugin installed in dir.
+func pluginIn(t *testing.T, dir string, settings map[string]string, change func(*configure.FeatherConfig)) *Feather {
+	t.Helper()
 	fc := configure.FeatherConfig{Type: configure.TypeExternal, Plugin: "test", Settings: settings}
 	if change != nil {
 		change(&fc)

@@ -286,13 +286,15 @@ project (current)          /home/me/src/app/.kjak.toml (trusted)
 secrets (user)             /home/me/.config/kjak/secrets.toml (3 secret(s))
 project secrets (current)  /home/me/src/app/.kjak.secrets.toml (1 secret(s), trusted with the project)
 trust store                /home/me/.config/kjak/trust.toml
+secrets checks             owner, mode bits, POSIX ACL
 ```
 
 A secrets file that is refused shows `refused: <why>` (permissions, owner,
-symbolic link). With `-o json`: `global`, `global_source`, `project`,
+an ACL entry, symbolic link); `secrets checks` names what this OS checks.
+With `-o json`: `global`, `global_source`, `project`,
 `project_state`, `secrets`, `secrets_source`, `secrets_state`,
 `project_secrets`, `project_secrets_state`, `secrets_permissions_checked`,
-`trust_store`.
+`secrets_permission_model`, `trust_store`.
 
 `config validate --strict` refuses literal secrets (exit 2). `config
 migrate-secrets` moves the literal secrets of the global file (or, with

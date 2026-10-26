@@ -13,6 +13,7 @@ import (
 	"github.com/magicdrive/kjak/internal/configure"
 	"github.com/magicdrive/kjak/internal/credential"
 	"github.com/magicdrive/kjak/internal/feather/external"
+	"github.com/magicdrive/kjak/internal/fileacl"
 	"github.com/magicdrive/kjak/internal/output"
 	"github.com/magicdrive/kjak/internal/textbank"
 )
@@ -139,6 +140,7 @@ func configPath(ctx context.Context, rt *Runtime, args []string) int {
 			"project_secrets":             p.ProjectSecrets,
 			"project_secrets_state":       projSecrets,
 			"secrets_permissions_checked": configure.SecretsChecksPermissions,
+			"secrets_permission_model":    fileacl.Model,
 		})
 		return ExitOK
 	}
@@ -156,10 +158,8 @@ func configPath(ctx context.Context, rt *Runtime, args []string) int {
 		fmt.Fprintf(tw, "project secrets\t%s\n", projSecrets)
 	}
 	fmt.Fprintf(tw, "trust store\t%s\n", p.TrustStore)
+	fmt.Fprintf(tw, "secrets checks\t%s\n", fileacl.Model)
 	_ = tw.Flush()
-	if !configure.SecretsChecksPermissions {
-		fmt.Fprintln(rt.Stdout, "note: the access control lists of secrets files are not checked on this OS")
-	}
 	return ExitOK
 }
 
