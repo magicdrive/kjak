@@ -221,6 +221,49 @@ Limits: a host name allowed with `allow_hosts` is trusted for every private
 address its DNS returns. The guard cannot see through an HTTP proxy, which
 is why none is used. Responses are read up to `max_response_bytes`.
 
+## External plugins
+
+A plugin (`type = "external"`) is an executable that runs with the user's
+rights: it can do whatever the user can. kjak cannot make a plugin safe; it
+controls which executable runs and what it is given ([plugins.md](plugins.md)):
+
+- **Discovery is not authorization.** A `kjak-feather-*` on `PATH` runs only
+  for a feather that names it; `kjak feather plugins` runs nothing. A plugin
+  name is lower-case ASCII and never a built-in type: `type = "slack"` is
+  always the built-in feather.
+- **PATH hijack.** Only absolute `PATH` directories are searched (an empty
+  element — the current directory — or a relative one is skipped). A name in
+  two directories as different files is an error unless `path` pins one. A
+  refused candidate is an error, never skipped for a later one.
+- **The file.** A regular, executable file (symbolic links resolved) of root
+  or the user, not writable by group or others, in a directory others cannot
+  write to unless sticky. Its identity (device, inode, size, mtime) and
+  SHA-256 are recorded when the feather is built and the identity is checked
+  again before every run; the SHA-256 too when it is pinned (`sha256`, or a
+  project's trust). **TOCTOU limit:** the file is executed by path after the
+  check; replacing it in between needs write access the checks keep to root
+  and the user. Windows: ACLs are not checked.
+- **Projects.** `config trust` records each plugin's resolved path and
+  SHA-256; another or a changed executable makes the project untrusted. The
+  trust shows the secrets, environment variables and settings the project
+  gives a plugin.
+- **What a plugin gets.** One JSON request on stdin: the message, the
+  settings, and only the secrets of its `secrets` table. No arguments; an
+  allow-listed environment (`PATH`, `HOME`, `TMPDIR`, locale, `TZ`, Windows'
+  `SYSTEMROOT`/`USERPROFILE`, and the names in `env`; never `KJAK_*`,
+  `LD_*`, `DYLD_*`, nor the variable a secret of the feather comes from);
+  the temporary directory as working directory. No secret is put in the
+  environment or the arguments.
+- **What kjak takes back.** At most 1 MiB of stdout (more: protocol error)
+  and 64 KiB of stderr; the text that reaches a report is cleaned of control
+  characters, shortened, and redacted of every secret kjak resolved.
+- **Lifetime.** A timeout (default 10s), the send's deadline and SIGINT kill
+  the plugin — on Unix its whole process group (`Setpgid`), also after it
+  exits; **on Windows only its own process** (no Job Object yet).
+- **Acceptance.** A plugin that ran and then failed, crashed, timed out or
+  answered wrong has acceptance `unknown` and is never retried; plugins are
+  run once per send unless `retry.policy = "plugin"`.
+
 ## Reporting a vulnerability
 
 Please report security issues privately through GitHub's "Report a
