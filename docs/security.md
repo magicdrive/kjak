@@ -214,7 +214,7 @@ this machine can reach: its own services, the cloud metadata endpoint
 - Redirects are not followed unless `max_redirects` allows them; then each
   is checked like the URL, https never goes to http, and `Authorization`,
   `Cookie` and the `[auth]` header are dropped as soon as the scheme, host
-  or port changes.
+  or port changes; no `Referer` is ever sent.
 - Secrets go only where `[auth]` puts them: never in a query, never in a
   static header, never in a template. Tokens, passwords, the encoded basic
   credentials, header values and a secret URL (with its path and query) are

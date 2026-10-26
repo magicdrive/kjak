@@ -459,6 +459,17 @@ func describeProject(rt *Runtime, f *configure.File) {
 			if policy != "" {
 				fmt.Fprintf(rt.Stdout, "    address policy: %s\n", policy)
 			}
+			for _, kind := range []struct {
+				label string
+				m     map[string]string
+			}{{"header", fc.Headers}, {"query", fc.Query}} {
+				for _, k := range sortedNames(kind.m) {
+					fmt.Fprintf(rt.Stdout, "    %s %s: %q\n", kind.label, k, kind.m[k])
+				}
+			}
+			if fc.Body != nil && fc.Body.Template != "" {
+				fmt.Fprintf(rt.Stdout, "    body template: %q\n", fc.Body.Template)
+			}
 		case configure.TypeEmail:
 			secret := "no password"
 			if fc.Password != nil {

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"text/template/parse"
 	"time"
 
 	"github.com/magicdrive/kjak/internal/credential"
@@ -163,8 +164,11 @@ func checkBodyTemplate(format, src string) error {
 		return fmt.Errorf("is longer than %d bytes", MaxHTTPBodyTemplateBytes)
 	}
 	parse := func(s string) error {
-		_, err := template.New("body").Option("missingkey=error").Parse(s)
-		return err
+		t, err := template.New("body").Option("missingkey=error").Parse(s)
+		if err != nil {
+			return err
+		}
+		return BodyTemplateProblem(t)
 	}
 	if format != BodyJSON {
 		return parse(src)
@@ -196,6 +200,52 @@ func checkBodyTemplate(format, src string) error {
 		return nil
 	}
 	return walk(doc)
+}
+
+// BodyTemplateProblem refuses what a body template cannot use: range (its
+// data are strings; a range over a number could run without end), and
+// template/define/block.
+func BodyTemplateProblem(t *template.Template) error {
+	var walk func(n parse.Node) error
+	walk = func(n parse.Node) error {
+		switch x := n.(type) {
+		case *parse.ListNode:
+			if x == nil {
+				return nil
+			}
+			for _, c := range x.Nodes {
+				if err := walk(c); err != nil {
+					return err
+				}
+			}
+		case *parse.RangeNode:
+			return errors.New("range is not available in a body template")
+		case *parse.TemplateNode:
+			return errors.New("template is not available in a body template")
+		case *parse.IfNode:
+			if err := walk(x.List); err != nil {
+				return err
+			}
+			return walk(x.ElseList)
+		case *parse.WithNode:
+			if err := walk(x.List); err != nil {
+				return err
+			}
+			return walk(x.ElseList)
+		}
+		return nil
+	}
+	for _, tt := range t.Templates() {
+		if tt.Name() != t.Name() {
+			return errors.New("define and block are not available in a body template")
+		}
+		if tt.Tree != nil {
+			if err := walk(tt.Tree.Root); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // httpFieldsSet reports whether fc sets a key of the http type only

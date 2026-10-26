@@ -224,6 +224,9 @@ func newClient(g *Guard, tlsConfig *tls.Config, fc configure.FeatherConfig, auth
 			if req.URL.Scheme != "https" && !(req.URL.Scheme == "http" && allowHTTP) {
 				return &BlockedError{Reason: "a redirect to a URL that is not https"}
 			}
+			// net/http sets Referer to the URL before: it may be a secret
+			// (url_secret) and never goes anywhere
+			req.Header.Del("Referer")
 			first := via[0].URL
 			// credentials go to the origin they were configured for only:
 			// the same scheme, host and port (stricter than net/http, which
