@@ -152,7 +152,7 @@ func ParseSend(args []string) (*SendOption, error) {
 	if given["concurrency"] && (opt.Concurrency < 1 || opt.Concurrency > configure.MaxConcurrency) {
 		return opt, usageErr(cmd, "--concurrency must be between 1 and %d", configure.MaxConcurrency)
 	}
-	if err := opt.OutputOption.check(cmd); err != nil {
+	if err := opt.check(cmd); err != nil {
 		return opt, err
 	}
 	return opt, nil

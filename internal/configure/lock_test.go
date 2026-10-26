@@ -19,11 +19,11 @@ func TestHelperHoldLock(t *testing.T) {
 	}
 	unlock, err := lockFile(path)
 	if err != nil {
-		os.Stdout.WriteString("error " + err.Error() + "\n")
+		_, _ = os.Stdout.WriteString("error " + err.Error() + "\n")
 		os.Exit(3)
 	}
 	_ = unlock // never released: the process is killed
-	os.Stdout.WriteString("locked\n")
+	_, _ = os.Stdout.WriteString("locked\n")
 	select {}
 }
 

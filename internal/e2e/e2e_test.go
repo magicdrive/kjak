@@ -22,7 +22,8 @@ import (
 	"time"
 )
 
-var binary string
+// binary is kjak, plugin the test plugin, both built by TestMain.
+var binary, plugin string
 
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "kjak-e2e-")
@@ -33,14 +34,22 @@ func TestMain(m *testing.M) {
 	if runtime.GOOS == "windows" {
 		binary += ".exe"
 	}
-	build := exec.Command("go", "build", "-o", binary, "../..")
-	build.Env = append(os.Environ(), "CGO_ENABLED=0")
-	if out, err := build.CombinedOutput(); err != nil {
-		os.Stderr.Write(out)
-		panic(err)
+	// the test plugin of feather/external (protocol v1), installed by the
+	// tests as kjak-feather-<name> (plugin_test.go)
+	plugin = filepath.Join(dir, "plugin-under-test")
+	if runtime.GOOS == "windows" {
+		plugin += ".exe"
+	}
+	for _, b := range [][2]string{{binary, "../.."}, {plugin, "../feather/external/testdata/plugin"}} {
+		build := exec.Command("go", "build", "-o", b[0], b[1])
+		build.Env = append(os.Environ(), "CGO_ENABLED=0")
+		if out, err := build.CombinedOutput(); err != nil {
+			_, _ = os.Stderr.Write(out)
+			panic(err)
+		}
 	}
 	code := m.Run()
-	os.RemoveAll(dir)
+	_ = os.RemoveAll(dir)
 	os.Exit(code)
 }
 
@@ -199,7 +208,7 @@ func TestBinaryExitCodes(t *testing.T) {
 // Every `kjak ...` command line in the README and the guides names a real
 // command and action: its --help succeeds.
 func TestReadmeCommandsExist(t *testing.T) {
-	for _, doc := range []string{"README.md", "README_ja.md", "docs/getting-started.md", "docs/getting-started_ja.md", "docs/configuration.md", "docs/configuration_ja.md"} {
+	for _, doc := range []string{"README.md", "README_ja.md", "docs/getting-started.md", "docs/getting-started_ja.md", "docs/configuration.md", "docs/configuration_ja.md", "docs/discord-e2e.md"} {
 		t.Run(doc, func(t *testing.T) { checkDocCommands(t, "../../"+doc) })
 	}
 }
@@ -209,7 +218,7 @@ func checkDocCommands(t *testing.T, path string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	s := newSandbox(t)
 	checked := map[string]bool{}
 	inCode := false
@@ -260,13 +269,13 @@ func TestBinaryClosedPipeIsQuiet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.Close()
+	_ = r.Close()
 	cmd := exec.Command(binary, "feather", "list", "-o", "json")
 	cmd.Dir, cmd.Env, cmd.Stdout = s.dir, s.env, w
 	var errOut bytes.Buffer
 	cmd.Stderr = &errOut
 	err = cmd.Run()
-	w.Close()
+	_ = w.Close()
 	var ee *exec.ExitError
 	if !errors.As(err, &ee) || ee.ExitCode() != 2 || errOut.Len() != 0 {
 		t.Fatalf("exit %v, stderr %q", err, errOut.String())

@@ -37,7 +37,7 @@ func TestAmbiguousOverTLS(t *testing.T) {
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		if c, _, err := w.(http.Hijacker).Hijack(); err == nil {
-			c.Close()
+			_ = c.Close()
 		}
 	}))
 	srv.EnableHTTP2 = true

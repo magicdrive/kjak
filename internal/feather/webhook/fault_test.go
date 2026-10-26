@@ -47,13 +47,13 @@ func newRawServer(t *testing.T, handle func(s *rawServer, c *net.TCPConn, r *buf
 			s.wg.Add(1)
 			go func() {
 				defer s.wg.Done()
-				defer c.Close()
+				defer func() { _ = c.Close() }()
 				_ = c.SetDeadline(time.Now().Add(10 * time.Second))
 				handle(s, c.(*net.TCPConn), bufio.NewReader(c))
 			}()
 		}
 	}()
-	t.Cleanup(func() { l.Close(); s.wg.Wait() })
+	t.Cleanup(func() { _ = l.Close(); s.wg.Wait() })
 	return s
 }
 
