@@ -28,6 +28,10 @@
 | `... exists: kjak does not overwrite it` (migrate-secrets) | the secrets file or `<file>.migrated` exists already | `--secrets-out NEW_FILE` / `--config-out NEW_FILE`, or move the secrets by hand |
 | `type "os": OS-native notifications are not supported` | | not available yet |
 | `the request was not sent: address 10.0.0.5 is private: allow it with allow_networks or allow_hosts` (`error.code: blocked`) | an http feather's host resolves to a private, loopback or link-local address | if it is meant, add the network (`allow_networks`) or the host (`allow_hosts`) ([http.md](http.md#the-address-policy-ssrf)) |
+| `the request was not sent: address 127.0.0.1 is loopback: allow it with allow_networks` (a slack, discord or email feather of `.kjak.toml`) | since v1.0.0 a project's webhook and SMTP feathers reach public addresses only | review the destination, add `allow_networks` / `allow_hosts` to the feather, `kjak config trust` ([migration.md](migration.md#a-projects-slack-discord-and-email-feathers-reach-public-addresses-only)) |
+| `the trust of the project does not allow its slack feather "x" to send env:VAR` | a project trusted before v1.0.0, or a new reference | review the project, then `kjak config trust` (`--yes --allow-user-secrets` in CI) ([migration.md](migration.md#project-env-and-keychain-references-need-a-grant)) |
+| `template error: x.body: range is not available in a message template` | `range`, `define`, `template` or `block` in a message template | write the text out ([migration.md](migration.md#message-templates-cannot-loop)) |
+| `...: it is not a regular file (a FIFO)` | a configuration file, `.kjak.toml` or the trust store is a FIFO, a device or a directory | use a regular file (a symbolic link to one is fine) |
 | `... is cloud metadata: never allowed` | an http feather (or a redirect) points at an instance metadata endpoint | not possible on purpose |
 | `url: must be https (http needs allow_http = true)` | an `http://` URL | use https, or `allow_http = true` for a local relay |
 | `HTTP 302: a redirect that is not followed (max_redirects)` | the API redirects | use the final URL, or `max_redirects = N` |

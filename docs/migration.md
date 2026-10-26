@@ -1,9 +1,53 @@
-# Migrating literal secrets to a secrets file
+# Migrating from v0.0.4 to v1.0.0
 
-(For the change of the project trust in 0.0.5, see
-[Project env and keychain references need a grant](#project-env-and-keychain-references-need-a-grant).)
+[Stability](stability.md) · [Configuration](configuration.md#77-secrets-files) · [Security](security.md#secrets-files)
 
-[Configuration](configuration.md#77-secrets-files) · [Security](security.md#secrets-files)
+v1.0.0 reads the configuration files, the groups, the templates and the
+trust store of v0.0.4, and sends the same requests to Slack, Discord and
+e-mail (`internal/e2e/compat_v004_test.go` checks this against files
+written by v0.0.4). A few changes are intended: they close security issues
+or freeze the output contract. Each is refused **before anything is sent**
+(exit 2, or `blocked` for an address), with a message that names the fix.
+
+## Checklist
+
+1. **Install v1.0.0** (`brew upgrade kjak`, or the archive of the release)
+   and keep a copy of `~/.config/kjak/trust.toml` if you may go back to
+   v0.0.4 ([Downgrading](#downgrading-to-v004)).
+2. **Validate:** `kjak config validate`. It reports literal secrets
+   (deprecated, still working); `kjak config validate --strict` refuses
+   them.
+3. **Move literal secrets** to a secrets file:
+   `kjak config migrate-secrets` ([below](#literal-secrets-deprecated)),
+   then rotate every secret that was ever committed or shared.
+4. **Re-trust each project** (`.kjak.toml`) whose slack, discord or email
+   feathers read `env` or `keychain` references: review it, then
+   `kjak config trust` ([details](#project-env-and-keychain-references-need-a-grant)).
+5. **Allow local or private destinations** of project slack, discord and
+   email feathers with `allow_networks` / `allow_hosts`, and trust again
+   ([details](#a-projects-slack-discord-and-email-feathers-reach-public-addresses-only)).
+6. **Rewrite looping templates** (`range`, `define`, `template`, `block`)
+   ([details](#message-templates-cannot-loop)).
+7. **Scripts:** `config show -o json` names group and template keys in lower
+   case ([details](#config-show--o-json-keys)); a configuration file that is
+   a FIFO or a device is refused
+   ([details](#configuration-files-must-be-regular-files)).
+8. Check: `kjak send --to NAME --dry-run test`, then a real send.
+
+| change | affects | what you see | fix |
+|---|---|---|---|
+| literal secrets deprecated | `{ literal = ... }`, `--secret-stdin` | a warning on stderr | `kjak config migrate-secrets` |
+| project `env`/`keychain` need a grant | project slack, discord, email feathers | exit 2, `credential`: "the trust of the project does not allow ..." | `kjak config trust` |
+| project address policy | project slack, discord, email feathers | `blocked`, nothing sent | `allow_networks`, `allow_hosts` |
+| templates cannot loop | message templates | exit 2 at `template set`, render or send | write the text out |
+| regular files only | configuration, project file, trust store | exit 2, "not a regular file" | use a regular file |
+| `config show -o json` keys | scripts | `feathers`, `title`, `body`, `level`, `url` instead of `Feathers`, `Title`, ... | read the new keys |
+
+Not changed: configurations without literals, the `env` and `keychain`
+references of the global configuration, groups, the JSON report of `send`
+(fields were only added), the exit status, the request bodies.
+
+## Literal secrets (deprecated)
 
 A `{ literal = "..." }` credential keeps the secret in the configuration
 file. Configuration files are copied, shared, committed and backed up; a
@@ -28,11 +72,11 @@ webhook_url = { secret = "dev_slack.webhook_url" }
 webhook_url = "https://hooks.slack.com/services/T000/B000/XXXX"
 ```
 
-Literals keep working in this version. `kjak send` warns on stderr for each
+Literals keep working in all of v1 ([deprecation policy](stability.md#deprecation-policy)). `kjak send` warns on stderr for each
 file that holds one; `kjak config validate --strict` refuses them (use it in
 CI to keep new literals out).
 
-## With `kjak config migrate-secrets`
+### With `kjak config migrate-secrets`
 
 ```sh
 kjak config migrate-secrets --dry-run     # what would move: names only, no file written
@@ -76,7 +120,7 @@ Then:
    committed, shared or synced while it was a literal: moving it does not
    un-leak it.
 
-### A project file
+#### A project file
 
 ```sh
 kjak config migrate-secrets --scope project
@@ -89,14 +133,14 @@ The project secrets file is trusted with the project file: after it is
 created, `kjak config trust` is needed. A committed literal is in the
 repository's history: rotate it.
 
-### Somewhere else (CI)
+#### Somewhere else (CI)
 
 ```sh
 kjak config migrate-secrets --config ci.toml --secrets-out ci-secrets.toml --config-out ci.new.toml
 kjak send --config ci.toml --secrets ci-secrets.toml ...   # or KJAK_SECRETS=ci-secrets.toml
 ```
 
-## By hand
+### By hand
 
 1. Create the secrets file private from the start:
    `install -m 600 /dev/null ~/.config/kjak/secrets.toml` (Unix).
@@ -109,7 +153,7 @@ kjak send --config ci.toml --secrets ci-secrets.toml ...   # or KJAK_SECRETS=ci-
 
 ## Message templates cannot loop
 
-Since 0.0.5 a message template (`[templates.*]`, `--template-file`) refuses
+Since v1.0.0 a message template (`[templates.*]`, `--template-file`) refuses
 `range` and `define`/`template`/`block`, like an http body template. Their
 variables are strings, which `range` cannot iterate, so the only loops were
 over numbers (`{{range 1000000000}}`), which could keep kjak busy without
@@ -118,12 +162,12 @@ render; write the text out instead.
 
 ## Configuration files must be regular files
 
-Since 0.0.5 a configuration file, a `.kjak.toml` or the trust store that is
+Since v1.0.0 a configuration file, a `.kjak.toml` or the trust store that is
 a FIFO, a device or a directory (or a link to one) is refused (`it is not a
 regular file`) instead of being read. A symbolic link to a regular file is
 still followed.
 
-## Compatibility
+## Trust store compatibility
 
 - Nothing changes for configurations without literals; `env` and `keychain`
   references work as before.
@@ -135,7 +179,7 @@ still followed.
 
 ## Project env and keychain references need a grant
 
-Since 0.0.5 the `env` and `keychain` references of a project's **slack,
+Since v1.0.0 the `env` and `keychain` references of a project's **slack,
 discord and email** feathers must be allowed by name when the project is
 trusted, like those of its http and external feathers (before, trusting the
 file allowed them). Each of these feathers sends to a destination the
@@ -163,7 +207,7 @@ Your global configuration is not affected: its feathers are yours.
 
 ## A project's slack, discord and email feathers reach public addresses only
 
-Since 0.0.5 the slack, discord and email feathers of a **project** file
+Since v1.0.0 the slack, discord and email feathers of a **project** file
 connect through the address policy of the http feathers: public addresses
 only, no proxy. A project feather that sends to a local relay, a test
 server or a private SMTP server is refused with the code `blocked`
@@ -186,3 +230,20 @@ allow_hosts = ["smtp.corp.example"]     # or allow_networks = ["10.0.0.0/24"]
 A project webhook feather behind a mandatory HTTP proxy cannot use the
 proxy any more: define it in your global file. Global feathers are not
 affected.
+
+## `config show -o json` keys
+
+v0.0.4 printed the entries of `groups` and `templates` with Go field names
+(`{"Feathers": [...]}`, `{"Title": ..., "Body": ...}`). v1.0.0 uses the
+names of the configuration file, like every other document:
+`{"feathers": [...]}`, `{"title", "body", "level", "url"}`. The top-level
+keys and the other documents are unchanged.
+
+## Downgrading to v0.0.4
+
+v0.0.4 reads the configuration files of v1.0.0 only if they use nothing new
+(no `secret` references, http or external feathers, `allow_*` keys). It
+refuses a trust store that has an entry with the new keys
+(`secrets_path`, `secrets_sha256`, `user_secrets`, `plugins`): "broken
+trust store". Restore the copy of `trust.toml` you kept, or remove those
+entries and trust again with v0.0.4.

