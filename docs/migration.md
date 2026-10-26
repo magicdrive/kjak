@@ -1,5 +1,8 @@
 # Migrating literal secrets to a secrets file
 
+(For the change of the project trust in 0.0.5, see
+[Project env and keychain references need a grant](#project-env-and-keychain-references-need-a-grant).)
+
 [Configuration](configuration.md#77-secrets-files) · [Security](security.md#secrets-files)
 
 A `{ literal = "..." }` credential keeps the secret in the configuration
@@ -113,3 +116,31 @@ kjak send --config ci.toml --secrets ci-secrets.toml ...   # or KJAK_SECRETS=ci-
   trust store with such an entry ("broken trust store"). Entries without
   them are written as before.
 - `--secret-stdin` still writes a literal (and warns): prefer `--secret-ref`.
+
+## Project env and keychain references need a grant
+
+Since 0.0.5 the `env` and `keychain` references of a project's **slack,
+discord and email** feathers must be allowed by name when the project is
+trusted, like those of its http and external feathers (before, trusting the
+file allowed them). Each of these feathers sends to a destination the
+project chooses — an SMTP host receives the password, a webhook URL
+receives the message — so a repository could otherwise hand one of your
+environment variables to a server of its choosing.
+
+A project trusted by an earlier kjak keeps its trust, but its grant does not
+name these references: `kjak send` refuses such a feather before anything is
+sent (exit 2), naming the reference:
+
+```
+kjak: feather "mail": password: credential error: env:SMTP_PASSWORD: the trust of the project does not allow its email feather "mail" to send env:SMTP_PASSWORD: review the project, then run `kjak config trust` and allow it (--allow-user-secrets with --yes)
+```
+
+To migrate, review the project file — its hosts, webhook URLs and the
+references it reads — then trust it again:
+
+```sh
+kjak config trust                               # interactive: answer the second question
+kjak config trust --yes --allow-user-secrets    # CI, after the review
+```
+
+Your global configuration is not affected: its feathers are yours.
