@@ -29,6 +29,12 @@ func (fc *FeatherConfig) Credentials(feather string) []CredentialField {
 	}
 	add("webhook_url", &fc.WebhookURL)
 	add("password", &fc.Password)
+	add("url_secret", &fc.URLSecret)
+	if fc.Auth != nil {
+		add("auth.token", &fc.Auth.Token)
+		add("auth.password", &fc.Auth.Password)
+		add("auth.value", &fc.Auth.Value)
+	}
 	return out
 }
 

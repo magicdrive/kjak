@@ -12,6 +12,7 @@ package template
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -93,6 +94,66 @@ func renderOne(name, src string, vars map[string]string) (string, error) {
 		return "", fmt.Errorf("%w: %v", ErrTemplate, err)
 	}
 	return buf.String(), nil
+}
+
+// Text renders src (a body template of an http feather) with data, as
+// text. A value of data is never parsed as a template.
+func Text(name, src string, data map[string]string) (string, error) {
+	return renderOne(name, src, data)
+}
+
+// JSON renders a JSON document whose strings are templates: each string
+// value is rendered with data and the document is encoded again, so a value
+// can never change its structure (no key or element can be injected). Keys
+// are kept as they are.
+func JSON(name, src string, data map[string]string) ([]byte, error) {
+	// numbers stay as written (json.Number), not float64
+	dec := json.NewDecoder(strings.NewReader(src))
+	dec.UseNumber()
+	var doc any
+	if err := dec.Decode(&doc); err != nil {
+		return nil, fmt.Errorf("%w: %s: not a JSON document: %v", ErrTemplate, name, err)
+	}
+	if dec.More() {
+		return nil, fmt.Errorf("%w: %s: more than one JSON document", ErrTemplate, name)
+	}
+	var walk func(any) (any, error)
+	walk = func(v any) (any, error) {
+		switch t := v.(type) {
+		case string:
+			return renderOne(name, t, data)
+		case []any:
+			for i, e := range t {
+				r, err := walk(e)
+				if err != nil {
+					return nil, err
+				}
+				t[i] = r
+			}
+			return t, nil
+		case map[string]any:
+			for k, e := range t {
+				r, err := walk(e)
+				if err != nil {
+					return nil, err
+				}
+				t[k] = r
+			}
+			return t, nil
+		}
+		return v, nil
+	}
+	out, err := walk(doc)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(out); err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", ErrTemplate, name, err)
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 // ParseFile reads a template file: a TOML document with the keys of a

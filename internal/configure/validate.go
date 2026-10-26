@@ -149,7 +149,15 @@ func featherProblems(fc FeatherConfig) []string {
 	webhookFields := fc.WebhookURL != nil || fc.Username != ""
 	emailFields := fc.Host != "" || fc.Port != 0 || fc.Security != "" || fc.User != "" || fc.Password != nil ||
 		fc.From != "" || len(fc.To) > 0 || fc.SubjectPrefix != ""
+	if fc.Type != TypeHTTP && httpFieldsSet(fc) {
+		add("%s feathers take no http settings (url, method, headers, query, auth, body, ...)", fc.Type)
+	}
 	switch fc.Type {
+	case TypeHTTP:
+		if webhookFields || emailFields {
+			add("http feathers take no webhook_url, username or email settings (use url, url_secret, [auth])")
+		}
+		problems = append(problems, httpProblems(fc)...)
 	case TypeSlack, TypeDiscord:
 		if emailFields {
 			add("%s feathers take no email settings (host, port, security, user, password, from, to, subject_prefix)", fc.Type)

@@ -15,11 +15,14 @@ const (
 	TypeSlack   = "slack"
 	TypeDiscord = "discord"
 	TypeEmail   = "email"
+	// TypeHTTP is a request to any HTTP API (feather/httpapi); not to be
+	// confused with feather/webhook, the sender of slack and discord.
+	TypeHTTP = "http"
 )
 
-// FeatherTypes are the types v0.1.0 implements. OS-native notifications are
-// a future feather and are refused (UnsupportedFeatherTypes).
-var FeatherTypes = []string{TypeSlack, TypeDiscord, TypeEmail}
+// FeatherTypes are the types kjak implements. OS-native notifications are a
+// future feather and are refused (UnsupportedFeatherTypes).
+var FeatherTypes = []string{TypeSlack, TypeDiscord, TypeEmail, TypeHTTP}
 
 // UnsupportedFeatherTypes are known but not implemented in v0.1.0; a feather
 // of one of them is a configuration error, never a silent no-op.
@@ -84,6 +87,81 @@ type FeatherConfig struct {
 	To       []string        `toml:"to,omitempty"`
 	// SubjectPrefix starts every subject, e.g. "[kjak]".
 	SubjectPrefix string `toml:"subject_prefix,omitempty"`
+
+	// http (docs/http.md): exactly one of URL and URLSecret
+	URL       string          `toml:"url,omitempty"`
+	URLSecret *credential.Ref `toml:"url_secret,omitempty,inline"`
+	Method    string          `toml:"method,omitempty"` // POST (default), GET, PUT, PATCH, DELETE
+	// Headers are sent as they are (no secret: use Auth); Query is added to
+	// the URL's query (no secret is ever put there).
+	Headers          map[string]string `toml:"headers,omitempty"`
+	Query            map[string]string `toml:"query,omitempty"`
+	Auth             *HTTPAuth         `toml:"auth,omitempty"`
+	Body             *HTTPBody         `toml:"body,omitempty"`
+	Timeout          *Duration         `toml:"timeout,omitempty"`        // of one attempt
+	SuccessStatus    []string          `toml:"success_status,omitempty"` // "2xx" (default), "200", ...
+	MaxResponseBytes int64             `toml:"max_response_bytes,omitempty"`
+	// The SSRF policy: https only unless AllowHTTP; no loopback, link-local,
+	// private, ... address unless AllowNetworks (CIDR) or, for private
+	// networks, AllowHosts (names) allow it; redirects not followed unless
+	// MaxRedirects.
+	AllowHTTP         bool       `toml:"allow_http,omitempty"`
+	AllowNetworks     []string   `toml:"allow_networks,omitempty"`
+	AllowHosts        []string   `toml:"allow_hosts,omitempty"`
+	MaxRedirects      int        `toml:"max_redirects,omitempty"`
+	IdempotencyKey    bool       `toml:"idempotency_key,omitempty"`
+	IdempotencyHeader string     `toml:"idempotency_header,omitempty"`
+	Retry             *HTTPRetry `toml:"retry,omitempty"`
+}
+
+// HTTP authentication types.
+const (
+	AuthNone   = "none"
+	AuthBearer = "bearer"
+	AuthBasic  = "basic"
+	AuthHeader = "header"
+)
+
+// HTTPAuth is the authentication of an http feather; every secret is a
+// credential reference.
+type HTTPAuth struct {
+	Type     string          `toml:"type"`
+	Token    *credential.Ref `toml:"token,omitempty,inline"`    // bearer
+	Username string          `toml:"username,omitempty"`        // basic
+	Password *credential.Ref `toml:"password,omitempty,inline"` // basic
+	Header   string          `toml:"header,omitempty"`          // header: its name
+	Value    *credential.Ref `toml:"value,omitempty,inline"`    // header: its value
+}
+
+// HTTP body formats.
+const (
+	BodyJSON = "json"
+	BodyText = "text"
+	BodyNone = "none"
+)
+
+// HTTPBody is the request body of an http feather: the message as JSON or
+// text, or a template of either (text/template, with the message's title,
+// body, level, url and the feather's name).
+type HTTPBody struct {
+	Format      string `toml:"format,omitempty"`
+	Template    string `toml:"template,omitempty"`
+	ContentType string `toml:"content_type,omitempty"`
+}
+
+// HTTP retry policies.
+const (
+	RetrySafe   = "safe"   // GET, PUT, DELETE; POST and PATCH with an idempotency key
+	RetryNever  = "never"  // one attempt
+	RetryAlways = "always" // POST and PATCH too, without a key: may deliver twice
+)
+
+// HTTPRetry is the retry policy of an http feather.
+type HTTPRetry struct {
+	Policy string `toml:"policy,omitempty"`
+	// MaxAttempts caps the attempts (first included) below the send's
+	// 1 + max_retries (0: no cap of its own).
+	MaxAttempts int `toml:"max_attempts,omitempty"`
 }
 
 // IsEnabled: a feather is enabled unless it says otherwise.

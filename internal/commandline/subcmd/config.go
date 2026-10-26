@@ -398,6 +398,12 @@ func describeProject(rt *Runtime, f *configure.File) {
 	for _, name := range sortedNames(f.Feathers) {
 		fc := f.Feathers[name]
 		switch fc.Type {
+		case configure.TypeHTTP:
+			url, auth, policy := describeHTTP(fc)
+			fmt.Fprintf(rt.Stdout, "  feather %s: http %s %s, auth %s\n", name, fc.HTTPMethod(), url, auth)
+			if policy != "" {
+				fmt.Fprintf(rt.Stdout, "    address policy: %s\n", policy)
+			}
 		case configure.TypeEmail:
 			secret := "no password"
 			if fc.Password != nil {
