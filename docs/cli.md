@@ -4,7 +4,7 @@
 kjak send ...
 kjak feather list|show|add|remove|enable|disable|types
 kjak group list|show|set|remove
-kjak config path|show|validate|init|trust|untrust
+kjak config path|show|validate|init|trust|untrust|migrate-secrets
 kjak template list|show|set|remove|render
 kjak version            (also --version, -v)
 kjak --help             (also -h, help; every command takes --help)
@@ -21,7 +21,8 @@ Options of every command that reads the configuration:
 | option | |
 |---|---|
 | `-c, --config FILE` | the global configuration file (default `$KJAK_CONFIG`, else `$XDG_CONFIG_HOME/kjak/config.toml`) |
-| `--no-project` | ignore `./.kjak.toml` |
+| `--secrets FILE` | the personal secrets file (default `$KJAK_SECRETS`, else `$XDG_CONFIG_HOME/kjak/secrets.toml`) |
+| `--no-project` | ignore `./.kjak.toml` (and `./.kjak.secrets.toml`) |
 | `-o, --output text\|json` | output format (commands that print data) |
 
 ## kjak send
@@ -216,7 +217,8 @@ feather of the same name. The secret of the type (Slack and Discord:
 |---|---|
 | `--secret-env VAR` | `{ env = "VAR" }` |
 | `--secret-keychain SERVICE/ACCOUNT` | `{ keychain = { service, account } }` |
-| `--secret-stdin` | `{ literal = "..." }`, read from standard input |
+| `--secret-ref NAME` | `{ secret = "NAME" }`, an entry of a secrets file |
+| `--secret-stdin` | `{ literal = "..." }`, read from standard input (deprecated: a literal; kjak warns) |
 
 The secret value is never a command-line argument (other processes and the
 shell history would see it).
@@ -257,13 +259,40 @@ the message without sending it.
 ## kjak config
 
 ```sh
-kjak config path [-o json]      # the files and the trust state of ./.kjak.toml
+kjak config path [-o json]      # the files, how each was chosen, trust and secrets state
 kjak config show [-o json]      # the effective configuration, literal secrets redacted
-kjak config validate            # both files, whether or not the project file is trusted
+kjak config validate [--strict] # both files, whether or not the project file is trusted, and the secrets files
 kjak config init [--force]      # create the global file
-kjak config trust [--yes]       # trust ./.kjak.toml (asks on a terminal; --yes otherwise)
+kjak config trust [--yes [--allow-user-secrets]]
+                                # trust ./.kjak.toml and ./.kjak.secrets.toml (asks on a terminal)
 kjak config untrust
+kjak config migrate-secrets [--scope global|project] [--dry-run] [--secrets-out FILE] [--config-out FILE]
 ```
+
+`config path` prints one line per file with how it was chosen — `explicit
+(--config)`, `explicit ($KJAK_CONFIG)`, `user`, `current` — and its state:
+
+```
+global (user)              /home/me/.config/kjak/config.toml
+project (current)          /home/me/src/app/.kjak.toml (trusted)
+secrets (user)             /home/me/.config/kjak/secrets.toml (3 secret(s))
+project secrets (current)  /home/me/src/app/.kjak.secrets.toml (1 secret(s), trusted with the project)
+trust store                /home/me/.config/kjak/trust.toml
+```
+
+A secrets file that is refused shows `refused: <why>` (permissions, owner,
+symbolic link). With `-o json`: `global`, `global_source`, `project`,
+`project_state`, `secrets`, `secrets_source`, `secrets_state`,
+`project_secrets`, `project_secrets_state`, `secrets_permissions_checked`,
+`trust_store`.
+
+`config validate --strict` refuses literal secrets (exit 2). `config
+migrate-secrets` moves the literal secrets of the global file (or, with
+`--scope project`, of `./.kjak.toml`) into a new secrets file created with
+mode 0600 (`--secrets-out`, default the scope's secrets file) and writes the
+configuration that refers to them to a new file (`--config-out`, default
+`<file>.migrated`). It never overwrites or changes a file: see
+[migration.md](migration.md).
 
 ## Environment
 
@@ -271,4 +300,5 @@ kjak config untrust
 |---|---|
 | `XDG_CONFIG_HOME` | base of the configuration directory (absolute; default `~/.config`; on Windows `%AppData%` when unset) |
 | `KJAK_CONFIG` | the global configuration file |
+| `KJAK_SECRETS` | the personal secrets file (`--secrets` wins) |
 | any `env` reference | read when a send resolves its credentials |

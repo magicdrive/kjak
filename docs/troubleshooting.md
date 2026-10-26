@@ -15,8 +15,17 @@
 | `the configuration is being changed by another kjak process (lock file ...lock)` | another kjak is changing the file right now (the lock is an OS lock: it ends with its process, a crashed kjak does not hold it) | retry; the `.lock` file itself stays and is harmless |
 | `the configuration file was modified concurrently` | the file changed while kjak wrote it | check the file, run the command again |
 | `unknown key(s): feathers.x.webhok (line 3)` | a typo | fix the key ([configuration.md](configuration.md)) |
-| `a credential is a table naming one source: ...` | `webhook_url = "https://..."` (a plain string) | `webhook_url = { env = "..." }` (or `{ literal = "..." }`) |
-| `credential error: name only one of env, keychain or literal` | two sources in one credential | keep one |
+| `a credential is a table naming one source: ...` | `webhook_url = "https://..."` (a plain string) | `webhook_url = { env = "..." }` or `{ secret = "..." }` |
+| `credential error: name only one of env, keychain, secret or literal` | two sources in one credential | keep one |
+| `the secrets file is not private: group or others have access (mode 0644)` | a secrets file others can read or change | `chmod 600 FILE` (and check who could read it meanwhile) |
+| `the secrets file is not private: it is owned by uid N` | a secrets file of another user (a container mount, `sudo`) | use a file of your own, or `env` |
+| `the secrets file is not private: it is a symbolic link, which is refused here` | `./.kjak.secrets.toml` is a link | make it a regular file (a repository could link it to your own secrets) |
+| `secret:x is not in the user secrets file ...` / `... does not exist` | the name, or the file, is missing | add it (`kjak config path` shows which file is used), or pass `--secrets FILE` |
+| `secret:x (used by the project configuration) is not in the project secrets file ..., and the trust of the project does not allow it ...` | a project reads one of your secrets you did not allow | review the project; `kjak config trust` lists and asks for each name |
+| `the project configuration is not trusted: ...: its secrets file ... changed since it was trusted` (or `is not covered by the trust`, `is gone`) | `./.kjak.secrets.toml` differs from the trusted one | review it, `kjak config trust` |
+| `config trust: the project reads N secret(s) from your secrets file ...` | `--yes` without `--allow-user-secrets` | review the names, then add `--allow-user-secrets` |
+| `kjak: warning: ... keeps N secret(s) in the file as literal (deprecated)` | `{ literal = "..." }` in a configuration | `kjak config migrate-secrets` ([migration.md](migration.md)) |
+| `... exists: kjak does not overwrite it` (migrate-secrets) | the secrets file or `<file>.migrated` exists already | `--secrets-out NEW_FILE` / `--config-out NEW_FILE`, or move the secrets by hand |
 | `type "os": OS-native notifications are not supported in kjak v0.1.0` | | not available yet |
 | `webhook_url: ... must be https (http is accepted for localhost only ...)` | an `http://` webhook URL to another host | use the `https` URL the provider gave |
 | `--json-input: key "body" given twice` | a JSON key repeated | give each key once |

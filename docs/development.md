@@ -31,8 +31,9 @@ internal/
   textbank/                  help texts and the default config (go:embed)
   core/                      Message, Level, Result, Report, aggregation (standard library only)
   clock/                     real and fake clocks (the engine's only time source)
-  configure/                 TOML schema, merge, validation, trust store, atomic writes
-  credential/                env / keychain / literal references, Secret, Redactor
+  configure/                 TOML schema, merge, validation, trust store, atomic writes,
+                             secrets files (private-file checks, scopes of a reference)
+  credential/                env / keychain / secret / literal references, Secret, Redactor
   template/                  text/template rendering of message templates
   routing/                   targets -> ordered plan (direct, group, skipped)
   delivery/                  worker pool, deadline, retry, backoff, cancellation
@@ -135,7 +136,8 @@ concurrent config modification, aggregation, trust, secret redaction) are
 named `TestCritical_<Name>`; they run with every other test.
 `architecture_test.go` checks the dependency rules.
 
-The fuzz targets cover message validation, TOML parsing (round trip), webhook
+The fuzz targets cover message validation, TOML parsing (round trip), secrets
+files (round trip, no value in an error), webhook
 URL checks, the JSON input object, the webhook classification and
 `Retry-After`, SMTP dot stuffing and reply parsing. `make fuzz` finds them
 with `go test -list`; a failing input is written to the package's

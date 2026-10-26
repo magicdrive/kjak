@@ -8,19 +8,29 @@
 - [4. Feathers](#4-feathers)
 - [5. Groups](#5-groups)
 - [6. Templates](#6-templates)
-- [7. Credentials and security](#7-credentials-and-security)
+- [7. Credentials and security](#7-credentials-and-security) ([secrets files](#77-secrets-files))
 - [8. Delivery behavior](#8-delivery-behavior)
 - [9. A complete example](#9-a-complete-example)
 - [10. Changes made by kjak](#10-changes-made-by-kjak)
 
 ## 1. Configuration files
 
-kjak reads TOML from two files:
+kjak reads TOML from two configuration files and two secrets files:
 
-| file | location | used |
-|---|---|---|
-| global | `--config FILE`, else `$KJAK_CONFIG`, else `$XDG_CONFIG_HOME/kjak/config.toml`, else `~/.config/kjak/config.toml` (also on macOS); on Windows without `XDG_CONFIG_HOME`: `%AppData%\kjak\config.toml` | always, when it exists |
-| project | `./.kjak.toml` (the current directory only; parent directories are not searched) | only when trusted ([7.4](#74-project-configuration-trust)); `--no-project` ignores it |
+| file | location | chosen as | used |
+|---|---|---|---|
+| global | `--config FILE`, else `$KJAK_CONFIG`, else `$XDG_CONFIG_HOME/kjak/config.toml`, else `~/.config/kjak/config.toml` (also on macOS); on Windows without `XDG_CONFIG_HOME`: `%AppData%\kjak\config.toml` | explicit (`--config`, `$KJAK_CONFIG`), else user | always, when it exists |
+| project | `./.kjak.toml` (the current directory only; parent directories are not searched) | current | only when trusted ([7.4](#74-project-configuration-trust)); `--no-project` ignores it |
+| personal secrets | `--secrets FILE`, else `$KJAK_SECRETS`, else `secrets.toml` in the directory of the default global file | explicit (`--secrets`, `$KJAK_SECRETS`), else user | for the `secret` references of the global file, and of the project file for the names its trust allows ([7.7](#77-secrets-files)) |
+| project secrets | `./.kjak.secrets.toml` | current | for the `secret` references of the project file only, trusted with it; `--no-project` ignores it |
+
+The three kinds of location are **explicit** (a command-line option or an
+environment variable: used as given, instead of the user file), **user**
+(your configuration directory) and **current** (the current directory: a
+repository you may not control, used only once trusted). Each file is chosen
+on its own: `--config` does not move the secrets file, and `--secrets` does
+not move the configuration. `kjak config path` shows which file was chosen
+for each, and how, and their state; never a secret.
 
 The trust store is `trust.toml` next to the default global file
 (`$XDG_CONFIG_HOME/kjak/trust.toml`, ...); `--config` and `KJAK_CONFIG` do not
@@ -51,6 +61,7 @@ both files.
 and keys given twice are errors, so a typo is never ignored. `kjak config
 validate` checks both files (the project file whether trusted or not);
 `kjak config show` prints the merged result with literal secrets redacted.
+`kjak config validate --strict` also refuses literal secrets.
 
 ## 2. Managing the configuration with the CLI
 
@@ -130,7 +141,7 @@ A key that does not belong to the type is an error.
 
 | key | CLI | meaning |
 |---|---|---|
-| `webhook_url` | `--secret-env`, `--secret-keychain`, `--secret-stdin` | the incoming webhook URL (a [credential](#71-credential-references)) |
+| `webhook_url` | `--secret-env`, `--secret-keychain`, `--secret-ref`, `--secret-stdin` | the incoming webhook URL (a [credential](#71-credential-references)) |
 
 ```toml
 [feathers.dev_slack]
@@ -149,7 +160,7 @@ it was created for.
 
 | key | CLI | meaning |
 |---|---|---|
-| `webhook_url` | `--secret-env`, `--secret-keychain`, `--secret-stdin` | the webhook URL |
+| `webhook_url` | `--secret-env`, `--secret-keychain`, `--secret-ref`, `--secret-stdin` | the webhook URL |
 | `username` | `--username` | display name of the messages (optional) |
 
 ```toml
@@ -172,7 +183,7 @@ longer than 4096 characters is cut and ends with `…`.
 | `port` | `--port` | 587 / 465 / 25 | by `security`: `starttls` / `tls` / `none` |
 | `security` | `--security` | `"starttls"` | `starttls` (required, never falls back), `tls` (implicit TLS), `none` |
 | `user` | `--user` | — | SMTP user; goes with `password` |
-| `password` | `--secret-env`, `--secret-keychain`, `--secret-stdin` | — | a credential |
+| `password` | `--secret-env`, `--secret-keychain`, `--secret-ref`, `--secret-stdin` | — | a credential |
 | `from` | `--from` | required | sender, a bare address |
 | `to` | `--mail-to` | required | recipients, bare addresses |
 | `subject_prefix` | `--subject-prefix` | — | put before every subject |
@@ -274,7 +285,8 @@ resolved when a send runs:
 |---|---|---|---|
 | `env` | `{ env = "KJAK_DEV_SLACK_WEBHOOK" }` | `--secret-env VAR` | the environment variable (set and non-empty) |
 | `keychain` | `{ keychain = { service = "kjak", account = "dev_slack" } }` | `--secret-keychain SERVICE/ACCOUNT` | the OS keychain (macOS, Linux) |
-| `literal` | `{ literal = "https://hooks.slack.com/..." }` | `--secret-stdin` | the file itself |
+| `secret` | `{ secret = "dev_slack.webhook_url" }` | `--secret-ref NAME` | an entry of a secrets file ([7.7](#77-secrets-files)) |
+| `literal` | `{ literal = "https://hooks.slack.com/..." }` | `--secret-stdin` | the file itself (**deprecated**, [7.8](#78-literal-secrets-deprecated)) |
 
 - Two sources, or none, is an error. A plain string (`webhook_url =
   "https://..."`) is an error too.
@@ -283,15 +295,15 @@ resolved when a send runs:
 - A credential that does not resolve stops the send before anything is sent
   (exit 2).
 - `feather add` never takes the secret as an argument: by reference, or on
-  standard input with `--secret-stdin`.
+  standard input with `--secret-stdin` (a literal: deprecated).
 
 **Which source to use**
 
 | situation | use |
 |---|---|
-| your own macOS or Linux desktop | `keychain` |
-| CI, servers, containers, cron, Windows | `env`, filled from the platform's secret store |
-| a quick local test | `literal` via `--secret-stdin`, in your global file only |
+| your own macOS or Linux desktop | `keychain`, or `secret` with a private secrets file |
+| CI, servers, containers, cron, Windows | `env`, filled from the platform's secret store; or `secret` with `--secrets FILE` |
+| a quick local test | `secret`, in your own secrets file |
 
 kjak only reads the keychain. Create the entry with the OS tool, which
 prompts for the secret so it stays out of your shell history:
@@ -313,6 +325,7 @@ Secrets are never printed. `feather show`, `feather list`, `config show` and
 ```
 webhook_url  env:KJAK_DEV_SLACK_WEBHOOK
 webhook_url  keychain:kjak/dev_slack
+webhook_url  secret:dev_slack.webhook_url
 webhook_url  literal:[REDACTED]
 ```
 
@@ -348,6 +361,15 @@ Trust this exact content? [y/N]
 - The trust is the file's canonical path and the SHA-256 of its content,
   stored in the trust store. **Any change** of the content, or another path,
   needs a new trust.
+- A `./.kjak.secrets.toml` next to it is trusted with it (its path and
+  SHA-256; the names it defines are shown, its values never). A secrets file that appears, changes
+  or goes after the trust withdraws it.
+- The `secret` references of the project file that the project secrets file
+  does not define are read from **your** secrets file only when you allow
+  each name: `config trust` lists them and asks a second question (with
+  `--yes`, `--allow-user-secrets` is required). Any other name is refused
+  when a send resolves it, so a trusted repository cannot reach the rest of
+  your secrets.
 - An untrusted project file is an error for every command that would use it
   (exit 2), never used and never ignored silently:
 
@@ -358,9 +380,12 @@ Trust this exact content? [y/N]
 
 - In an untrusted repository, read `.kjak.toml` first, or run kjak with
   `--no-project`.
-- Without a terminal, `config trust` requires `--yes`: review the file first.
+- Without a terminal, `config trust` requires `--yes` (and
+  `--allow-user-secrets` for the names above): review the files first. It
+  never waits for an answer there.
 - `kjak config untrust` withdraws the trust; `kjak config path` shows the
-  state (`trusted`, `untrusted`, `untrusted (changed since it was trusted)`).
+  state (`trusted`, `untrusted`, `untrusted (changed since it was trusted)`,
+  or untrusted because of its secrets file).
 
 ### 7.5 Keeping secrets out of Git
 
@@ -368,8 +393,8 @@ Trust this exact content? [y/N]
   `literal`. Each user then provides the secret in their own environment.
 - Webhook URLs leak easily: check `git diff` before committing, and revoke
   (delete and recreate) a webhook whose URL was committed or shared.
-- A file that holds literal secrets belongs in your global configuration, not
-  in the repository.
+- Secrets belong in a secrets file, never in the repository: keep
+  `.kjak.secrets.toml` in `.gitignore`.
 
 ### 7.6 In CI
 
@@ -380,6 +405,61 @@ Trust this exact content? [y/N]
   `--no-project` with a configuration the pipeline controls (`--config FILE`
   or `KJAK_CONFIG`), or trust only in pipelines that run reviewed code.
 - Use `-o json` to keep a machine-readable record; it contains no secret.
+- A secrets file written by the pipeline (mode 0600, owned by the job's
+  user) can be given with `--secrets FILE` or `KJAK_SECRETS`. Container
+  secret mounts (Kubernetes, Docker) are usually readable by others or owned
+  by root and are then refused: use `env` there.
+
+### 7.7 Secrets files
+
+A secrets file is TOML of string values in tables; a `secret` reference
+names one by its key path:
+
+```toml
+# ~/.config/kjak/secrets.toml   (mode 0600)
+[dev_slack]
+webhook_url = "https://hooks.slack.com/services/..."
+
+[oncall_mail]
+password = "..."
+```
+
+```toml
+# ~/.config/kjak/config.toml
+[feathers.dev_slack]
+type = "slack"
+webhook_url = { secret = "dev_slack.webhook_url" }
+```
+
+| | |
+|---|---|
+| names | dot-separated segments, each a letter or digit then letters, digits, `_`, `-` (at most 64); at most 8 segments and 255 bytes. A key that contains a dot is an error |
+| values | strings only; an empty value is an error when it is used. Values are used as they are: nothing in them is expanded (`${...}`, `{ env = ... }` and `{{...}}` stay text) |
+| size | at most 1 MiB; unknown or non-string entries are errors that name the key, never the value |
+| permissions (Unix) | a regular file of the user running kjak, with no permission for group or others (`chmod 600`); otherwise refused before it is parsed. The check is made on the opened file (`fstat`), not on the path |
+| links | the personal file may be a symbolic link (dotfiles): the file it leads to is checked. The project file must not be a symbolic link (opened with `O_NOFOLLOW`), must have one name only (no hard link), and must not be the personal file: a repository, or another user, could otherwise present your personal file as the project's |
+| FIFOs, devices | refused without waiting (`--secrets <(...)` does not work: use `env`) |
+| Windows | the file must be a regular file; its access control list is **not checked** (kjak does not read ACLs yet). A file under `%AppData%` is private by the profile's default ACL; keep it there. A project secrets file that is a reparse point is refused (checked on the path, before the open) |
+
+**Which file a reference reads.** Two files are read, each on its own:
+
+| reference in | reads |
+|---|---|
+| the global file (`--config`, `$KJAK_CONFIG` or the user file) | the personal secrets file only (`--secrets`, else `$KJAK_SECRETS`, else the user file). The project secrets file is never read for it: a repository cannot redirect your feathers |
+| the project file | the project secrets file; else the personal secrets file, **only for the names its trust allows** ([7.4](#74-project-configuration-trust)); any other name is an error |
+
+The personal file is read once per run, when a send first needs a secret
+(`kjak config validate` checks it too). A missing secret, a missing file or a
+refused file stops the send before anything is sent (exit 2, `error.code:
+credential`).
+
+### 7.8 Literal secrets (deprecated)
+
+`{ literal = "..." }` keeps a secret in the configuration file, which is
+easily shared, committed or backed up. It still works; `kjak send` warns about
+it on stderr, and `kjak config validate --strict` refuses it.
+`kjak config migrate-secrets` moves the literals of a file to a new secrets
+file without changing the file: see [migration.md](migration.md).
 
 More: [security.md](security.md).
 

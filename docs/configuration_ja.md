@@ -15,12 +15,16 @@
 
 ## 1. 設定ファイル
 
-kjak は2つの TOML ファイルを読み込みます。
+kjak は2つの設定ファイルと2つの secrets ファイル（いずれも TOML）を読み込みます。
 
-| ファイル | 場所 | 使われる条件 |
-|---|---|---|
-| グローバル | `--config FILE`、なければ `$KJAK_CONFIG`、なければ `$XDG_CONFIG_HOME/kjak/config.toml`、なければ `~/.config/kjak/config.toml`（macOS も同じ）。Windows で `XDG_CONFIG_HOME` が未設定なら `%AppData%\kjak\config.toml` | 存在すれば常に |
-| プロジェクト | `./.kjak.toml`（カレントディレクトリのみ。親ディレクトリは探さない） | Trust 済みの場合のみ（[7.4](#74-プロジェクト設定の-trust)）。`--no-project` で無視できる |
+| ファイル | 場所 | 選択元 | 使われる条件 |
+|---|---|---|---|
+| グローバル | `--config FILE`、なければ `$KJAK_CONFIG`、なければ `$XDG_CONFIG_HOME/kjak/config.toml`、なければ `~/.config/kjak/config.toml`（macOS も同じ）。Windows で `XDG_CONFIG_HOME` が未設定なら `%AppData%\kjak\config.toml` | explicit（`--config`、`$KJAK_CONFIG`）、なければ user | 存在すれば常に |
+| プロジェクト | `./.kjak.toml`（カレントディレクトリのみ。親ディレクトリは探さない） | current | Trust 済みの場合のみ（[7.4](#74-プロジェクト設定の-trust)）。`--no-project` で無視できる |
+| 個人の secrets | `--secrets FILE`、なければ `$KJAK_SECRETS`、なければ既定のグローバル設定ファイルと同じディレクトリの `secrets.toml` | explicit（`--secrets`、`$KJAK_SECRETS`）、なければ user | グローバル設定の `secret` 参照、および Trust で許可された名前に限りプロジェクト設定の `secret` 参照（[7.7](#77-secrets-ファイル)） |
+| プロジェクトの secrets | `./.kjak.secrets.toml` | current | プロジェクト設定の `secret` 参照のみ。プロジェクト設定と一緒に Trust される。`--no-project` で無視できる |
+
+選択元は3種類です。**explicit**（コマンドラインオプションか環境変数。user のファイルの代わりにそのまま使う）、**user**（自分の設定ディレクトリ）、**current**（カレントディレクトリ。自分が管理していないかもしれないリポジトリなので、Trust した後にだけ使う）。ファイルはそれぞれ独立に選ばれます。`--config` で secrets ファイルの場所は変わらず、`--secrets` で設定ファイルの場所は変わりません。どのファイルがどの選択元で選ばれたか、その状態は `kjak config path` で確認できます（秘密情報は表示しません）。
 
 Trust ストアは、既定のグローバル設定ファイルと同じディレクトリの `trust.toml`（`$XDG_CONFIG_HOME/kjak/trust.toml` など）です。`--config` や `KJAK_CONFIG` を指定しても、Trust ストアの場所は変わりません。
 
@@ -110,7 +114,7 @@ feather は1つの通知先です。Slack の Incoming Webhook、Discord の Web
 
 | キー | CLI | 意味 |
 |---|---|---|
-| `webhook_url` | `--secret-env`、`--secret-keychain`、`--secret-stdin` | Incoming Webhook の URL（[認証情報](#71-認証情報の参照)） |
+| `webhook_url` | `--secret-env`、`--secret-keychain`、`--secret-ref`、`--secret-stdin` | Incoming Webhook の URL（[認証情報](#71-認証情報の参照)） |
 
 ```toml
 [feathers.dev_slack]
@@ -125,7 +129,7 @@ levels = ["warning", "error", "critical"]
 
 | キー | CLI | 意味 |
 |---|---|---|
-| `webhook_url` | `--secret-env`、`--secret-keychain`、`--secret-stdin` | Webhook の URL |
+| `webhook_url` | `--secret-env`、`--secret-keychain`、`--secret-ref`、`--secret-stdin` | Webhook の URL |
 | `username` | `--username` | メッセージの表示名（任意） |
 
 ```toml
@@ -145,7 +149,7 @@ username = "kjak"
 | `port` | `--port` | 587 / 465 / 25 | `security` に応じる：`starttls` / `tls` / `none` |
 | `security` | `--security` | `"starttls"` | `starttls`（必須。平文に戻らない）、`tls`（最初から TLS）、`none` |
 | `user` | `--user` | — | SMTP ユーザー。`password` と組で使う |
-| `password` | `--secret-env`、`--secret-keychain`、`--secret-stdin` | — | 認証情報 |
+| `password` | `--secret-env`、`--secret-keychain`、`--secret-ref`、`--secret-stdin` | — | 認証情報 |
 | `from` | `--from` | 必須 | 送信元（アドレスのみ） |
 | `to` | `--mail-to` | 必須 | 宛先（アドレスのみ） |
 | `subject_prefix` | `--subject-prefix` | — | すべての件名の先頭に付ける文字列 |
@@ -234,20 +238,21 @@ feather の秘密情報（Slack や Discord の Webhook URL。URL 自体が認�
 |---|---|---|---|
 | `env` | `{ env = "KJAK_DEV_SLACK_WEBHOOK" }` | `--secret-env VAR` | 環境変数（設定済みで空でないこと） |
 | `keychain` | `{ keychain = { service = "kjak", account = "dev_slack" } }` | `--secret-keychain SERVICE/ACCOUNT` | OS のキーチェーン（macOS、Linux） |
-| `literal` | `{ literal = "https://hooks.slack.com/..." }` | `--secret-stdin` | 設定ファイルの値そのもの |
+| `secret` | `{ secret = "dev_slack.webhook_url" }` | `--secret-ref NAME` | secrets ファイルのエントリー（[7.7](#77-secrets-ファイル)） |
+| `literal` | `{ literal = "https://hooks.slack.com/..." }` | `--secret-stdin` | 設定ファイルの値そのもの（**非推奨**、[7.8](#78-literal-非推奨)） |
 
 - 参照元が2つ、または1つもない場合はエラーです。単なる文字列（`webhook_url = "https://..."`）もエラーになります。
 - Webhook URL は `https` である必要があります（`http` は `localhost` のみ）。ユーザー情報を含む URL は使えません。
 - 解決できない認証情報があると、何も送信せずに終了します（exit 2）。
-- `feather add` は秘密情報を引数として受け取りません。参照で指定するか、`--secret-stdin` で標準入力から渡します。
+- `feather add` は秘密情報を引数として受け取りません。参照で指定するか、`--secret-stdin` で標準入力から渡します（literal になるため非推奨）。
 
 **どれを使うか**
 
 | 状況 | 使うもの |
 |---|---|
-| 自分の macOS / Linux デスクトップ | `keychain` |
-| CI、サーバー、コンテナ、cron、Windows | `env`（各環境のシークレット管理から設定する） |
-| 手元での簡単なテスト | `--secret-stdin` による `literal`（グローバル設定ファイルにだけ置く） |
+| 自分の macOS / Linux デスクトップ | `keychain`、または非公開の secrets ファイルと `secret` |
+| CI、サーバー、コンテナ、cron、Windows | `env`（各環境のシークレット管理から設定する）、または `--secrets FILE` と `secret` |
+| 手元での簡単なテスト | 自分の secrets ファイルと `secret` |
 
 kjak はキーチェーンを読むだけです。エントリーは OS のツールで作成してください。どちらのツールも秘密情報の入力を求めるので、シェルの履歴に残りません。
 
@@ -265,6 +270,7 @@ Linux では Secret Service（GNOME Keyring や KWallet のあるデスクトッ
 ```
 webhook_url  env:KJAK_DEV_SLACK_WEBHOOK
 webhook_url  keychain:kjak/dev_slack
+webhook_url  secret:dev_slack.webhook_url
 webhook_url  literal:[REDACTED]
 ```
 
@@ -291,6 +297,8 @@ Trust this exact content? [y/N]
 ```
 
 - Trust の対象は、ファイルの正規化されたパスと内容の SHA-256 で、Trust ストアに保存されます。内容が**少しでも**変わったり、パスが変わったりした場合は、Trust し直す必要があります。
+- 同じディレクトリの `./.kjak.secrets.toml` も一緒に Trust されます（パスと SHA-256。定義している名前は表示し、値は表示しません）。Trust の後に secrets ファイルが現れた、変わった、なくなった場合は、Trust が取り消されます。
+- プロジェクト設定の `secret` 参照のうち、プロジェクトの secrets ファイルにない名前は、名前ごとに許可した場合に限り**あなたの** secrets ファイルから読みます。`config trust` はその名前を一覧表示し、2つ目の質問で許可を求めます（`--yes` のときは `--allow-user-secrets` が必要）。許可していない名前は送信時にエラーになるので、Trust したリポジトリでも、それ以外の秘密情報には届きません。
 - Trust していないプロジェクト設定は、それを使うすべてのコマンドでエラーになります（exit 2）。黙って使われることも、黙って無視されることもありません。
 
   ```
@@ -299,20 +307,64 @@ Trust this exact content? [y/N]
   ```
 
 - 信頼できないリポジトリでは、先に `.kjak.toml` を読むか、`--no-project` を付けて kjak を実行してください。
-- 端末がない環境では、`config trust` に `--yes` が必要です。先にファイルを確認してください。
-- `kjak config untrust` で Trust を取り消せます。状態は `kjak config path` で確認できます（`trusted`、`untrusted`、`untrusted (changed since it was trusted)`）。
+- 端末がない環境では、`config trust` に `--yes`（上記の名前があれば `--allow-user-secrets` も）が必要です。先にファイルを確認してください。端末がなければ回答を待つことはありません。
+- `kjak config untrust` で Trust を取り消せます。状態は `kjak config path` で確認できます（`trusted`、`untrusted`、`untrusted (changed since it was trusted)`、または secrets ファイルによる untrusted）。
 
 ### 7.5 秘密情報を Git に入れない
 
 - コミットする `.kjak.toml` には、`env` か `keychain` の参照だけを書き、`literal` は書かないでください。秘密情報は各利用者が自分の環境で用意します。
 - Webhook URL は漏れやすい情報です。コミット前に `git diff` を確認し、URL をコミットまたは共有してしまった Webhook は無効化（削除して作り直し）してください。
-- リテラルの秘密情報を含む設定は、リポジトリではなくグローバル設定ファイルに置いてください。
+- 秘密情報は secrets ファイルに置き、リポジトリには入れないでください。`.kjak.secrets.toml` は `.gitignore` に入れてください。
 
 ### 7.6 CI で使う場合
 
 - 秘密情報は、CI のシークレット管理から環境変数として渡してください（`env` 参照）。CI ではキーチェーンは使えません。
 - CI で `kjak config trust --yes` を実行すると、チェックアウトしたコミットの内容を、プルリクエストによる変更も含めてそのまま Trust します。パイプラインが管理する設定（`--config FILE` または `KJAK_CONFIG`）と `--no-project` を使うか、レビュー済みのコードだけを実行するパイプラインでのみ Trust してください。
 - 機械で読める記録を残すには `-o json` を使ってください。秘密情報は含まれません。
+- パイプラインが書き出した secrets ファイル（モード 0600、ジョブのユーザーが所有）は `--secrets FILE` か `KJAK_SECRETS` で渡せます。コンテナの secret マウント（Kubernetes、Docker）は多くの場合、他者が読めるか root の所有なので拒否されます。その場合は `env` を使ってください。
+
+### 7.7 secrets ファイル
+
+secrets ファイルは、テーブルの中に文字列の値を並べた TOML です。`secret` 参照はキーのパスで値を指定します。
+
+```toml
+# ~/.config/kjak/secrets.toml   （モード 0600）
+[dev_slack]
+webhook_url = "https://hooks.slack.com/services/..."
+
+[oncall_mail]
+password = "..."
+```
+
+```toml
+# ~/.config/kjak/config.toml
+[feathers.dev_slack]
+type = "slack"
+webhook_url = { secret = "dev_slack.webhook_url" }
+```
+
+| | |
+|---|---|
+| 名前 | ドット区切りのセグメント。各セグメントは英字か数字で始まり、英数字・`_`・`-` が続く（最大 64）。最大 8 セグメント、255 バイト。ドットを含むキーはエラー |
+| 値 | 文字列のみ。空の値は使うときにエラー。値はそのまま使い、中身を展開しない（`${...}`、`{ env = ... }`、`{{...}}` はただの文字列） |
+| サイズ | 最大 1 MiB。不明な項目や文字列以外の項目はエラーで、キー名だけを示し、値は示さない |
+| 権限（Unix） | kjak を実行しているユーザーが所有する通常ファイルで、グループとその他に権限がないこと（`chmod 600`）。そうでなければ解析前に拒否する。検査はパスではなく開いたファイルに対して行う（`fstat`） |
+| リンク | 個人のファイルはシンボリックリンクでもよい（dotfiles）。リンク先のファイルを検査する。プロジェクトのファイルはシンボリックリンク不可（`O_NOFOLLOW` で開く）、名前は1つだけ（ハードリンク不可）、個人のファイルそのものも不可。そうでないと、リポジトリや他のユーザーがあなたの個人のファイルをプロジェクトのものとして見せられるため |
+| FIFO、デバイス | 待たずに拒否する（`--secrets <(...)` は使えない。`env` を使う） |
+| Windows | 通常ファイルであることのみ検査し、アクセス制御リスト（ACL）は**検査しない**（kjak はまだ ACL を読まない）。`%AppData%` の下のファイルはプロファイルの既定の ACL で本人専用になるので、そこに置くこと。リパースポイントであるプロジェクトの secrets ファイルは拒否する（開く前にパスで検査） |
+
+**参照がどのファイルを読むか**：2つのファイルを、それぞれ独立に読みます。
+
+| 参照がある場所 | 読むファイル |
+|---|---|
+| グローバル設定（`--config`、`$KJAK_CONFIG`、または user のファイル） | 個人の secrets ファイルのみ（`--secrets`、なければ `$KJAK_SECRETS`、なければ user のファイル）。プロジェクトの secrets ファイルは決して読まないので、リポジトリがあなたの feather の宛先を変えることはできない |
+| プロジェクト設定 | プロジェクトの secrets ファイル。なければ、**Trust で許可された名前に限り**個人の secrets ファイル。それ以外の名前はエラー |
+
+個人のファイルは、送信で最初に秘密情報が必要になったときに1回だけ読みます（`kjak config validate` でも検査します）。秘密情報やファイルがない、またはファイルが拒否された場合は、何も送信せずに終了します（exit 2、`error.code: credential`）。
+
+### 7.8 literal（非推奨）
+
+`{ literal = "..." }` は秘密情報を設定ファイルに置くので、共有・コミット・バックアップで漏れやすくなります。引き続き動作しますが、`kjak send` は stderr に警告を出し、`kjak config validate --strict` はエラーにします。`kjak config migrate-secrets` は、ファイルを変更せずに literal を新しい secrets ファイルへ移します。[migration.md](migration.md)（英語）を参照してください。
 
 詳しくは [security.md](security.md)（英語）を参照してください。
 

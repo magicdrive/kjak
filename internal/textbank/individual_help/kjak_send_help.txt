@@ -37,6 +37,8 @@ Output and configuration:
   -o, --output FORMAT     text (default) or json (schema_version 1)
   -q, --quiet             No text output when everything was delivered
   -c, --config FILE       The global configuration file
+      --secrets FILE      The personal secrets file (default $KJAK_SECRETS,
+                          else $XDG_CONFIG_HOME/kjak/secrets.toml)
       --no-project        Ignore ./.kjak.toml
   -h, --help              Show this help
 

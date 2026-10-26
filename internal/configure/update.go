@@ -58,6 +58,7 @@ func Update(p Paths, scope Scope, now time.Time, fn func(*File) error) error {
 		}
 	}
 
+	var written *File
 	_, newHash, err := rewrite(path, expect, func(current []byte) ([]byte, error) {
 		f := &File{}
 		if current != nil {
@@ -76,13 +77,14 @@ func Update(p Paths, scope Scope, now time.Time, fn func(*File) error) error {
 		if err := validateWithOther(p, scope, f); err != nil {
 			return nil, err
 		}
+		written = f
 		return Encode(f)
 	})
 	if err != nil {
 		return err
 	}
 	if scope == ScopeProject {
-		return Trust(p.TrustStore, path, newHash, now)
+		return retrust(p.TrustStore, path, newHash, now, SecretNames(written))
 	}
 	return nil
 }

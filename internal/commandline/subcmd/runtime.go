@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/magicdrive/kjak/internal/clock"
 	"github.com/magicdrive/kjak/internal/commandline/option"
@@ -163,7 +164,12 @@ func (rt *Runtime) parsed(ctx context.Context, err error, helpText string) (code
 }
 
 func (rt *Runtime) paths(c option.ConfigOption) (configure.Paths, error) {
-	return configure.DefaultPaths(rt.ConfigEnv, c.ConfigPath, c.NoProject)
+	p, err := configure.DefaultPaths(rt.ConfigEnv, c.ConfigPath, c.NoProject)
+	if err != nil {
+		return p, err
+	}
+	p.SetExplicitSecrets(c.SecretsPath)
+	return p, nil
 }
 
 // load reads the configuration of a run.
@@ -173,6 +179,37 @@ func (rt *Runtime) load(c option.ConfigOption) (*configure.Loaded, error) {
 		return nil, err
 	}
 	return configure.Load(p)
+}
+
+// warnLoadedLiterals reports the literal secrets of the files a send uses.
+func (rt *Runtime) warnLoadedLiterals(l *configure.Loaded) {
+	rt.warnLiterals(l.Global)
+	if l.ProjectTrusted {
+		rt.warnLiterals(l.Project)
+	}
+}
+
+// warnLiterals reports the literal secrets of a configuration file on
+// stderr: they are deprecated (kjak config migrate-secrets moves them to a
+// secrets file).
+func (rt *Runtime) warnLiterals(src *configure.Source) {
+	if src == nil || src.File == nil {
+		return
+	}
+	lits := configure.Literals(src.File)
+	if len(lits) == 0 {
+		return
+	}
+	fmt.Fprintf(rt.Stderr, "kjak: warning: %s keeps %d secret(s) in the file as literal (deprecated): %s\n  move them to a secrets file: kjak config migrate-secrets (see docs/migration.md)\n",
+		src.Path, len(lits), literalFields(lits))
+}
+
+func literalFields(lits []configure.CredentialField) string {
+	fields := make([]string, len(lits))
+	for i, c := range lits {
+		fields[i] = "feathers." + c.Feather + "." + c.Field
+	}
+	return strings.Join(fields, ", ")
 }
 
 // resolveScope is the file a change of name goes to: the scope asked for,

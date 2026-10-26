@@ -14,6 +14,7 @@ Options:
   -s, --scope SCOPE   global or project (default: the file that defines it,
                       else global)
   -c, --config FILE   The global configuration file
+      --secrets FILE  The personal secrets file
       --no-project    Ignore ./.kjak.toml
   -h, --help          Show this help
 

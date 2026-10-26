@@ -122,13 +122,14 @@ func ParseScopedName(command string, args []string) (*ScopedNameOption, error) {
 type SecretOption struct {
 	Env      string // --secret-env VAR
 	Keychain string // --secret-keychain SERVICE/ACCOUNT
-	Stdin    bool   // --secret-stdin: a literal, read from standard input
+	Ref      string // --secret-ref NAME: an entry of a secrets file
+	Stdin    bool   // --secret-stdin: a literal, read from standard input (deprecated)
 }
 
 // Count is the number of sources named.
 func (s SecretOption) Count() int {
 	n := 0
-	for _, b := range []bool{s.Env != "", s.Keychain != "", s.Stdin} {
+	for _, b := range []bool{s.Env != "", s.Keychain != "", s.Ref != "", s.Stdin} {
 		if b {
 			n++
 		}
@@ -170,6 +171,7 @@ func ParseFeatherAdd(args []string) (*FeatherAddOption, error) {
 	fs.Var(&levels, "levels", "")
 	fs.StringVar(&opt.Secret.Env, "secret-env", "", "")
 	fs.StringVar(&opt.Secret.Keychain, "secret-keychain", "", "")
+	fs.StringVar(&opt.Secret.Ref, "secret-ref", "", "")
 	fs.BoolVar(&opt.Secret.Stdin, "secret-stdin", false, "")
 	fs.StringVar(&opt.Username, "username", "", "")
 	fs.StringVar(&opt.Host, "host", "", "")
@@ -191,7 +193,7 @@ func ParseFeatherAdd(args []string) (*FeatherAddOption, error) {
 		return nil, usageErr(cmd, "--type is required (slack, discord or email)")
 	}
 	if n := opt.Secret.Count(); n > 1 {
-		return nil, usageErr(cmd, "--secret-env, --secret-keychain and --secret-stdin exclude each other")
+		return nil, usageErr(cmd, "--secret-env, --secret-keychain, --secret-ref and --secret-stdin exclude each other")
 	}
 	if opt.Secret.Keychain != "" {
 		svc, acct, ok := strings.Cut(opt.Secret.Keychain, "/")
@@ -289,6 +291,9 @@ func ParseConfigInit(args []string) (*ConfigInitOption, error) {
 type ConfigTrustOption struct {
 	ConfigOption
 	Yes bool
+	// AllowUserSecrets (trust): with --yes, allow the project to read the
+	// secrets it names from the personal secrets file (asked otherwise).
+	AllowUserSecrets bool
 }
 
 func ParseConfigTrust(command string, args []string) (*ConfigTrustOption, error) {
@@ -297,9 +302,73 @@ func ParseConfigTrust(command string, args []string) (*ConfigTrustOption, error)
 	opt.ConfigOption.register(fs)
 	fs.BoolVar(&opt.Yes, "yes", false, "")
 	fs.BoolVar(&opt.Yes, "y", false, "")
+	if command == "config trust" {
+		fs.BoolVar(&opt.AllowUserSecrets, "allow-user-secrets", false, "")
+	}
 	pos, err := parse(command, fs, args)
 	if err != nil {
 		return nil, err
 	}
 	return opt, exactArgs(command, pos, 0, "no argument")
+}
+
+// ConfigValidateOption: kjak config validate.
+type ConfigValidateOption struct {
+	ConfigOption
+	OutputOption
+	// Strict: a literal secret is an error, not a warning.
+	Strict bool
+}
+
+// Output is the --output of the options (nil options: none).
+func (o *ConfigValidateOption) Output() *OutputOption {
+	if o == nil {
+		return nil
+	}
+	return &o.OutputOption
+}
+
+func ParseConfigValidate(args []string) (*ConfigValidateOption, error) {
+	const cmd = "config validate"
+	opt := &ConfigValidateOption{}
+	fs := newFlagSet(cmd)
+	opt.ConfigOption.register(fs)
+	opt.OutputOption.register(fs)
+	fs.BoolVar(&opt.Strict, "strict", false, "")
+	pos, err := parse(cmd, fs, args)
+	if err != nil {
+		return nil, err
+	}
+	if err := exactArgs(cmd, pos, 0, "no argument"); err != nil {
+		return opt, err
+	}
+	return opt, opt.OutputOption.check(cmd)
+}
+
+// ConfigMigrateOption: kjak config migrate-secrets.
+type ConfigMigrateOption struct {
+	ConfigOption
+	Scope      string // global (default) or project
+	SecretsOut string // the new secrets file (default: the scope's)
+	ConfigOut  string // the new configuration file (default: <file>.migrated)
+	DryRun     bool
+}
+
+func ParseConfigMigrate(args []string) (*ConfigMigrateOption, error) {
+	const cmd = "config migrate-secrets"
+	opt := &ConfigMigrateOption{}
+	fs := newFlagSet(cmd)
+	opt.ConfigOption.register(fs)
+	registerScope(fs, &opt.Scope)
+	fs.StringVar(&opt.SecretsOut, "secrets-out", "", "")
+	fs.StringVar(&opt.ConfigOut, "config-out", "", "")
+	fs.BoolVar(&opt.DryRun, "dry-run", false, "")
+	pos, err := parse(cmd, fs, args)
+	if err != nil {
+		return nil, err
+	}
+	if err := exactArgs(cmd, pos, 0, "no argument"); err != nil {
+		return opt, err
+	}
+	return opt, checkScope(cmd, opt.Scope)
 }

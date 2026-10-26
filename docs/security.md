@@ -9,11 +9,15 @@ credential), an SMTP password — is a reference resolved when a send runs:
 |---|---|---|
 | `env` | `{ env = "KJAK_DEV_SLACK_WEBHOOK" }` | the environment variable (must be set and non-empty) |
 | `keychain` | `{ keychain = { service = "kjak", account = "dev_slack" } }` | the OS keychain (below) |
-| `literal` | `{ literal = "https://hooks.slack.com/..." }` | the file itself |
+| `secret` | `{ secret = "dev_slack.webhook_url" }` | a secrets file (below) |
+| `literal` | `{ literal = "https://hooks.slack.com/..." }` | the file itself (deprecated) |
 
-Exactly one source per credential; two are an error. Prefer `env` or
-`keychain`: a `literal` puts the secret in the file (kjak writes its files with
-mode 0600, but backups and repositories may not).
+Exactly one source per credential; two are an error. Prefer `env`,
+`keychain` or `secret`: a `literal` puts the secret in the configuration
+file (kjak writes its files with mode 0600, but backups and repositories may
+not). `kjak send` warns about literals, `kjak config validate --strict`
+refuses them, and `kjak config migrate-secrets` moves them to a secrets file
+([migration.md](migration.md)).
 
 A credential that does not resolve is a preflight error (exit 2): nothing is
 sent to any target.
@@ -33,6 +37,74 @@ sent to any target.
   position, never the value.
 - Command lines: `feather add` takes the secret by reference, or from
   standard input (`--secret-stdin`), never as an argument.
+
+## Secrets files
+
+Secrets live apart from the configuration, in TOML files of their own
+([configuration.md](configuration.md#77-secrets-files)):
+
+| file | chosen | serves |
+|---|---|---|
+| personal | `--secrets FILE`, else `$KJAK_SECRETS` (explicit), else `<config dir>/secrets.toml` (user) | the global configuration; the project configuration for the names its trust allows |
+| project | `./.kjak.secrets.toml` (current) | the project configuration only, trusted with it |
+
+What kjak checks, and why:
+
+- **Private files (Unix).** A secrets file must be a regular file owned by
+  the effective user, with no permission bit for group or others (any of
+  `0o077`); otherwise it is refused before it is parsed (exit 2). The file is
+  opened first and the checks are made on the open descriptor (`fstat`), so
+  a file swapped between a check and the read is not read: there is no
+  separate check of the path. FIFOs and devices are refused without waiting
+  (`O_NONBLOCK`). The size is limited to 1 MiB.
+- **Links.** The project file is opened with `O_NOFOLLOW`: a repository
+  could ship `.kjak.secrets.toml` as a symbolic link to your personal file,
+  which would make your secrets look like the project's. For the same
+  reason it must have a single name (no hard link: another user of the
+  machine could make one in a directory you work in) and must not be the
+  personal file itself (checked with the file's identity). The personal
+  file may be a symbolic link (dotfiles); the file it leads to is checked. kjak does
+  not check the directories above a secrets file: keep them yours.
+- **Windows.** The access control list is not read (not implemented in this
+  version): only "a regular file" and the size are checked, and a project
+  file that is a link or reparse point is refused by a check of the path
+  made before the open (a link created in between is not seen). Keep the
+  personal file under `%AppData%`, whose default ACL is private to the user.
+  `kjak config path` says when permissions are not checked.
+- **Nothing is expanded.** A secret is used as it is: `${VAR}`,
+  `{ env = ... }`, `{{...}}` in a value, in a message or in a template are
+  text. A secret is never substituted into a string.
+- **Errors name keys, not values.** A broken secrets file is reported by
+  line, column or key; values are registered with the redactor when they are
+  resolved, like any other secret.
+
+### The trust boundary of a project
+
+A cloned repository controls `./.kjak.toml` and `./.kjak.secrets.toml`. The
+rules that keep your secrets from it:
+
+1. The project configuration is used only once trusted, as before.
+2. The project secrets file is part of that trust (its canonical path and
+   SHA-256; `config trust` shows the names it defines, never the values). A
+   project secrets file that appears, changes or disappears after the trust
+   withdraws it, so it cannot be swapped after your review.
+3. The global configuration never reads the project secrets file: a
+   repository cannot redirect your own feathers by defining the names they
+   use.
+4. The project configuration reads your personal secrets file only for the
+   names you allowed: `config trust` lists every name the project would read
+   from your file and asks a separate question; `--yes` needs
+   `--allow-user-secrets` for them. The allowed names are stored in the trust
+   entry (`user_secrets`). Any other name is an error when it is resolved,
+   even in a trusted project. kjak's own edits of a trusted project file
+   (`feather add --scope project`) keep the allowed names the new content
+   still uses and allow no new one.
+5. `env` and `keychain` references of a project file are, as before, shown
+   by `config trust` and allowed by trusting the file: reviewing them is
+   your part.
+
+An allowed name means "this project may send this secret to the
+destinations it configures": review those destinations before you allow it.
 
 ## OS keychain
 
@@ -83,7 +155,10 @@ Trust this exact content? [y/N]
 - Without a terminal, `kjak config trust` requires `--yes`: review the file
   first.
 - `kjak config untrust` removes the entry; `kjak config path` shows the state
-  (`trusted`, `untrusted`, `untrusted (changed since it was trusted)`).
+  (`trusted`, `untrusted`, `untrusted (changed since it was trusted)`, or
+  untrusted because of the project secrets file).
+- The project secrets file and the personal secrets the project may read
+  are part of the trust: see [The trust boundary of a project](#the-trust-boundary-of-a-project).
 - kjak edits a project file only when it is trusted (or new), and then trusts
   the content it wrote itself.
 
