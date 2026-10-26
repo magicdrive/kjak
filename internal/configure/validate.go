@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/magicdrive/kjak/internal/core"
 )
@@ -146,6 +147,14 @@ func featherProblems(fc FeatherConfig) []string {
 			add("levels: %v", err)
 		}
 	}
+	// text kjak prints (config trust, feather show, errors) or puts in a
+	// message header: no control character, which a terminal would run
+	// (an escape sequence) or which would break the line
+	for _, f := range textFields(fc) {
+		if HasControl(f.value) {
+			add("%s: contains a control character", f.name)
+		}
+	}
 	webhookFields := fc.WebhookURL != nil || fc.Username != ""
 	emailFields := fc.Host != "" || fc.Port != 0 || fc.Security != "" || fc.User != "" || fc.Password != nil ||
 		fc.From != "" || len(fc.To) > 0 || fc.SubjectPrefix != ""
@@ -163,6 +172,9 @@ func featherProblems(fc FeatherConfig) []string {
 		if webhookFields || emailFields {
 			add("external feathers take no webhook_url, username or email settings (give the plugin settings and secrets)")
 		}
+		if len(fc.AllowNetworks) > 0 || len(fc.AllowHosts) > 0 {
+			add("external feathers take no allow_networks or allow_hosts (a plugin makes its own connections)")
+		}
 		problems = append(problems, externalProblems(fc)...)
 	case TypeHTTP:
 		if webhookFields || emailFields {
@@ -176,6 +188,7 @@ func featherProblems(fc FeatherConfig) []string {
 		if fc.Type == TypeSlack && fc.Username != "" {
 			add("slack feathers take no username (an incoming webhook posts as its app)")
 		}
+		problems = append(problems, addressPolicyProblems(fc)...)
 		if fc.WebhookURL == nil {
 			add("webhook_url is required")
 		} else if err := fc.WebhookURL.Validate(); err != nil {
@@ -189,6 +202,7 @@ func featherProblems(fc FeatherConfig) []string {
 		if webhookFields {
 			add("email feathers take no webhook_url or username")
 		}
+		problems = append(problems, addressPolicyProblems(fc)...)
 		if fc.Host == "" {
 			add("host is required")
 		}
@@ -236,6 +250,39 @@ func featherProblems(fc FeatherConfig) []string {
 		}
 	}
 	return problems
+}
+
+type textField struct{ name, value string }
+
+// textFields are the free-text fields of fc (not the message templates,
+// not the secrets).
+func textFields(fc FeatherConfig) []textField {
+	fs := []textField{
+		{"username", fc.Username}, {"host", fc.Host}, {"user", fc.User}, {"from", fc.From},
+		{"subject_prefix", fc.SubjectPrefix}, {"plugin", fc.Plugin}, {"path", fc.Path},
+	}
+	for _, a := range fc.To {
+		fs = append(fs, textField{"to", a})
+	}
+	for _, k := range sortedKeys(fc.Settings) {
+		fs = append(fs, textField{"settings." + k, fc.Settings[k]})
+	}
+	for _, k := range sortedKeys(fc.Query) {
+		fs = append(fs, textField{"query (a key)", k})
+	}
+	for _, h := range fc.AllowHosts {
+		fs = append(fs, textField{"allow_hosts", h})
+	}
+	if fc.Auth != nil {
+		fs = append(fs, textField{"auth.username", fc.Auth.Username}, textField{"auth.header", fc.Auth.Header})
+	}
+	return fs
+}
+
+// HasControl reports whether s holds a control character: C0 (ESC, BEL,
+// a line break, a tab), DEL or C1.
+func HasControl(s string) bool {
+	return strings.IndexFunc(s, unicode.IsControl) >= 0
 }
 
 // CheckWebhookURL checks a webhook URL, which is a secret: https, or http to

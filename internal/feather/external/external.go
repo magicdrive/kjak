@@ -32,7 +32,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode"
 
 	"github.com/magicdrive/kjak/internal/clock"
 	"github.com/magicdrive/kjak/internal/configure"
@@ -111,6 +110,9 @@ type Feather struct {
 	MaxAttempts    int
 	IdempotencyKey string
 	Clock          clock.Clock
+	// Redactor: the secrets redacted from the plugin's text before it is
+	// shortened (nil: none).
+	Redactor *credential.Redactor
 
 	attempts atomic.Int32
 }
@@ -120,6 +122,9 @@ type Options struct {
 	// LookupEnv reads kjak's environment (PATH, the allowed variables).
 	LookupEnv func(string) (string, bool)
 	Clock     clock.Clock
+	// Redactor redacts the secrets of the feather from the plugin's text
+	// (its message, its stderr) before it is shortened.
+	Redactor *credential.Redactor
 }
 
 // New builds the feather of fc around a checked executable, with the
@@ -128,7 +133,7 @@ func New(name string, fc configure.FeatherConfig, exe *Executable, secrets map[s
 	f := &Feather{
 		Name: name, Exe: exe, Rehash: fc.SHA256 != "",
 		Settings: map[string]string{}, Secrets: secrets,
-		Timeout: DefaultTimeout, Clock: opt.Clock,
+		Timeout: DefaultTimeout, Clock: opt.Clock, Redactor: opt.Redactor,
 	}
 	for k, v := range fc.Settings {
 		f.Settings[k] = v
@@ -269,7 +274,7 @@ func (f *Feather) run(ctx context.Context, msg core.Message, attempt int) feathe
 	out, overflow := stdout.bytes()
 	diag, _ := stderr.bytes()
 	withDiag := func(err error) error {
-		if d := tail(diag); d != "" {
+		if d := tail(f.Redactor, diag); d != "" {
 			return fmt.Errorf("%w; stderr: %s", err, d)
 		}
 		return err
@@ -289,7 +294,7 @@ func (f *Feather) run(ctx context.Context, msg core.Message, attempt int) feathe
 	if werr != nil {
 		return feather.Unknown(core.ErrCodeProtocol, withDiag(fmt.Errorf("the plugin's output could not be read (%v); it may have delivered", werr)))
 	}
-	o, err := parseResponse(out, c.Now())
+	o, err := parseResponse(f.Redactor, out, c.Now())
 	if err != nil {
 		return feather.Unknown(core.ErrCodeProtocol, withDiag(fmt.Errorf("protocol error: %v; the plugin may have delivered", err)))
 	}
@@ -300,7 +305,7 @@ func (f *Feather) run(ctx context.Context, msg core.Message, attempt int) feathe
 }
 
 // parseResponse turns a response into an outcome.
-func parseResponse(out []byte, now time.Time) (feather.Outcome, error) {
+func parseResponse(rd *credential.Redactor, out []byte, now time.Time) (feather.Outcome, error) {
 	dec := json.NewDecoder(bytes.NewReader(out))
 	var r Response
 	if err := dec.Decode(&r); err != nil {
@@ -324,10 +329,10 @@ func parseResponse(out []byte, now time.Time) (feather.Outcome, error) {
 	text := ""
 	code := ""
 	if r.Error != nil {
-		text, code = clean(r.Error.Message), r.Error.Code
+		text, code = clean(rd, r.Error.Message), r.Error.Code
 	}
 	if text == "" {
-		text = clean(r.Message)
+		text = clean(rd, r.Message)
 	}
 	failure := func(def string) error {
 		if text == "" {
@@ -369,28 +374,19 @@ func rejectedCode(c string) core.ErrorCode {
 	return core.ErrCodeRejected
 }
 
-// clean keeps a plugin's text short and printable.
-func clean(s string) string {
-	s = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return ' '
-		}
-		return r
-	}, s)
-	s = strings.TrimSpace(s)
-	if r := []rune(s); len(r) > 300 {
-		s = string(r[:300]) + "..."
-	}
-	return s
+// printable is a plugin's text on one line, without control characters.
+func printable(s string) string { return strings.TrimSpace(credential.Printable(s)) }
+
+// clean keeps a plugin's text short and printable, the secrets of rd
+// redacted before it is changed (credential.Redactor.Clip).
+func clean(rd *credential.Redactor, s string) string {
+	return rd.Clip(s, printable, 300, false)
 }
 
-// tail is the end of a plugin's stderr, printable and short.
-func tail(b []byte) string {
-	s := clean(strings.ToValidUTF8(string(b), "?"))
-	if r := []rune(s); len(r) > 300 {
-		s = "..." + string(r[len(r)-300:])
-	}
-	return s
+// tail is the end of a plugin's stderr, printable and short, the secrets
+// of rd redacted before it is changed.
+func tail(rd *credential.Redactor, b []byte) string {
+	return rd.Clip(strings.ToValidUTF8(string(b), "?"), printable, 300, true)
 }
 
 func describeStart(err error) string {

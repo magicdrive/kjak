@@ -79,6 +79,9 @@ type Feather struct {
 	IdempotencyKey    string
 	Client            *http.Client
 	Clock             clock.Clock
+	// Redactor: the secrets redacted from a response body before it is
+	// shortened (nil: none).
+	Redactor *credential.Redactor
 
 	attempts atomic.Int32
 }
@@ -88,6 +91,9 @@ type Options struct {
 	Resolver Resolver    // DNS (net.DefaultResolver when nil)
 	TLS      *tls.Config // root CAs of tests; nil: the system's
 	Clock    clock.Clock
+	// Redactor redacts the secrets of the feather from a response body
+	// before it is shortened for an error (an API may echo them).
+	Redactor *credential.Redactor
 	// dial replaces the connection to a checked address (tests).
 	dial func(ctx context.Context, network, addr string) (net.Conn, error)
 }
@@ -130,6 +136,7 @@ func New(name string, fc configure.FeatherConfig, rawURL string, auth Auth, opt 
 		Timeout:     configure.DefaultHTTPTimeout,
 		MaxResponse: configure.DefaultMaxResponseBytes,
 		Clock:       opt.Clock,
+		Redactor:    opt.Redactor,
 	}
 	for k, v := range fc.Headers {
 		f.Header.Set(k, v)
@@ -341,7 +348,7 @@ func (f *Feather) classify(status int, h http.Header, body []byte, truncated boo
 			return feather.Confirmed(status)
 		}
 	}
-	detail := webhook.Sanitize(string(body))
+	detail := webhook.Sanitize(f.Redactor, string(body))
 	if truncated {
 		detail += " (response cut at max_response_bytes)"
 	}

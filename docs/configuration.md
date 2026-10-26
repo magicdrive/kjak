@@ -214,6 +214,24 @@ levels = ["error", "critical"]
   URL.
 - One refused recipient refuses the whole message: nothing is sent.
 
+### Address policy of a project's slack, discord and email feathers
+
+A slack, discord or email feather of a **project** file sends to a
+destination the project chose, so it connects like an http feather
+([SSRF](security.md#http-feathers-and-ssrf)): to public addresses only,
+directly (proxy environment variables are not used). A webhook relay or an
+SMTP server on this machine or the private network must be allowed in the
+project file, and `config trust` shows it (`address policy: ...`):
+
+| key | meaning | example |
+|---|---|---|
+| `allow_networks` | allows loopback, link-local, private and IPv6-transition addresses inside these CIDR prefixes; never metadata, unspecified, multicast or reserved ones | `["127.0.0.1/32"]` |
+| `allow_hosts` | allows the private addresses of these host names (not loopback or link-local) | `["smtp.corp.example"]` |
+
+The feathers of your global file are yours: they are not restricted (the
+keys are accepted there and have no effect), and they keep using the proxy
+environment variables.
+
 ### http
 
 Any HTTP API or webhook: the guide is [http.md](http.md). Configured in the
