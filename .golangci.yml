@@ -75,30 +75,26 @@ linters:
         linters: [gosec]
         text: "G103:"
 
+      # G103 (unsafe): the OS calls that read ACLs and run plugins pass
+      # pointers to the structures they fill or read, as x/sys does:
+      # getattrlist/fgetattrlist through libSystem trampolines (macOS; x/sys
+      # wraps neither), the TOKEN_OWNER and ACL buffers GetTokenInformation
+      # and GetSecurityInfo return (x/sys exposes no typed accessor for the
+      # ACL bytes), JOBOBJECT_EXTENDED_LIMIT_INFORMATION for
+      # SetInformationJobObject, and GetProcessHandleCount in a test. Every
+      # buffer is bounds-checked by the parsers (fuzzed) before it is read.
+      - path: internal/fileacl/(getattrlist_darwin|fileacl_windows)\.go
+        linters: [gosec]
+        text: "G103:"
+      - path: internal/feather/external/(proc_windows|external_windows_test)\.go
+        linters: [gosec]
+        text: "G103:"
+
       # G101 (hardcoded credentials): SecretsFileName/ProjectSecretsFileName
       # are file names ("secrets.toml"), not credentials.
       - path: internal/configure/secrets\.go
         linters: [gosec]
         text: "G101:"
-
-      # errcheck, best-effort cleanup on paths that already return the error
-      # that matters (the files are owned by the OS-security work, kept
-      # unchanged here): closing a temporary file or a lock file after a
-      # failed write/lock, os.Remove of the temporary file that was not
-      # committed, and deferred Close of files opened read-only (atomic.go
-      # readOptional, secrets.go read, discover.go plugin stat). Close of a
-      # read-only descriptor reports nothing actionable; the write path
-      # checks Close (atomic.go and secrets.go keep `cerr := f.Close()`).
-      - path: internal/configure/(atomic|secrets)\.go
-        linters: [errcheck]
-        text: "Error return value of `(tmp\\.Close|f\\.Close|os\\.Remove)` is not checked"
-      # gosec G104 is the same finding as errcheck above (the same calls).
-      - path: internal/configure/(atomic|secrets)\.go
-        linters: [gosec]
-        text: "G104:"
-      - path: internal/feather/external/discover\.go
-        linters: [errcheck]
-        text: "Error return value of `f\\.Close` is not checked"
 
       # ---- tests -----------------------------------------------------------
 

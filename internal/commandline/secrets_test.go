@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -73,8 +74,8 @@ func TestSendWithSecretReferences(t *testing.T) {
 
 // A secrets file other users can read is refused: nothing is sent.
 func TestCritical_LooseSecretsFileRefused(t *testing.T) {
-	if !configure.SecretsChecksPermissions {
-		t.Skip("permissions are not checked on this OS")
+	if runtime.GOOS == "windows" {
+		t.Skip("mode bits: Windows has its own test (secrets_windows_test.go: an ACE for Everyone)")
 	}
 	p := newProvider(t, 200, "ok")
 	e := newEnv(t)
@@ -183,7 +184,7 @@ func TestCritical_ProjectSecretsReplacementAndLinks(t *testing.T) {
 }
 
 func TestProjectSecretsLinkRefused(t *testing.T) {
-	if !configure.SecretsChecksPermissions {
+	if runtime.GOOS == "windows" {
 		t.Skip("symbolic links need a privilege on Windows")
 	}
 	e := newEnv(t)
@@ -250,7 +251,7 @@ func TestMigrateSecrets(t *testing.T) {
 	if string(before) != string(after) {
 		t.Fatal("the original file was changed")
 	}
-	if configure.SecretsChecksPermissions {
+	if runtime.GOOS != "windows" {
 		if st, err := os.Stat(e.userSecrets()); err != nil || st.Mode().Perm() != 0o600 {
 			t.Fatalf("secrets file mode: %v %v", st, err)
 		}

@@ -92,19 +92,19 @@ func rewrite(path string, expect Expect, fn func(current []byte) ([]byte, error)
 	committed := false
 	defer func() {
 		if !committed {
-			os.Remove(tmpName)
+			_ = os.Remove(tmpName)
 		}
 	}()
 	if err := tmp.Chmod(fileMode(path)); err != nil && runtime.GOOS != "windows" {
-		tmp.Close()
+		_ = tmp.Close()
 		return oldHash, "", err
 	}
 	if _, err := tmp.Write(next); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return oldHash, "", err
 	}
 	if err := syncFile(tmp); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return oldHash, "", err
 	}
 	if err := tmp.Close(); err != nil {
@@ -139,7 +139,7 @@ func readOptional(path string) ([]byte, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	b, err := io.ReadAll(io.LimitReader(f, MaxConfigSize+1))
 	if err != nil {
 		return nil, false, err
@@ -186,14 +186,14 @@ func lockFile(path string) (func(), error) {
 	}
 	held, err := tryLock(f)
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, fmt.Errorf("cannot lock %s: %w", lock, err)
 	}
 	if held {
-		f.Close()
+		_ = f.Close()
 		return nil, fmt.Errorf("%w (lock file %s)", ErrLocked, lock)
 	}
-	return func() { f.Close() }, nil
+	return func() { _ = f.Close() }, nil
 }
 
 func syncDir(dir string) {
