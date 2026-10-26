@@ -52,6 +52,7 @@ var metadata = []netip.Addr{
 	netip.MustParseAddr("192.0.0.192"),
 	netip.MustParseAddr("fd00:ec2::254"),
 	netip.MustParseAddr("fd00:ec2::23"),
+	netip.MustParseAddr("fd20:ce::254"), // GCP IPv6
 }
 
 func prefixes(list ...string) []netip.Prefix {
@@ -63,7 +64,7 @@ func prefixes(list ...string) []netip.Prefix {
 }
 
 var (
-	reserved4 = prefixes("0.0.0.0/8", "240.0.0.0/4", "255.255.255.255/32")
+	reserved4 = prefixes("0.0.0.0/8", "240.0.0.0/4", "255.255.255.255/32", "192.88.99.0/24" /* 6to4 relay anycast */)
 	private4  = prefixes(
 		"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", // RFC 1918
 		"100.64.0.0/10",   // carrier-grade NAT (RFC 6598)
@@ -76,10 +77,14 @@ var (
 	private6 = prefixes("fc00::/7", "fec0::/10", "2001:db8::/32", "100::/64")
 	// IPv4-compatible IPv6 (deprecated, RFC 4291 2.5.5.1): never a
 	// destination
-	compat4   = netip.MustParsePrefix("::/96")
-	nat64     = prefixes("64:ff9b::/96", "64:ff9b:1::/48")
-	sixToFour = netip.MustParsePrefix("2002::/16")
-	teredo    = netip.MustParsePrefix("2001::/32")
+	compat4 = netip.MustParsePrefix("::/96")
+	nat64   = prefixes("64:ff9b::/96")
+	// local-use NAT64 (RFC 8215): the IPv4 address is not at a fixed place
+	nat64Local = netip.MustParsePrefix("64:ff9b:1::/48")
+	// IPv4-translated (RFC 2765, ::ffff:0:0:0/96)
+	translated4 = netip.MustParsePrefix("::ffff:0:0:0/96")
+	sixToFour   = netip.MustParsePrefix("2002::/16")
+	teredo      = netip.MustParsePrefix("2001::/32")
 )
 
 // Classify tells the category of an address. An IPv4-mapped, NAT64 or 6to4
@@ -124,6 +129,12 @@ func Classify(a netip.Addr) Category {
 		if p.Contains(a) {
 			return worse(CatTunnel, Classify(netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]})))
 		}
+	}
+	if translated4.Contains(a) {
+		return worse(CatTunnel, Classify(netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]})))
+	}
+	if nat64Local.Contains(a) {
+		return CatTunnel
 	}
 	if sixToFour.Contains(a) {
 		return worse(CatTunnel, Classify(netip.AddrFrom4([4]byte{b[2], b[3], b[4], b[5]})))

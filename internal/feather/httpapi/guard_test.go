@@ -58,6 +58,12 @@ func TestClassify(t *testing.T) {
 		"FD00:EC2::254":            CatMetadata,
 		"::ffff:7f00:1":            CatLoopback,
 		"0:0:0:0:0:ffff:7f00:0001": CatLoopback,
+		"::ffff:0:7f00:1":          CatLoopback, // IPv4-translated
+		"::ffff:0:a9fe:a9fe":       CatMetadata,
+		"::ffff:0:5db8:d822":       CatTunnel,
+		"192.88.99.1":              CatReserved,
+		"fd20:ce::254":             CatMetadata,
+		"64:ff9b:1::7f00:1":        CatTunnel,
 	}
 	for s, want := range cases {
 		a, err := netip.ParseAddr(s)

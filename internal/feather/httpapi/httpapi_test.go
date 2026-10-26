@@ -408,6 +408,9 @@ func TestCritical_RedirectsKeepCredentialsAtTheirOrigin(t *testing.T) {
 	if len(landed) != 1 || landed[0].Header.Get("X-Api-Key") != "" || landed[0].Header.Get("Authorization") != "" {
 		t.Fatalf("credentials went to another origin: %+v", landed)
 	}
+	if landed[0].Header.Get("Referer") != "" {
+		t.Fatalf("the URL went to another origin as Referer: %q", landed[0].Header.Get("Referer"))
+	}
 	if landed[0].Header.Get("X-Static") != "kept" {
 		t.Fatal("the static header was dropped")
 	}

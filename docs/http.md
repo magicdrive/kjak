@@ -132,7 +132,11 @@ With `format = "text"`, the template is rendered as it is: right for
 plain-text or Markdown APIs, **wrong for JSON** (use `json`).
 
 Nothing in a message is run as a template (`{{...}}` in a body is text), and
-no secret is ever available to a template. A body is at most 1 MiB.
+no secret is ever available to a template. A body template cannot use
+`range`, `template`, `define` or `block` (its data are strings; a `range`
+over a number could run without end), `printf` refuses widths and
+precisions of 1000 or more, and rendering stops at 1 MiB. A body is at most
+1 MiB.
 
 ## Success, errors and the response
 
@@ -195,9 +199,9 @@ feather, redirects included, goes through a guard:
 | private: 10/8, 172.16/12, 192.168/16, 100.64/10 (CGNAT), fc00::/7 (ULA), fec0::/10, 192.0.0/24, 198.18/15, documentation ranges | refused | `allow_networks` (CIDR) or `allow_hosts` (that host name) |
 | loopback: 127/8, ::1 | refused | `allow_networks` only |
 | link-local: 169.254/16, fe80::/10 | refused | `allow_networks` only |
-| IPv6 transition: NAT64 (64:ff9b::/96), 6to4 (2002::/16), Teredo | refused | `allow_networks` only; classified by the IPv4 address they carry |
-| cloud metadata: 169.254.169.254, 169.254.170.2, fd00:ec2::254, 100.100.100.200, 192.0.0.192 | **never** | — |
-| unspecified (0.0.0.0, ::), multicast, broadcast, reserved (0/8, 240/4, IPv4-compatible ::/96) | **never** | — |
+| IPv6 transition: NAT64 (64:ff9b::/96, 64:ff9b:1::/48), IPv4-translated (::ffff:0:0:0/96), 6to4 (2002::/16), Teredo | refused | `allow_networks` only; classified by the IPv4 address they carry when it is at a fixed place |
+| cloud metadata: 169.254.169.254, 169.254.170.2, fd00:ec2::254, fd20:ce::254, 100.100.100.200, 192.0.0.192 | **never** | — |
+| unspecified (0.0.0.0, ::), multicast, broadcast, reserved (0/8, 240/4, 192.88.99/24, IPv4-compatible ::/96) | **never** | — |
 
 - IPv4-mapped IPv6 (`::ffff:127.0.0.1`) is checked as the IPv4 address.
 - kjak resolves the host once, checks every address, and connects to a
@@ -217,7 +221,8 @@ feather, redirects included, goes through a guard:
   user information; `Authorization`, `Cookie` and the `[auth]` header are
   removed as soon as the scheme, host or port differs from the configured
   URL's (stricter than browsers and `curl`, which keep them for a
-  subdomain). A `301`/`302`/`303` turns a `POST` into a `GET` without body
+  subdomain). No `Referer` is sent on a redirect (it would carry the
+  previous URL, a secret with `url_secret`). A `301`/`302`/`303` turns a `POST` into a `GET` without body
   (as browsers do); `307`/`308` repeat it.
 
 ```toml

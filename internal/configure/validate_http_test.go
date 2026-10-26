@@ -114,3 +114,12 @@ func TestHTTPDefaultsAndMerge(t *testing.T) {
 		t.Fatalf("round trip: %v\n%s", err, b)
 	}
 }
+
+func TestHTTPBodyTemplateRefusesRange(t *testing.T) {
+	for _, tpl := range []string{"{{range 9}}x{{end}}", "{{define \"a\"}}x{{end}}"} {
+		doc := httpBase + "url = \"https://a.example/\"\n[feathers.api.body]\nformat = \"text\"\ntemplate = '" + tpl + "'\n"
+		if _, err := Parse([]byte(doc)); err == nil {
+			t.Errorf("%s accepted", tpl)
+		}
+	}
+}

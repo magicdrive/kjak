@@ -121,3 +121,30 @@ func FuzzJSONBodyTemplate(f *testing.F) {
 		}
 	})
 }
+
+// A template cannot make kjak allocate without bound: printf widths, a
+// range in a body template, an output over the limit.
+func TestTemplateLimits(t *testing.T) {
+	data := map[string]string{"body": strings.Repeat("x", 1000)}
+	for _, src := range []string{`{{printf "%999999999d" 1}}`, `{{printf "%.99999f" 1.0}}`, `{{printf "%*d" 999999999 1}}`, `{{printf "%[1]*d" 999999999 1}}`} {
+		if _, err := Text("t", src, data); !errors.Is(err, ErrTemplate) {
+			t.Errorf("%s: %v", src, err)
+		}
+	}
+	for _, src := range []string{`{{range 100000000000}}{{$.body}}{{end}}`, `{{if .body}}{{range 5}}x{{end}}{{end}}`, `{{define "a"}}x{{end}}{{template "a"}}`} {
+		if _, err := Text("t", src, data); !errors.Is(err, ErrTemplate) {
+			t.Errorf("%s: %v", src, err)
+		}
+		if _, err := JSON("t", `{"a": "`+strings.ReplaceAll(src, `"`, `\"`)+`"}`, data); !errors.Is(err, ErrTemplate) {
+			t.Errorf("json %s: %v", src, err)
+		}
+	}
+	// a message template may range, within the output limit
+	big := map[string]string{"x": strings.Repeat("y", 1<<16)}
+	if _, err := Render("t", configure.TemplateConfig{Body: `{{range 100}}{{$.x}}{{end}}`}, big); !errors.Is(err, ErrTemplate) {
+		t.Errorf("an output over the limit: %v", err)
+	}
+	if s, err := Text("t", `{{printf "%-10s|" .body | len}}`, map[string]string{"body": "a"}); err != nil || s != "11" {
+		t.Errorf("printf: %q %v", s, err)
+	}
+}
