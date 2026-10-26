@@ -27,14 +27,14 @@ const (
 // future feather and are refused (UnsupportedFeatherTypes).
 var FeatherTypes = []string{TypeSlack, TypeDiscord, TypeEmail, TypeHTTP, TypeExternal}
 
-// UnsupportedFeatherTypes are known but not implemented in v0.1.0; a feather
+// UnsupportedFeatherTypes are known but not implemented; a feather
 // of one of them is a configuration error, never a silent no-op.
 var UnsupportedFeatherTypes = map[string]string{
-	"os":      "OS-native notifications are not supported in kjak v0.1.0",
-	"native":  "OS-native notifications are not supported in kjak v0.1.0",
-	"macos":   "OS-native notifications are not supported in kjak v0.1.0",
-	"linux":   "OS-native notifications are not supported in kjak v0.1.0",
-	"windows": "OS-native notifications are not supported in kjak v0.1.0",
+	"os":      "OS-native notifications are not supported",
+	"native":  "OS-native notifications are not supported",
+	"macos":   "OS-native notifications are not supported",
+	"linux":   "OS-native notifications are not supported",
+	"windows": "OS-native notifications are not supported",
 }
 
 // Defaults of the engine (spec: timeout 10s, 2 retries, 5 at a time).
@@ -186,17 +186,18 @@ type HTTPRetry struct {
 func (f FeatherConfig) IsEnabled() bool { return f.Enabled == nil || *f.Enabled }
 
 // GroupConfig is a named list of feathers (no groups: nesting is not
-// supported in v0.1.0).
+// supported).
 type GroupConfig struct {
-	Feathers []string `toml:"feathers"`
+	Feathers []string `toml:"feathers" json:"feathers"`
 }
 
 // TemplateConfig is a message template (internal/template).
+// The JSON names are those of `config show -o json`.
 type TemplateConfig struct {
-	Title string `toml:"title,omitempty"`
-	Body  string `toml:"body"`
-	Level string `toml:"level,omitempty"`
-	URL   string `toml:"url,omitempty"`
+	Title string `toml:"title,omitempty" json:"title"`
+	Body  string `toml:"body" json:"body"`
+	Level string `toml:"level,omitempty" json:"level"`
+	URL   string `toml:"url,omitempty" json:"url"`
 }
 
 // Duration is a time.Duration written as a Go duration string ("10s").
