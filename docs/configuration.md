@@ -116,8 +116,8 @@ The options `--timeout`, `--max-retries`, `--concurrency`, `--level` and
 
 ## 4. Feathers
 
-A feather is one destination: a Slack incoming webhook, a Discord webhook or
-an SMTP server with its recipients. `kjak feather types` lists the types.
+A feather is one destination: a Slack incoming webhook, a Discord webhook,
+an SMTP server with its recipients, or any HTTP API. `kjak feather types` lists the types.
 
 **Names** (feathers, groups, templates): letters, digits, `_`, `.`, `-`; at
 most 64; starting with a letter or a digit. A name cannot be both a feather
@@ -131,7 +131,7 @@ sending anything (exit 2).
 
 | key | type | default | CLI (`feather add`) | meaning |
 |---|---|---|---|---|
-| `type` | string | required | `--type` | `slack`, `discord` or `email` (OS-native notifications are not available) |
+| `type` | string | required | `--type` | `slack`, `discord`, `email` or `http` (OS-native notifications are not available) |
 | `enabled` | bool | `true` | `--disabled`; `feather enable` / `disable` | a disabled feather is not sent to |
 | `levels` | list | all levels | `--levels L[,L]` | the levels the feather accepts |
 
@@ -213,6 +213,56 @@ levels = ["error", "critical"]
   `subject_prefix`. The body is UTF-8 quoted-printable text, followed by the
   URL.
 - One refused recipient refuses the whole message: nothing is sent.
+
+### http
+
+Any HTTP API or webhook: the guide is [http.md](http.md). Configured in the
+file (`feather add` does not create one).
+
+| key | type | default | required | validation | security | example |
+|---|---|---|---|---|---|---|
+| `url` | string | — | one of `url`, `url_secret` | absolute `https` (`http` with `allow_http`), a host, no user information, no fragment | shown by `feather show` and `config trust`: not for secrets | `"https://api.example.com/v1/alerts"` |
+| `url_secret` | credential | — | one of `url`, `url_secret` | as `url`, checked when resolved | never printed; path and query redacted | `{ secret = "chat.webhook_url" }` |
+| `method` | string | `"POST"` | no | `GET`, `POST`, `PUT`, `PATCH`, `DELETE` (upper case) | decides the retry policy | `"PUT"` |
+| `headers` | table of strings | — | no | header names (tokens), values without control characters, at most 64; not `Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Keep-Alive`, `Upgrade`, `TE`, `Trailer`, `Proxy-*`, `Authorization`, `Cookie`, `Content-Type` | plain values: no secret (use `[auth]`) | `{ "X-Team" = "ops" }` |
+| `query` | table of strings | — | no | non-empty keys | plain values: kjak never puts a secret in a query | `{ source = "kjak" }` |
+| `auth.type` | string | `"none"` | with `[auth]` | `none`, `bearer`, `basic`, `header`; only the keys of the type | — | `"bearer"` |
+| `auth.token` | credential | — | `bearer` | a credential reference | sent as `Authorization: Bearer ...`; redacted | `{ secret = "api.token" }` |
+| `auth.username` | string | — | `basic` | no `:` or line break | shown | `"kjak"` |
+| `auth.password` | credential | — | `basic` | a credential reference | the encoded header is redacted too | `{ env = "API_PASSWORD" }` |
+| `auth.header` | string | — | `header` | a header name, not a reserved one (`Authorization` and `Cookie` allowed here), not also in `headers` | — | `"X-Api-Key"` |
+| `auth.value` | credential | — | `header` | a credential without line breaks | redacted | `{ keychain = { service = "kjak", account = "api" } }` |
+| `body.format` | string | `json` (`POST`, `PUT`, `PATCH`), `none` (`GET`, `DELETE`) | no | `json`, `text`, `none`; a `GET` has no body | — | `"text"` |
+| `body.template` | string | — | no | `text/template`; for `json` a JSON document whose strings are templates; at most 64 KiB | a message cannot change a JSON template's structure; no secret is available to it | `'{"text": "{{.title}}: {{.body}}"}'` |
+| `body.content_type` | string | `application/json` / `text/plain; charset=utf-8` | no | a media type | — | `"text/markdown"` |
+| `timeout` | duration | `"10s"` | no | 0 < t <= 10m | — | `"5s"` |
+| `success_status` | list of strings | `["2xx"]` | no | `"NNN"` (100-599) or `"Nxx"` | — | `["200", "204"]` |
+| `max_response_bytes` | integer | 65536 | no | 1 - 10485760 | bounds the memory a response takes | `4096` |
+| `allow_http` | bool | `false` | no | — | `http://` sends everything in clear text | `true` |
+| `allow_networks` | list of strings | — | no | CIDR prefixes or addresses | allows loopback, link-local, private and IPv6-transition addresses inside them; never metadata, unspecified, multicast or reserved ones | `["10.1.0.0/16"]` |
+| `allow_hosts` | list of strings | — | no | host names | allows the private addresses of these names (not loopback or link-local) | `["alerts.corp.example"]` |
+| `max_redirects` | integer | 0 | no | 0 - 10 | each redirect is checked like the URL; credentials are dropped when the origin changes | `2` |
+| `idempotency_key` | bool | `false` | no | — | lets `POST` and `PATCH` be retried under policy `safe` | `true` |
+| `idempotency_header` | string | `"Idempotency-Key"` | no | with `idempotency_key`; a header name, not reserved | — | `"X-Request-Id"` |
+| `retry.policy` | string | `"safe"` | no | `safe`, `never`, `always` | `always` may deliver a `POST` twice | `"never"` |
+| `retry.max_attempts` | integer | 0 (no cap) | no | 0 - 11 | — | `3` |
+
+```toml
+[feathers.ops_api]
+type = "http"
+url = "https://api.example.com/v1/alerts"
+headers = { "X-Team" = "ops" }
+
+[feathers.ops_api.auth]
+type = "bearer"
+token = { secret = "ops_api.token" }
+
+[feathers.ops_api.body]
+template = '{"summary": "[{{.level}}] {{.title}}", "details": "{{.body}}"}'
+```
+
+Proxies from the environment are not used by http feathers, and every
+connection is checked by the address policy: [http.md](http.md#the-address-policy-ssrf).
 
 ## 5. Groups
 

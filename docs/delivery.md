@@ -89,6 +89,30 @@ used when there is no `Retry-After` header.
 `Retry-After` is read as delay-seconds or an HTTP date (both capped at 24h). The
 wait before a retry is `Retry-After` when given, else the backoff.
 
+### HTTP feathers
+
+An `http` feather ([http.md](http.md)) is classified like the webhooks
+(HTTP/1.1, a connection per request, `httptrace` for how far the request
+got), with its own success statuses, and an address policy:
+
+| outcome | acceptance | retryable |
+|---|---|---|
+| status in `success_status` (default 2xx) | confirmed | — |
+| 429 | rejected (`rate_limited`) | by the retry policy, after `Retry-After` |
+| 408, 500, 503, other 5xx | rejected (`server_error`) | by the retry policy (`Retry-After` honored) |
+| 502, 504 | **unknown** | never |
+| 3xx not followed, other statuses, a 2xx not in `success_status` | rejected | no |
+| address or redirect refused by the policy | rejected (`blocked`) | no |
+| error before the request was fully written; the attempt `timeout` before it was | rejected (`network`) | by the retry policy |
+| the attempt `timeout`, the deadline or SIGINT after it was written; connection lost | **unknown** | never |
+
+**The retry policy** decides whether a retryable refusal is retried at all:
+by default (`safe`) `GET`, `PUT` and `DELETE` are, `POST` and `PATCH` only
+with `idempotency_key = true` (the same key on every attempt of a send);
+`never` retries nothing; `always` retries every method. `retry.max_attempts`
+caps the attempts below `1 + max_retries`. The engine is unchanged: it
+retries what an attempt marks retryable, never an unknown acceptance.
+
 ### E-mail (SMTP)
 
 kjak speaks SMTP itself to know the stage of an error:

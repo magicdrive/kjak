@@ -2,8 +2,8 @@
 
 [日本語](README_ja.md) · [Getting started](docs/getting-started.md) · [Configuration](docs/configuration.md)
 
-kjak delivers one notification to many destinations — Slack, Discord and
-e-mail — from the command line, a script or CI. Each destination is a
+kjak delivers one notification to many destinations — Slack, Discord,
+e-mail and any HTTP API — from the command line, a script or CI. Each destination is a
 **feather**; feathers can be gathered in **groups**.
 
 ```sh
@@ -184,9 +184,36 @@ wants from **your** secrets file must be allowed, name by name, when you
 trust it. See [docs/configuration.md](docs/configuration.md) and
 [docs/security.md](docs/security.md).
 
+### HTTP API / webhook feathers
+
+An `http` feather sends to any HTTP API: method, headers, query,
+authentication (bearer, basic, a custom header; secrets by reference) and a
+JSON or text body, from a template if you want one.
+
+```toml
+[feathers.ops_api]
+type = "http"
+url = "https://api.example.com/v1/alerts"
+
+[feathers.ops_api.auth]
+type = "bearer"
+token = { secret = "ops_api.token" }
+
+[feathers.ops_api.body]
+template = '{"summary": "[{{.level}}] {{.title}}", "details": "{{.body}}"}'
+```
+
+`https` only (unless `allow_http`), no redirects (unless `max_redirects`),
+and no connection to loopback, link-local, private or cloud-metadata
+addresses unless the configuration allows the network: the address is
+checked where the connection is made, so DNS rebinding does not get around
+it. `POST` and `PATCH` are not retried unless an idempotency key (or the
+policy) allows it. See the [HTTP feather guide](docs/http.md).
+
 ## Known limitations
 
-- Feathers: Slack (incoming webhooks), Discord (webhooks) and e-mail (SMTP).
+- Feathers: Slack (incoming webhooks), Discord (webhooks), e-mail (SMTP) and
+  HTTP APIs (`http`).
   **OS-native notifications are not supported** (a future feather); a feather
   of type `os` is a configuration error.
 - OS keychain: macOS (`security`) and Linux (`secret-tool`, libsecret) are
@@ -205,6 +232,7 @@ More in [docs/troubleshooting.md](docs/troubleshooting.md).
 - [CLI usage](docs/cli.md)
 - [Credentials, trust and security](docs/security.md)
 - [Migrating literal secrets](docs/migration.md)
+- [HTTP API / webhook feathers](docs/http.md)
 - [Delivery, retry and acceptance semantics](docs/delivery.md)
 - [Development guide](docs/development.md)
 - [Release runbook](docs/release.md)

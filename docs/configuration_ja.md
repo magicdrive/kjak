@@ -94,7 +94,7 @@ targets = ["development"]
 
 ## 4. Feather
 
-feather は1つの通知先です。Slack の Incoming Webhook、Discord の Webhook、または SMTP サーバーと宛先の組です。`kjak feather types` で種類を一覧できます。
+feather は1つの通知先です。Slack の Incoming Webhook、Discord の Webhook、SMTP サーバーと宛先の組、または任意の HTTP API です。`kjak feather types` で種類を一覧できます。
 
 **名前**（feather、group、テンプレート共通）：英数字、`_`、`.`、`-`。最大 64 文字で、英数字で始まる必要があります。同じ名前を feather と group の両方に使うことはできません。
 
@@ -104,7 +104,7 @@ feather は1つの通知先です。Slack の Incoming Webhook、Discord の Web
 
 | キー | 型 | 既定値 | CLI（`feather add`） | 意味 |
 |---|---|---|---|---|
-| `type` | 文字列 | 必須 | `--type` | `slack`、`discord`、`email`（OS ネイティブの通知には対応していない） |
+| `type` | 文字列 | 必須 | `--type` | `slack`、`discord`、`email`、`http`（OS ネイティブの通知には対応していない） |
 | `enabled` | 真偽値 | `true` | `--disabled`、`feather enable` / `disable` | 無効な feather には送信しない |
 | `levels` | リスト | すべてのレベル | `--levels L[,L]` | 受け付けるレベル |
 
@@ -174,6 +174,54 @@ levels = ["error", "critical"]
 - `from` と `to` はアドレスのみです（`name@example.com`。表示名は不可）。
 - 件名は、`subject_prefix` の後にタイトル、タイトルがなければ `[LEVEL] 本文の1行目` です。本文は UTF-8 の quoted-printable テキストで、末尾に URL が付きます。
 - 宛先が1つでも拒否されると、メッセージ全体が拒否され、誰にも送信されません。
+
+### http
+
+任意の HTTP API や Webhook に送ります。ガイドは [http.md](http.md)（英語）です。設定ファイルに書きます（`feather add` では作成できません）。
+
+| キー | 型 | 既定値 | 必須 | 検証 | セキュリティ上の意味 | 例 |
+|---|---|---|---|---|---|---|
+| `url` | 文字列 | — | `url` か `url_secret` のどちらか | 絶対 URL の `https`（`allow_http` があれば `http`）。ホストが必要。ユーザー情報とフラグメントは不可 | `feather show` と `config trust` に表示される。秘密情報には使わない | `"https://api.example.com/v1/alerts"` |
+| `url_secret` | 認証情報 | — | `url` か `url_secret` のどちらか | `url` と同じ（解決時に検査） | 表示しない。パスとクエリはエラーから除去 | `{ secret = "chat.webhook_url" }` |
+| `method` | 文字列 | `"POST"` | いいえ | `GET`、`POST`、`PUT`、`PATCH`、`DELETE`（大文字） | 再試行の方針を決める | `"PUT"` |
+| `headers` | 文字列のテーブル | — | いいえ | ヘッダー名はトークン、値に制御文字なし、最大 64。`Host`、`Content-Length`、`Transfer-Encoding`、`Connection`、`Keep-Alive`、`Upgrade`、`TE`、`Trailer`、`Proxy-*`、`Authorization`、`Cookie`、`Content-Type` は不可 | 値は平文。秘密情報は `[auth]` へ | `{ "X-Team" = "ops" }` |
+| `query` | 文字列のテーブル | — | いいえ | キーは空でない | 値は平文。kjak が秘密情報をクエリに入れることはない | `{ source = "kjak" }` |
+| `auth.type` | 文字列 | `"none"` | `[auth]` があれば | `none`、`bearer`、`basic`、`header`。その種類のキーのみ | — | `"bearer"` |
+| `auth.token` | 認証情報 | — | `bearer` | 認証情報の参照 | `Authorization: Bearer ...` として送る。除去対象 | `{ secret = "api.token" }` |
+| `auth.username` | 文字列 | — | `basic` | `:` と改行は不可 | 表示される | `"kjak"` |
+| `auth.password` | 認証情報 | — | `basic` | 認証情報の参照 | エンコード後のヘッダー値も除去対象 | `{ env = "API_PASSWORD" }` |
+| `auth.header` | 文字列 | — | `header` | ヘッダー名。予約済みのものは不可（ここでは `Authorization` と `Cookie` は可）。`headers` との重複不可 | — | `"X-Api-Key"` |
+| `auth.value` | 認証情報 | — | `header` | 改行を含まない認証情報 | 除去対象 | `{ keychain = { service = "kjak", account = "api" } }` |
+| `body.format` | 文字列 | `json`（`POST`、`PUT`、`PATCH`）、`none`（`GET`、`DELETE`） | いいえ | `json`、`text`、`none`。`GET` は本文なし | — | `"text"` |
+| `body.template` | 文字列 | — | いいえ | `text/template`。`json` では文字列値がテンプレートである JSON 文書。最大 64 KiB | メッセージが JSON テンプレートの構造を変えることはできない。秘密情報はテンプレートから参照できない | `'{"text": "{{.title}}: {{.body}}"}'` |
+| `body.content_type` | 文字列 | `application/json` / `text/plain; charset=utf-8` | いいえ | メディアタイプ | — | `"text/markdown"` |
+| `timeout` | 期間 | `"10s"` | いいえ | 0 < t <= 10m | — | `"5s"` |
+| `success_status` | 文字列のリスト | `["2xx"]` | いいえ | `"NNN"`（100〜599）または `"Nxx"` | — | `["200", "204"]` |
+| `max_response_bytes` | 整数 | 65536 | いいえ | 1〜10485760 | 応答が使うメモリを制限する | `4096` |
+| `allow_http` | 真偽値 | `false` | いいえ | — | `http://` ではすべてが平文で流れる | `true` |
+| `allow_networks` | 文字列のリスト | — | いいえ | CIDR またはアドレス | 範囲内のループバック、リンクローカル、プライベート、IPv6 移行アドレスを許可。メタデータ、未指定、マルチキャスト、予約済みは決して許可しない | `["10.1.0.0/16"]` |
+| `allow_hosts` | 文字列のリスト | — | いいえ | ホスト名 | そのホスト名のプライベートアドレスを許可（ループバック、リンクローカルは不可） | `["alerts.corp.example"]` |
+| `max_redirects` | 整数 | 0 | いいえ | 0〜10 | リダイレクト先も URL と同じく検査する。オリジンが変わると認証情報を外す | `2` |
+| `idempotency_key` | 真偽値 | `false` | いいえ | — | 方針 `safe` で `POST` と `PATCH` を再試行できるようにする | `true` |
+| `idempotency_header` | 文字列 | `"Idempotency-Key"` | いいえ | `idempotency_key` と一緒に。予約済みでないヘッダー名 | — | `"X-Request-Id"` |
+| `retry.policy` | 文字列 | `"safe"` | いいえ | `safe`、`never`、`always` | `always` では `POST` が二重に届くことがある | `"never"` |
+| `retry.max_attempts` | 整数 | 0（上限なし） | いいえ | 0〜11 | — | `3` |
+
+```toml
+[feathers.ops_api]
+type = "http"
+url = "https://api.example.com/v1/alerts"
+headers = { "X-Team" = "ops" }
+
+[feathers.ops_api.auth]
+type = "bearer"
+token = { secret = "ops_api.token" }
+
+[feathers.ops_api.body]
+template = '{"summary": "[{{.level}}] {{.title}}", "details": "{{.body}}"}'
+```
+
+http feather は環境変数のプロキシを使わず、すべての接続をアドレスポリシーで検査します（[http.md](http.md#the-address-policy-ssrf)）。
 
 ## 5. Group
 

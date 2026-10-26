@@ -2,7 +2,7 @@
 
 [English](README.md) · [導入ガイド](docs/getting-started_ja.md) · [設定リファレンス](docs/configuration_ja.md)
 
-kjak は、1つの通知を複数の通知先（Slack、Discord、メール）へ送るコマンドラインツールです。ターミナル、スクリプト、CI から使えます。通知先1つ1つを **feather（フェザー）** と呼び、feather は **group（グループ）** にまとめられます。
+kjak は、1つの通知を複数の通知先（Slack、Discord、メール、任意の HTTP API）へ送るコマンドラインツールです。ターミナル、スクリプト、CI から使えます。通知先1つ1つを **feather（フェザー）** と呼び、feather は **group（グループ）** にまとめられます。
 
 ```sh
 kjak send --to development --level error --title "nightly build" "tests failed on main"
@@ -115,9 +115,28 @@ webhook_url = "https://hooks.slack.com/services/..."
 
 explicit のファイルは同じ種類の user のファイルの代わりに使われ、種類ごとに独立して選ばれます。使われているファイルと選択元、状態は `kjak config path` で確認できます。プロジェクト設定が**あなたの** secrets ファイルから読む名前は、`kjak config trust` のときに名前ごとに許可する必要があります。詳しくは[設定リファレンス](docs/configuration_ja.md#7-認証情報とセキュリティ)を参照してください。
 
+## HTTP API / Webhook feather
+
+`http` feather は任意の HTTP API に送ります。メソッド、ヘッダー、クエリ、認証（bearer、basic、任意のヘッダー。秘密情報は参照で指定）、JSON またはテキストの本文（テンプレートも可）を設定できます。
+
+```toml
+[feathers.ops_api]
+type = "http"
+url = "https://api.example.com/v1/alerts"
+
+[feathers.ops_api.auth]
+type = "bearer"
+token = { secret = "ops_api.token" }
+
+[feathers.ops_api.body]
+template = '{"summary": "[{{.level}}] {{.title}}", "details": "{{.body}}"}'
+```
+
+既定では `https` のみ（`allow_http` で http）、リダイレクトは追従せず（`max_redirects` で許可）、ループバック・リンクローカル・プライベート・クラウドのメタデータのアドレスには、設定でネットワークを許可しない限り接続しません。アドレスは接続する時点で検査するので、DNS リバインディングでは回避できません。`POST` と `PATCH` は、冪等性キー（または方針）で許可しない限り再試行しません。詳しくは [HTTP feather ガイド](docs/http.md)（英語）を参照してください。
+
 ## 既知の制限
 
-- feather：Slack（Incoming Webhook）、Discord（Webhook）、メール（SMTP）。**OS ネイティブの通知には対応していません**。種類 `os` の feather は設定エラーになります。
+- feather：Slack（Incoming Webhook）、Discord（Webhook）、メール（SMTP）、HTTP API（`http`）。**OS ネイティブの通知には対応していません**。種類 `os` の feather は設定エラーになります。
 - OS のキーチェーン：macOS（`security`）と Linux（`secret-tool`、libsecret）は読み取りのみ対応。**Windows はキーチェーンに対応していません**（`env` を使ってください）。
 - group は入れ子にできません。
 - 設定を変更するコマンド（`feather add`、`group set` など）は、設定ファイルをコメントなしで書き直します。
@@ -129,7 +148,7 @@ explicit のファイルは同じ種類の user のファイルの代わりに�
 
 - [導入ガイド](docs/getting-started_ja.md)（[English](docs/getting-started.md)）：インストール、Slack、Discord、メール、利用例
 - [設定リファレンス](docs/configuration_ja.md)（[English](docs/configuration.md)）：設定キー、CLI による管理、認証情報、Trust、配信の動作
-- 以下は英語のみです：[CLI usage](docs/cli.md)、[Credentials, trust and security](docs/security.md)、[Migrating literal secrets](docs/migration.md)、[Delivery, retry and acceptance semantics](docs/delivery.md)、[Development guide](docs/development.md)、[Release runbook](docs/release.md)、[Troubleshooting](docs/troubleshooting.md)
+- 以下は英語のみです：[CLI usage](docs/cli.md)、[Credentials, trust and security](docs/security.md)、[Migrating literal secrets](docs/migration.md)、[HTTP API / webhook feathers](docs/http.md)、[Delivery, retry and acceptance semantics](docs/delivery.md)、[Development guide](docs/development.md)、[Release runbook](docs/release.md)、[Troubleshooting](docs/troubleshooting.md)
 
 ## ライセンス
 
