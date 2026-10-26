@@ -172,6 +172,9 @@ func featherProblems(fc FeatherConfig) []string {
 		if webhookFields || emailFields {
 			add("external feathers take no webhook_url, username or email settings (give the plugin settings and secrets)")
 		}
+		if len(fc.AllowNetworks) > 0 || len(fc.AllowHosts) > 0 {
+			add("external feathers take no allow_networks or allow_hosts (a plugin makes its own connections)")
+		}
 		problems = append(problems, externalProblems(fc)...)
 	case TypeHTTP:
 		if webhookFields || emailFields {
@@ -185,6 +188,7 @@ func featherProblems(fc FeatherConfig) []string {
 		if fc.Type == TypeSlack && fc.Username != "" {
 			add("slack feathers take no username (an incoming webhook posts as its app)")
 		}
+		problems = append(problems, addressPolicyProblems(fc)...)
 		if fc.WebhookURL == nil {
 			add("webhook_url is required")
 		} else if err := fc.WebhookURL.Validate(); err != nil {
@@ -198,6 +202,7 @@ func featherProblems(fc FeatherConfig) []string {
 		if webhookFields {
 			add("email feathers take no webhook_url or username")
 		}
+		problems = append(problems, addressPolicyProblems(fc)...)
 		if fc.Host == "" {
 			add("host is required")
 		}

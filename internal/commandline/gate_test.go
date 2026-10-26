@@ -53,7 +53,7 @@ func TestCritical_ProjectWebhookEnvAndKeychainNeedAGrant(t *testing.T) {
 			e := newEnv(t)
 			e.vars["HOOK"] = p.URL
 			e.keychain = keychain{"kjak/kc": p.URL}
-			e.writeProject("[feathers.hook]\ntype = \"" + c.typ + "\"\nwebhook_url = " + c.ref + "\n")
+			e.writeProject("[feathers.hook]\ntype = \"" + c.typ + "\"\nwebhook_url = " + c.ref + "\n" + allowLoopback)
 			r := e.run("config", "trust", "--yes")
 			if r.code != 2 || !strings.Contains(r.stdout, c.grant) || !strings.Contains(r.stderr, "--allow-user-secrets") {
 				t.Fatalf("trust --yes: %+v", r)

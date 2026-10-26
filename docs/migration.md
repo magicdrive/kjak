@@ -144,3 +144,29 @@ kjak config trust --yes --allow-user-secrets    # CI, after the review
 ```
 
 Your global configuration is not affected: its feathers are yours.
+
+## A project's slack, discord and email feathers reach public addresses only
+
+Since 0.0.5 the slack, discord and email feathers of a **project** file
+connect through the address policy of the http feathers: public addresses
+only, no proxy. A project feather that sends to a local relay, a test
+server or a private SMTP server is refused with the code `blocked`
+(nothing is sent):
+
+```
+FAIL  mail (email) failed (1 attempt): connect: address 10.0.0.25 is private: allow it with allow_networks or allow_hosts
+```
+
+Review the destination, then allow it in the project file and trust the
+project again:
+
+```toml
+[feathers.mail]
+type = "email"
+host = "smtp.corp.example"
+allow_hosts = ["smtp.corp.example"]     # or allow_networks = ["10.0.0.0/24"]
+```
+
+A project webhook feather behind a mandatory HTTP proxy cannot use the
+proxy any more: define it in your global file. Global feathers are not
+affected.
