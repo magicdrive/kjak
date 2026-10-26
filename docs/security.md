@@ -31,7 +31,12 @@ sent to any target.
   `*url.Error` quotes the URL, which is the webhook's secret), and every
   resolved secret — and its URL path and query — is removed from every error
   and result message before it is printed, including text a provider echoes
-  back.
+  back. Text kjak shortens or makes single-line (a response body, an SMTP
+  reply, a plugin's message or stderr) is redacted **before** it is changed;
+  the single-line form of a secret (a PEM key's line breaks as spaces) and
+  its JSON-escaped forms are redacted too, and so is the part of a secret a
+  cut leaves (at least its first, or last, 4 bytes). A secret shorter than 4
+  bytes is not searched for.
 - Configuration files are read up to 1 MiB, so an untrusted project file
   cannot exhaust memory before its trust is checked; TOML errors give the
   position, never the value.

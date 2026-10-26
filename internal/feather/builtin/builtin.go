@@ -82,7 +82,7 @@ func Build(ctx context.Context, name string, fc configure.FeatherConfig, d Deps)
 		if err := checkResolvedURL(name, u); err != nil {
 			return nil, err
 		}
-		return &slack.Feather{WebhookURL: u, Poster: &webhook.Poster{Client: httpClient, Clock: d.Clock}}, nil
+		return &slack.Feather{WebhookURL: u, Poster: &webhook.Poster{Client: httpClient, Clock: d.Clock, Redactor: d.Redactor}}, nil
 	case configure.TypeDiscord:
 		u, err := resolve("webhook_url", fc.WebhookURL)
 		if err != nil {
@@ -99,6 +99,7 @@ func Build(ctx context.Context, name string, fc configure.FeatherConfig, d Deps)
 				Clock:          d.Clock,
 				RetryAfterBody: discord.RetryAfterBody,
 				Detail:         discord.Detail,
+				Redactor:       d.Redactor,
 			},
 		}, nil
 	case configure.TypeEmail:
@@ -111,6 +112,7 @@ func Build(ctx context.Context, name string, fc configure.FeatherConfig, d Deps)
 			To:            append([]string(nil), fc.To...),
 			SubjectPrefix: fc.SubjectPrefix,
 			Clock:         d.Clock,
+			Redactor:      d.Redactor,
 		}
 		if f.Security == "" {
 			f.Security = email.SecuritySTARTTLS
@@ -196,7 +198,7 @@ func buildExternal(name string, fc configure.FeatherConfig, d Deps, resolve func
 		}
 		secrets[k] = s
 	}
-	f, err := external.New(name, fc, exe, secrets, external.Options{LookupEnv: d.LookupEnv, Clock: d.Clock})
+	f, err := external.New(name, fc, exe, secrets, external.Options{LookupEnv: d.LookupEnv, Clock: d.Clock, Redactor: d.Redactor})
 	if err != nil {
 		return nil, fmt.Errorf("feather %q: %w", name, err)
 	}
@@ -260,6 +262,7 @@ func buildHTTP(name string, fc configure.FeatherConfig, d Deps, resolve func(str
 	}
 	opt := d.HTTPAPI
 	opt.Clock = d.Clock
+	opt.Redactor = d.Redactor
 	f, err := httpapi.New(name, fc, rawURL, auth, opt)
 	if err != nil {
 		return nil, fmt.Errorf("feather %q: %w", name, err)
