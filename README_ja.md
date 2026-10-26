@@ -2,7 +2,7 @@
 
 [English](README.md) · [導入ガイド](docs/getting-started_ja.md) · [設定リファレンス](docs/configuration_ja.md)
 
-kjak は、1つの通知を複数の通知先（Slack、Discord、メール、任意の HTTP API）へ送るコマンドラインツールです。ターミナル、スクリプト、CI から使えます。通知先1つ1つを **feather（フェザー）** と呼び、feather は **group（グループ）** にまとめられます。
+kjak は、1つの通知を複数の通知先（Slack、Discord、メール、任意の HTTP API、自作のプラグイン）へ送るコマンドラインツールです。ターミナル、スクリプト、CI から使えます。通知先1つ1つを **feather（フェザー）** と呼び、feather は **group（グループ）** にまとめられます。
 
 ```sh
 kjak send --to development --level error --title "nightly build" "tests failed on main"
@@ -134,13 +134,35 @@ template = '{"summary": "[{{.level}}] {{.title}}", "details": "{{.body}}"}'
 
 既定では `https` のみ（`allow_http` で http）、リダイレクトは追従せず（`max_redirects` で許可）、ループバック・リンクローカル・プライベート・クラウドのメタデータのアドレスには、設定でネットワークを許可しない限り接続しません。アドレスは接続する時点で検査するので、DNS リバインディングでは回避できません。`POST` と `PATCH` は、冪等性キー（または方針）で許可しない限り再試行しません。詳しくは [HTTP feather ガイド](docs/http.md)（英語）を参照してください。
 
+## 外部プラグイン
+
+プラグインは、`PATH` 上にある `kjak-feather-<name>` という名前の実行ファイルです。kjak は、それを指定した feather があるときだけ実行します。
+
+```toml
+[feathers.pager]
+type = "external"
+plugin = "pagerduty"                     # kjak-feather-pagerduty を実行
+secrets = { routing_key = { secret = "pagerduty.routing_key" } }
+```
+
+プラグインは標準入力で JSON のリクエスト（メッセージ、設定値、渡すと指定した秘密情報のみ）を1つ受け取り、標準出力に JSON の応答を1つ返します（プロトコル v1）。**プラグインはあなたの権限で動きます**。信頼できるプラグインだけをインストールしてください。kjak は絶対パスの `PATH` ディレクトリだけを探し、あいまいな実行ファイルや他者が書き換えられる実行ファイルを拒否し、実行のたびにファイルを再検査し、最小限の環境変数だけを渡し、タイムアウトでプラグインを終了させます。`kjak feather plugins` は何も実行せずに `PATH` 上のプラグインを一覧します。詳しくは[プラグインガイド](docs/plugins.md)（英語。作り方も含む）を参照してください。
+
+## セキュリティ
+
+- 秘密情報は参照（secrets ファイル、環境変数、キーチェーン）で、送信時に解決し、表示せず、すべてのエラーとレポートから取り除きます。
+- リポジトリの `.kjak.toml`（と `.kjak.secrets.toml`）は `kjak config trust` の後にだけ使い、変更されると Trust は取り消されます。あなたの秘密情報を読むこと、http feather やプラグインにあなたの環境変数を渡すことは、許可した名前に限ります。
+- http feather：https のみ、リダイレクトなし、ループバック・プライベート・リンクローカル・クラウドのメタデータのアドレスには許可がない限り接続しない（接続時に検査）、プロキシは使わない。
+- プラグインはあなたの権限で動きます。kjak はどの実行ファイルを動かすか（絶対パスの `PATH` のみ、実行のたびに検査）と何を渡すか（最小限の環境変数、自身の秘密情報のみ）を制御しますが、プラグインの動作そのものは制御しません。
+
+詳しくは [docs/security.md](docs/security.md)（英語）を参照してください。脆弱性は [SECURITY.md](SECURITY.md) の方法で非公開に報告してください。
+
 ## 既知の制限
 
 - feather：Slack（Incoming Webhook）、Discord（Webhook）、メール（SMTP）、HTTP API（`http`）。**OS ネイティブの通知には対応していません**。種類 `os` の feather は設定エラーになります。
 - OS のキーチェーン：macOS（`security`）と Linux（`secret-tool`、libsecret）は読み取りのみ対応。**Windows はキーチェーンに対応していません**（`env` を使ってください）。
 - group は入れ子にできません。
 - 設定を変更するコマンド（`feather add`、`group set` など）は、設定ファイルをコメントなしで書き直します。
-- プラグインはありません。feather はすべて組み込みです。
+- プラグインはサンドボックス化されません（あなたの権限で動きます）。Windows では、タイムアウト時にプラグインの子プロセスまでは終了させません。
 
 詳しくは [docs/troubleshooting.md](docs/troubleshooting.md)（英語）を参照してください。
 
@@ -148,7 +170,7 @@ template = '{"summary": "[{{.level}}] {{.title}}", "details": "{{.body}}"}'
 
 - [導入ガイド](docs/getting-started_ja.md)（[English](docs/getting-started.md)）：インストール、Slack、Discord、メール、利用例
 - [設定リファレンス](docs/configuration_ja.md)（[English](docs/configuration.md)）：設定キー、CLI による管理、認証情報、Trust、配信の動作
-- 以下は英語のみです：[CLI usage](docs/cli.md)、[Credentials, trust and security](docs/security.md)、[Migrating literal secrets](docs/migration.md)、[HTTP API / webhook feathers](docs/http.md)、[Delivery, retry and acceptance semantics](docs/delivery.md)、[Development guide](docs/development.md)、[Release runbook](docs/release.md)、[Troubleshooting](docs/troubleshooting.md)
+- 以下は英語のみです：[CLI usage](docs/cli.md)、[Credentials, trust and security](docs/security.md)、[Migrating literal secrets](docs/migration.md)、[HTTP API / webhook feathers](docs/http.md)、[External feather plugins](docs/plugins.md)、[Delivery, retry and acceptance semantics](docs/delivery.md)、[Development guide](docs/development.md)、[Release runbook](docs/release.md)、[Troubleshooting](docs/troubleshooting.md)
 
 ## ライセンス
 

@@ -2,7 +2,7 @@
 
 ```
 kjak send ...
-kjak feather list|show|add|remove|enable|disable|types
+kjak feather list|show|add|remove|enable|disable|types|plugins
 kjak group list|show|set|remove
 kjak config path|show|validate|init|trust|untrust|migrate-secrets
 kjak template list|show|set|remove|render
@@ -207,7 +207,15 @@ kjak feather remove NAME [--scope global|project]
 kjak feather enable NAME [--scope global|project]
 kjak feather disable NAME [--scope global|project]
 kjak feather types
+kjak feather plugins [-o json]
 ```
+
+`plugins` lists the `kjak-feather-*` executables of the absolute `PATH`
+directories (name, path, SHA-256, refused or duplicate, the feathers that
+use each) and the `PATH` elements that are not searched; it runs none of
+them ([plugins.md](plugins.md)). `add` does not create `http` or
+`external` feathers: they are written in the file ([http.md](http.md),
+[plugins.md](plugins.md)).
 
 `add` writes the global file unless `--scope project`; `--force` replaces a
 feather of the same name. The secret of the type (Slack and Discord:

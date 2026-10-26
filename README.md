@@ -3,7 +3,8 @@
 [日本語](README_ja.md) · [Getting started](docs/getting-started.md) · [Configuration](docs/configuration.md)
 
 kjak delivers one notification to many destinations — Slack, Discord,
-e-mail and any HTTP API — from the command line, a script or CI. Each destination is a
+e-mail, any HTTP API, or a plugin of your own — from the command line, a
+script or CI. Each destination is a
 **feather**; feathers can be gathered in **groups**.
 
 ```sh
@@ -210,6 +211,45 @@ checked where the connection is made, so DNS rebinding does not get around
 it. `POST` and `PATCH` are not retried unless an idempotency key (or the
 policy) allows it. See the [HTTP feather guide](docs/http.md).
 
+### External plugins
+
+A plugin is an executable named `kjak-feather-<name>` on your `PATH`. kjak
+runs it for a feather that names it, and only then:
+
+```toml
+[feathers.pager]
+type = "external"
+plugin = "pagerduty"                     # runs kjak-feather-pagerduty
+secrets = { routing_key = { secret = "pagerduty.routing_key" } }
+```
+
+It reads one JSON request on stdin (the message, its settings, and only the
+secrets you give it) and answers one JSON response on stdout (protocol v1).
+**A plugin runs with your rights**: install only plugins you trust. kjak
+searches absolute `PATH` directories only, refuses ambiguous or writable
+executables, re-checks the file before every run, passes a minimal
+environment, and kills the plugin at its timeout. `kjak feather plugins`
+lists what `PATH` has without running anything. See the
+[plugin guide](docs/plugins.md), which also covers writing one.
+
+## Security
+
+- Secrets are references (secrets file, environment, keychain), resolved
+  when a send runs, never printed, and removed from every error and report.
+- A repository's `.kjak.toml` (and its `.kjak.secrets.toml`) is used only
+  after `kjak config trust`; any change withdraws the trust. It reads your
+  own secrets, and gives your environment variables to an http feather or a
+  plugin, only by the names you allowed.
+- http feathers: https only, no redirects, no connection to loopback,
+  private, link-local or cloud-metadata addresses unless allowed (checked
+  where the connection is made), no proxy.
+- Plugins run with your rights: kjak controls which executable runs (absolute
+  `PATH` only, checked before every run) and what it gets (a minimal
+  environment, only its own secrets), not what it does.
+
+Details: [docs/security.md](docs/security.md). Report a vulnerability
+privately: [SECURITY.md](SECURITY.md).
+
 ## Known limitations
 
 - Feathers: Slack (incoming webhooks), Discord (webhooks), e-mail (SMTP) and
@@ -221,7 +261,8 @@ policy) allows it. See the [HTTP feather guide](docs/http.md).
 - Groups do not nest.
 - kjak rewrites its configuration files without their comments when a
   command (`feather add`, `group set`, ...) changes them.
-- No plugins: every feather is built in.
+- Plugins are not sandboxed (they run with your rights); on Windows a
+  plugin's child processes are not killed at its timeout.
 
 More in [docs/troubleshooting.md](docs/troubleshooting.md).
 
@@ -233,6 +274,7 @@ More in [docs/troubleshooting.md](docs/troubleshooting.md).
 - [Credentials, trust and security](docs/security.md)
 - [Migrating literal secrets](docs/migration.md)
 - [HTTP API / webhook feathers](docs/http.md)
+- [External feather plugins](docs/plugins.md) (users and plugin authors)
 - [Delivery, retry and acceptance semantics](docs/delivery.md)
 - [Development guide](docs/development.md)
 - [Release runbook](docs/release.md)

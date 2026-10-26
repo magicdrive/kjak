@@ -94,7 +94,7 @@ targets = ["development"]
 
 ## 4. Feather
 
-feather は1つの通知先です。Slack の Incoming Webhook、Discord の Webhook、SMTP サーバーと宛先の組、または任意の HTTP API です。`kjak feather types` で種類を一覧できます。
+feather は1つの通知先です。Slack の Incoming Webhook、Discord の Webhook、SMTP サーバーと宛先の組、任意の HTTP API、またはプラグインです。`kjak feather types` で種類を一覧できます。
 
 **名前**（feather、group、テンプレート共通）：英数字、`_`、`.`、`-`。最大 64 文字で、英数字で始まる必要があります。同じ名前を feather と group の両方に使うことはできません。
 
@@ -104,7 +104,7 @@ feather は1つの通知先です。Slack の Incoming Webhook、Discord の Web
 
 | キー | 型 | 既定値 | CLI（`feather add`） | 意味 |
 |---|---|---|---|---|
-| `type` | 文字列 | 必須 | `--type` | `slack`、`discord`、`email`、`http`（OS ネイティブの通知には対応していない） |
+| `type` | 文字列 | 必須 | `--type` | `slack`、`discord`、`email`、`http`、`external`（OS ネイティブの通知には対応していない） |
 | `enabled` | 真偽値 | `true` | `--disabled`、`feather enable` / `disable` | 無効な feather には送信しない |
 | `levels` | リスト | すべてのレベル | `--levels L[,L]` | 受け付けるレベル |
 
@@ -222,6 +222,33 @@ template = '{"summary": "[{{.level}}] {{.title}}", "details": "{{.body}}"}'
 ```
 
 http feather は環境変数のプロキシを使わず、すべての接続をアドレスポリシーで検査します（[http.md](http.md#the-address-policy-ssrf)）。
+
+### external
+
+プラグイン（実行ファイル `kjak-feather-<plugin>`）を、試行ごとに1回、プロトコル v1 で実行します。利用者とプラグイン作者向けのガイドは [plugins.md](plugins.md)（英語）です。**プラグインはあなたの権限で動きます。** 設定ファイルに書きます（`feather add` では作成できません）。`kjak feather plugins` は、何も実行せずに `PATH` 上のプラグインを一覧します。
+
+| キー | 型 | 既定値 | 必須 | 検証 | セキュリティ上の意味 | 例 |
+|---|---|---|---|---|---|---|
+| `plugin` | 文字列 | — | はい | 小文字の英字、数字、`_`、`-`（最大 48）。組み込みの種類や kjak の名前は不可 | どの実行ファイルを動かすか：絶対パスの `PATH` ディレクトリにある `kjak-feather-<plugin>` | `"pagerduty"` |
+| `path` | 文字列 | — | いいえ | 絶対パスで、ファイル名が `kjak-feather-<plugin>` | ファイルを固定する（`PATH` を探さない） | `"/opt/homebrew/bin/kjak-feather-pagerduty"` |
+| `sha256` | 文字列 | — | いいえ | 小文字 16 進 64 桁 | 内容を固定し、実行のたびに検査する | `"9f2c...e1"` |
+| `secrets` | 認証情報のテーブル | — | いいえ | キーは小文字の英字、数字、`_`。最大 32 | プラグインが受け取る**唯一の**秘密情報。リクエストで渡し、環境変数や引数には載せない | `{ routing_key = { secret = "pd.key" } }` |
+| `settings` | 文字列のテーブル | — | いいえ | キーは同上。最大 64、値は最大 4 KiB | 平文。`config trust` に表示される | `{ service = "api" }` |
+| `env` | 文字列のリスト | — | いいえ | 変数名。`KJAK_*`、`LD_*`、`DYLD_*`、`GODEBUG`、`GOTRACEBACK`、および自身の secrets の参照元の変数は不可 | `PATH`、`HOME`、`TMPDIR`、`LANG` などに加えてプラグインが見られる変数 | `["HTTPS_PROXY"]` |
+| `timeout` | 期間 | `"10s"` | いいえ | 0 < t <= 10m | 過ぎるとプラグイン（Unix ではプロセスグループごと）を終了させる | `"5s"` |
+| `retry.policy` | 文字列 | `"never"` | いいえ | `never`、`plugin` | `plugin`：応答が `rejected` かつ `retryable` なら再試行する | `"plugin"` |
+| `retry.max_attempts` | 整数 | 0（上限なし） | いいえ | 0〜11 | — | `3` |
+
+```toml
+[feathers.pager]
+type = "external"
+plugin = "pagerduty"
+settings = { service = "api" }
+secrets = { routing_key = { secret = "pagerduty.routing_key" } }
+timeout = "5s"
+```
+
+プロジェクト設定のプラグインは、Trust したときに実行ファイル（パスと SHA-256）を記録します。別の、または変更された実行ファイルになると Trust は取り消されます。
 
 ## 5. Group
 

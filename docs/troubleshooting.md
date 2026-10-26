@@ -33,6 +33,13 @@
 | `HTTP 302: a redirect that is not followed (max_redirects)` | the API redirects | use the final URL, or `max_redirects = N` |
 | `(not retried: POST is not repeated without an idempotency key; retry.policy)` | a POST refused with a transient status | `idempotency_key = true` if the API supports it, or `retry.policy = "always"` if a duplicate is acceptable |
 | `feather add: an http feather is configured in the file` | `feather add --type http` | write `[feathers.NAME]` with `type = "http"` ([http.md](http.md)) |
+| `plugin error: kjak-feather-x is not on PATH (absolute directories only)` | the plugin is not installed, or only in a relative or empty `PATH` element | install it in an absolute `PATH` directory, or set `path =` ([plugins.md](plugins.md)) |
+| `... is found in several PATH directories as different files` | two installations of one plugin | remove one, or pin `path =` |
+| `plugin error: ...: writable by group or others` / `not executable` / `owned by uid N` | the plugin file could be changed by someone else, or is not runnable | `chmod 755`, own it, or install it elsewhere |
+| `plugin name "slack" is reserved` | a plugin named like a built-in type | rename the plugin |
+| `its plugin x is not the executable that was trusted` (`untrusted_project`) | a project's plugin was upgraded or replaced | review it, `kjak config trust` |
+| `the plugin was not run: ... changed since it was checked` (`blocked`) | the executable changed between the check and the run | run again; find out what replaced it |
+| `protocol error: ...; the plugin may have delivered` / `the plugin exited with status N` (`????`) | a plugin that answered wrong, crashed or exited non-zero | check the destination before sending again; fix the plugin (its stderr is in the error) |
 | `webhook_url: ... must be https (http is accepted for localhost only ...)` | an `http://` webhook URL to another host | use the `https` URL the provider gave |
 | `--json-input: key "body" given twice` | a JSON key repeated | give each key once |
 | `the file is larger than 1048576 bytes` | a configuration file over 1 MiB | split it, or check that `.kjak.toml` is what you think |

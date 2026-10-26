@@ -40,6 +40,8 @@ internal/
   feather/                   the Feather interface and Outcome (the engine's view)
     webhook/                 HTTP POST and its classification (shared by slack, discord)
     httpapi/                 the http feather: any HTTP API, its SSRF guard and retry policy
+    external/                plugins: discovery, checks, protocol v1, process groups
+                             (testdata/plugin: the plugin the tests build)
     slack/ discord/ email/   the adapters: payloads, SMTP
     builtin/                 builds a feather from its configuration (credentials resolved)
   output/                    text and JSON (schema_version 1) reports
@@ -140,7 +142,7 @@ named `TestCritical_<Name>`; they run with every other test.
 The fuzz targets cover message validation, TOML parsing (round trip), secrets
 files (round trip, no value in an error), http feather URLs, address
 classification (IPv4-mapped / NAT64 / 6to4 consistency), JSON body templates
-(no structure change), webhook
+(no structure change), plugin responses and names, webhook
 URL checks, the JSON input object, the webhook classification and
 `Retry-After`, SMTP dot stuffing and reply parsing. `make fuzz` finds them
 with `go test -list`; a failing input is written to the package's

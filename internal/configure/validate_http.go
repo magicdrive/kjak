@@ -248,12 +248,13 @@ func BodyTemplateProblem(t *template.Template) error {
 	return nil
 }
 
-// httpFieldsSet reports whether fc sets a key of the http type.
+// httpFieldsSet reports whether fc sets a key of the http type only
+// (timeout and retry belong to external feathers too).
 func httpFieldsSet(fc FeatherConfig) bool {
 	return fc.URL != "" || fc.URLSecret != nil || fc.Method != "" || len(fc.Headers) > 0 || len(fc.Query) > 0 ||
-		fc.Auth != nil || fc.Body != nil || fc.Timeout != nil || len(fc.SuccessStatus) > 0 || fc.MaxResponseBytes != 0 ||
+		fc.Auth != nil || fc.Body != nil || len(fc.SuccessStatus) > 0 || fc.MaxResponseBytes != 0 ||
 		fc.AllowHTTP || len(fc.AllowNetworks) > 0 || len(fc.AllowHosts) > 0 || fc.MaxRedirects != 0 ||
-		fc.IdempotencyKey || fc.IdempotencyHeader != "" || fc.Retry != nil
+		fc.IdempotencyKey || fc.IdempotencyHeader != ""
 }
 
 // HTTPMethod is the method of an http feather (POST when unset).

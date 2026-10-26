@@ -109,7 +109,7 @@ kjak send --config ci.toml --secrets ci-secrets.toml ...   # or KJAK_SECRETS=ci-
 - Nothing changes for configurations without literals; `env` and `keychain`
   references work as before.
 - The trust store gets new keys (`secrets_path`, `secrets_sha256`,
-  `user_secrets`) only in entries that use them; an earlier kjak refuses a
+  `user_secrets`, `plugins`) only in entries that use them; an earlier kjak refuses a
   trust store with such an entry ("broken trust store"). Entries without
   them are written as before.
 - `--secret-stdin` still writes a literal (and warns): prefer `--secret-ref`.

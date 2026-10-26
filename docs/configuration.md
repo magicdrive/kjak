@@ -117,7 +117,7 @@ The options `--timeout`, `--max-retries`, `--concurrency`, `--level` and
 ## 4. Feathers
 
 A feather is one destination: a Slack incoming webhook, a Discord webhook,
-an SMTP server with its recipients, or any HTTP API. `kjak feather types` lists the types.
+an SMTP server with its recipients, any HTTP API, or a plugin. `kjak feather types` lists the types.
 
 **Names** (feathers, groups, templates): letters, digits, `_`, `.`, `-`; at
 most 64; starting with a letter or a digit. A name cannot be both a feather
@@ -131,7 +131,7 @@ sending anything (exit 2).
 
 | key | type | default | CLI (`feather add`) | meaning |
 |---|---|---|---|---|
-| `type` | string | required | `--type` | `slack`, `discord`, `email` or `http` (OS-native notifications are not available) |
+| `type` | string | required | `--type` | `slack`, `discord`, `email`, `http` or `external` (OS-native notifications are not available) |
 | `enabled` | bool | `true` | `--disabled`; `feather enable` / `disable` | a disabled feather is not sent to |
 | `levels` | list | all levels | `--levels L[,L]` | the levels the feather accepts |
 
@@ -263,6 +263,39 @@ template = '{"summary": "[{{.level}}] {{.title}}", "details": "{{.body}}"}'
 
 Proxies from the environment are not used by http feathers, and every
 connection is checked by the address policy: [http.md](http.md#the-address-policy-ssrf).
+
+### external
+
+A plugin: the executable `kjak-feather-<plugin>`, run once per attempt with
+protocol v1. The guide, for users and plugin authors, is
+[plugins.md](plugins.md). **A plugin runs with your rights.** Configured in
+the file (`feather add` does not create one); `kjak feather plugins` lists
+what `PATH` has, without running anything.
+
+| key | type | default | required | validation | security | example |
+|---|---|---|---|---|---|---|
+| `plugin` | string | — | yes | lower-case ASCII letters, digits, `_`, `-` (at most 48); not a built-in type or a kjak name | which executable runs: `kjak-feather-<plugin>` from the absolute `PATH` directories | `"pagerduty"` |
+| `path` | string | — | no | absolute, named `kjak-feather-<plugin>` | pins the file: no `PATH` search | `"/opt/homebrew/bin/kjak-feather-pagerduty"` |
+| `sha256` | string | — | no | 64 lower-case hex digits | pins the content, checked before every run | `"9f2c...e1"` |
+| `secrets` | table of credentials | — | no | keys: lower-case letters, digits, `_`; at most 32 | the **only** secrets the plugin gets, in the request (never in the environment or arguments) | `{ routing_key = { secret = "pd.key" } }` |
+| `settings` | table of strings | — | no | same keys; at most 64, values at most 4 KiB | plain values, shown by `config trust` | `{ service = "api" }` |
+| `env` | list of strings | — | no | variable names; not `KJAK_*`, `LD_*`, `DYLD_*`, `GODEBUG`, `GOTRACEBACK`, nor the source of one of its secrets | variables the plugin may see besides `PATH`, `HOME`, `TMPDIR`, `LANG`, ... | `["HTTPS_PROXY"]` |
+| `timeout` | duration | `"10s"` | no | 0 < t <= 10m | the plugin (its process group on Unix) is killed after it | `"5s"` |
+| `retry.policy` | string | `"never"` | no | `never`, `plugin` | `plugin`: a response `rejected` + `retryable` is retried | `"plugin"` |
+| `retry.max_attempts` | integer | 0 (no cap) | no | 0 - 11 | — | `3` |
+
+```toml
+[feathers.pager]
+type = "external"
+plugin = "pagerduty"
+settings = { service = "api" }
+secrets = { routing_key = { secret = "pagerduty.routing_key" } }
+timeout = "5s"
+```
+
+In a project file, the plugin's executable (path and SHA-256) is recorded
+when the project is trusted; another or a changed executable withdraws the
+trust.
 
 ## 5. Groups
 

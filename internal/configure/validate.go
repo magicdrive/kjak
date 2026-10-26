@@ -152,7 +152,18 @@ func featherProblems(fc FeatherConfig) []string {
 	if fc.Type != TypeHTTP && httpFieldsSet(fc) {
 		add("%s feathers take no http settings (url, method, headers, query, auth, body, ...)", fc.Type)
 	}
+	if fc.Type != TypeExternal && externalFieldsSet(fc) {
+		add("%s feathers take no plugin settings (plugin, path, sha256, secrets, settings, env)", fc.Type)
+	}
+	if fc.Type != TypeHTTP && fc.Type != TypeExternal && (fc.Timeout != nil || fc.Retry != nil) {
+		add("%s feathers take no timeout or retry of their own (use [defaults])", fc.Type)
+	}
 	switch fc.Type {
+	case TypeExternal:
+		if webhookFields || emailFields {
+			add("external feathers take no webhook_url, username or email settings (give the plugin settings and secrets)")
+		}
+		problems = append(problems, externalProblems(fc)...)
 	case TypeHTTP:
 		if webhookFields || emailFields {
 			add("http feathers take no webhook_url, username or email settings (use url, url_secret, [auth])")

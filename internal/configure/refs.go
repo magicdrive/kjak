@@ -35,6 +35,11 @@ func (fc *FeatherConfig) Credentials(feather string) []CredentialField {
 		add("auth.password", &fc.Auth.Password)
 		add("auth.value", &fc.Auth.Value)
 	}
+	for _, k := range sortedKeys(fc.PluginSecrets) {
+		if r := fc.PluginSecrets[k]; r != nil {
+			out = append(out, CredentialField{Feather: feather, Field: "secrets." + k, Ref: r, set: func(n *credential.Ref) { fc.PluginSecrets[k] = n }})
+		}
+	}
 	return out
 }
 
@@ -90,7 +95,7 @@ func GrantName(r *credential.Ref) string {
 // own endpoint. In a project, its env and keychain references must be
 // allowed by name when the project is trusted, like its references to the
 // personal secrets file.
-func GatedType(t string) bool { return t == TypeHTTP }
+func GatedType(t string) bool { return t == TypeHTTP || t == TypeExternal }
 
 // GatedNames are the grant names of the env and keychain references of the
 // gated feathers of f, sorted, each once.
@@ -107,6 +112,17 @@ func GatedNames(f *File) []string {
 		if n := GrantName(c.Ref); n != "" && !seen[n] {
 			seen[n] = true
 			names = append(names, n)
+		}
+	}
+	// the environment variables a plugin is given
+	for _, name := range sortedKeys(f.Feathers) {
+		if fc := f.Feathers[name]; fc.Type == TypeExternal {
+			for _, e := range fc.Env {
+				if n := "env:" + e; !seen[n] {
+					seen[n] = true
+					names = append(names, n)
+				}
+			}
 		}
 	}
 	sort.Strings(names)

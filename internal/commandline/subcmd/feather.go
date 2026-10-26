@@ -36,10 +36,12 @@ func Feather(ctx context.Context, rt *Runtime, args []string) int {
 		return featherEnable(ctx, rt, rest, action == "enable")
 	case "types":
 		return featherTypes(rt)
+	case "plugins":
+		return featherPlugins(ctx, rt, rest)
 	case "-h", "--help", "help":
 		return rt.help(textbank.FeatherHelp)
 	}
-	return rt.fail(ctx, fmt.Errorf("feather: unknown action %q (list, show, add, remove, enable, disable, types)\nRun 'kjak feather --help' for usage", action))
+	return rt.fail(ctx, fmt.Errorf("feather: unknown action %q (list, show, add, remove, enable, disable, types, plugins)\nRun 'kjak feather --help' for usage", action))
 }
 
 // featherView is how a feather is shown: credentials by their source only.
@@ -64,6 +66,21 @@ type featherView struct {
 	Method string `json:"method,omitempty"`
 	Auth   string `json:"auth,omitempty"`
 	Policy string `json:"policy,omitempty"`
+	// external
+	Plugin  string   `json:"plugin,omitempty"`
+	Path    string   `json:"path,omitempty"`
+	SHA256  string   `json:"sha256,omitempty"`
+	Secrets []string `json:"secrets,omitempty"`
+	Env     []string `json:"env,omitempty"`
+}
+
+// describeSecrets lists the secrets of a plugin by their source.
+func describeSecrets(fc configure.FeatherConfig) []string {
+	var out []string
+	for _, k := range sortedNames(fc.PluginSecrets) {
+		out = append(out, k+" from "+fc.PluginSecrets[k].Describe())
+	}
+	return out
 }
 
 // describeHTTP tells what an http feather sends where, with its secrets by
@@ -118,6 +135,10 @@ func viewFeather(l *configure.Loaded, name string, fc configure.FeatherConfig) f
 	if fc.Type == configure.TypeHTTP {
 		v.URL, v.Auth, v.Policy = describeHTTP(fc)
 		v.Method = fc.HTTPMethod()
+	}
+	if fc.Type == configure.TypeExternal {
+		v.Plugin, v.Path, v.SHA256, v.Env = fc.Plugin, fc.Path, fc.SHA256, fc.Env
+		v.Secrets = describeSecrets(fc)
 	}
 	return v
 }
@@ -211,6 +232,11 @@ func featherShow(ctx context.Context, rt *Runtime, args []string) int {
 	row("url", v.URL)
 	row("auth", v.Auth)
 	row("policy", v.Policy)
+	row("plugin", v.Plugin)
+	row("path", v.Path)
+	row("sha256", v.SHA256)
+	row("secrets", strings.Join(v.Secrets, ", "))
+	row("env", strings.Join(v.Env, ", "))
 	_ = tw.Flush()
 	return ExitOK
 }
@@ -225,6 +251,9 @@ func featherAdd(ctx context.Context, rt *Runtime, args []string) int {
 	}
 	if opt.Type == configure.TypeHTTP {
 		return rt.fail(ctx, withCode(output.CodeUsage, fmt.Errorf("feather add: an http feather is configured in the file ([feathers.%s] type = \"http\", docs/http.md); then run kjak config validate", opt.Name)))
+	}
+	if opt.Type == configure.TypeExternal {
+		return rt.fail(ctx, withCode(output.CodeUsage, fmt.Errorf("feather add: an external feather is configured in the file ([feathers.%s] type = \"external\", plugin = \"NAME\", docs/plugins.md); kjak feather plugins lists what PATH has", opt.Name)))
 	}
 	fc := configure.FeatherConfig{Type: opt.Type, Levels: opt.Levels}
 	if opt.Disabled {
@@ -367,6 +396,7 @@ func featherTypes(rt *Runtime) int {
 	fmt.Fprintln(rt.Stdout, "discord  Discord webhook (secret: webhook_url)")
 	fmt.Fprintln(rt.Stdout, "email    E-mail over SMTP (secret: password)")
 	fmt.Fprintln(rt.Stdout, "http     Any HTTP API: method, headers, auth, body (secrets: url_secret, auth); configured in the file")
+	fmt.Fprintln(rt.Stdout, "external A plugin, the executable kjak-feather-<plugin> on PATH (secrets: the ones it is given); configured in the file")
 	fmt.Fprintln(rt.Stdout, "")
 	fmt.Fprintln(rt.Stdout, "Not supported in v0.1.0: OS-native notifications (a future feather).")
 	return ExitOK

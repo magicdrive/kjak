@@ -18,11 +18,14 @@ const (
 	// TypeHTTP is a request to any HTTP API (feather/httpapi); not to be
 	// confused with feather/webhook, the sender of slack and discord.
 	TypeHTTP = "http"
+	// TypeExternal runs a plugin: the executable kjak-feather-<plugin>
+	// (feather/external, docs/plugins.md).
+	TypeExternal = "external"
 )
 
 // FeatherTypes are the types kjak implements. OS-native notifications are a
 // future feather and are refused (UnsupportedFeatherTypes).
-var FeatherTypes = []string{TypeSlack, TypeDiscord, TypeEmail, TypeHTTP}
+var FeatherTypes = []string{TypeSlack, TypeDiscord, TypeEmail, TypeHTTP, TypeExternal}
 
 // UnsupportedFeatherTypes are known but not implemented in v0.1.0; a feather
 // of one of them is a configuration error, never a silent no-op.
@@ -105,13 +108,27 @@ type FeatherConfig struct {
 	// private, ... address unless AllowNetworks (CIDR) or, for private
 	// networks, AllowHosts (names) allow it; redirects not followed unless
 	// MaxRedirects.
-	AllowHTTP         bool       `toml:"allow_http,omitempty"`
-	AllowNetworks     []string   `toml:"allow_networks,omitempty"`
-	AllowHosts        []string   `toml:"allow_hosts,omitempty"`
-	MaxRedirects      int        `toml:"max_redirects,omitempty"`
-	IdempotencyKey    bool       `toml:"idempotency_key,omitempty"`
-	IdempotencyHeader string     `toml:"idempotency_header,omitempty"`
-	Retry             *HTTPRetry `toml:"retry,omitempty"`
+	AllowHTTP         bool     `toml:"allow_http,omitempty"`
+	AllowNetworks     []string `toml:"allow_networks,omitempty"`
+	AllowHosts        []string `toml:"allow_hosts,omitempty"`
+	MaxRedirects      int      `toml:"max_redirects,omitempty"`
+	IdempotencyKey    bool     `toml:"idempotency_key,omitempty"`
+	IdempotencyHeader string   `toml:"idempotency_header,omitempty"`
+	// Retry is the retry policy of an http or an external feather.
+	Retry *HTTPRetry `toml:"retry,omitempty"`
+
+	// external (docs/plugins.md); Timeout and Retry apply too
+	Plugin string `toml:"plugin,omitempty"`
+	// Path and SHA256 pin the executable: an absolute path instead of the
+	// PATH search, the SHA-256 of its content.
+	Path   string `toml:"path,omitempty"`
+	SHA256 string `toml:"sha256,omitempty"`
+	// PluginSecrets are the only secrets the plugin gets, by the names it
+	// knows them by; Settings are plain values; Env names the environment
+	// variables it may see besides kjak's minimal set.
+	PluginSecrets map[string]*credential.Ref `toml:"secrets,omitempty"`
+	Settings      map[string]string          `toml:"settings,omitempty"`
+	Env           []string                   `toml:"env,omitempty"`
 }
 
 // HTTP authentication types.
@@ -149,11 +166,12 @@ type HTTPBody struct {
 	ContentType string `toml:"content_type,omitempty"`
 }
 
-// HTTP retry policies.
+// Retry policies (http: safe, never, always; external: never, plugin).
 const (
 	RetrySafe   = "safe"   // GET, PUT, DELETE; POST and PATCH with an idempotency key
 	RetryNever  = "never"  // one attempt
 	RetryAlways = "always" // POST and PATCH too, without a key: may deliver twice
+	RetryPlugin = "plugin" // external: as the plugin's answer says (rejected and retryable)
 )
 
 // HTTPRetry is the retry policy of an http feather.

@@ -5,12 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/magicdrive/kjak/internal/commandline/option"
 	"github.com/magicdrive/kjak/internal/configure"
 	"github.com/magicdrive/kjak/internal/credential"
+	"github.com/magicdrive/kjak/internal/feather/external"
 	"github.com/magicdrive/kjak/internal/output"
 	"github.com/magicdrive/kjak/internal/textbank"
 )
@@ -353,6 +355,27 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 		}
 	}
 	describeProject(rt, src.File)
+	// the executables of its plugins, as they are now: a later change of
+	// one withdraws the trust
+	pathList, _ := rt.LookupEnv("PATH")
+	for _, name := range sortedNames(src.File.Feathers) {
+		fc := src.File.Feathers[name]
+		if fc.Type != configure.TypeExternal {
+			continue
+		}
+		if _, done := (configure.TrustEntry{Plugins: grant.Plugins}).Plugin(fc.Plugin); done {
+			continue
+		}
+		exe, err := external.Resolve(fc.Plugin, fc.Path, pathList, runtime.GOOS)
+		if err != nil {
+			return rt.fail(ctx, fmt.Errorf("config trust: feather %s: %w (install the plugin, then trust)", name, err))
+		}
+		if fc.SHA256 != "" && fc.SHA256 != exe.SHA256 {
+			return rt.fail(ctx, fmt.Errorf("config trust: feather %s: %s has SHA-256 %s, the configuration pins %s", name, exe.Real, exe.SHA256, fc.SHA256))
+		}
+		grant.Plugins = append(grant.Plugins, configure.TrustedPlugin{Name: fc.Plugin, Path: exe.Real, SHA256: exe.SHA256})
+		fmt.Fprintf(rt.Stdout, "plugin %s: %s\nsha256 %s\n", fc.Plugin, exe.Real, exe.SHA256)
+	}
 	// the names the project reads from the personal secrets file: each one
 	// is shown and allowed explicitly
 	for _, name := range configure.SecretNames(src.File) {
@@ -369,7 +392,7 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 	// the environment variables and keychain entries its http feathers
 	// send to a URL of the project's choosing
 	if gated := configure.GatedNames(src.File); len(gated) > 0 {
-		fmt.Fprintln(rt.Stdout, "The project asks to send these to URLs it chooses (http feathers):")
+		fmt.Fprintln(rt.Stdout, "The project asks to give these to destinations it chooses (http feathers, plugins):")
 		for _, name := range gated {
 			fmt.Fprintf(rt.Stdout, "  %s\n", name)
 		}
@@ -415,6 +438,21 @@ func describeProject(rt *Runtime, f *configure.File) {
 	for _, name := range sortedNames(f.Feathers) {
 		fc := f.Feathers[name]
 		switch fc.Type {
+		case configure.TypeExternal:
+			fmt.Fprintf(rt.Stdout, "  feather %s: external plugin %s (runs with your rights)\n", name, fc.Plugin)
+			if s := describeSecrets(fc); len(s) > 0 {
+				fmt.Fprintf(rt.Stdout, "    secrets given to it: %s\n", strings.Join(s, ", "))
+			}
+			if len(fc.Env) > 0 {
+				fmt.Fprintf(rt.Stdout, "    environment variables given to it: %s\n", strings.Join(fc.Env, ", "))
+			}
+			if len(fc.Settings) > 0 {
+				var kv []string
+				for _, k := range sortedNames(fc.Settings) {
+					kv = append(kv, k+"="+fc.Settings[k])
+				}
+				fmt.Fprintf(rt.Stdout, "    settings: %s\n", strings.Join(kv, ", "))
+			}
 		case configure.TypeHTTP:
 			url, auth, policy := describeHTTP(fc)
 			fmt.Fprintf(rt.Stdout, "  feather %s: http %s %s, auth %s\n", name, fc.HTTPMethod(), url, auth)
