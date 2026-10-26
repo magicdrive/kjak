@@ -39,7 +39,14 @@ sent to any target.
   bytes is not searched for.
 - Configuration files are read up to 1 MiB, so an untrusted project file
   cannot exhaust memory before its trust is checked; TOML errors give the
-  position, never the value.
+  position, never the value. A configuration file (or the trust store) that
+  is not a regular file — a FIFO, a device, a directory, or a link to one —
+  is refused without being read: it is opened without blocking
+  (`O_NONBLOCK`) and its type checked on the open descriptor, so a
+  `.kjak.toml` FIFO cannot make kjak wait.
+- Templates cannot loop: `range` and `define`/`template`/`block` are
+  refused in message templates (as in http body templates), so a template
+  cannot keep kjak busy without output; the output is limited to 1 MiB.
 - Command lines: `feather add` takes the secret by reference, or from
   standard input (`--secret-stdin`), never as an argument.
 
@@ -245,13 +252,17 @@ this machine can reach: its own services, the cloud metadata endpoint
   classified by the IPv4 address they carry), IPv4-mapped forms of all of
   them. `allow_networks` (CIDR) allows them explicitly; `allow_hosts` allows
   private addresses for named hosts. **Never** allowed: the cloud metadata
-  addresses (169.254.169.254, fd00:ec2::254, 169.254.170.2, 100.100.100.200,
-  192.0.0.192), unspecified, multicast, broadcast and reserved addresses.
+  addresses (169.254.169.254, fd00:ec2::254, fd20:ce::254, 169.254.170.2,
+  100.100.100.200, 192.0.0.192, 168.63.129.16 (Azure WireServer),
+  169.254.0.23 (Tencent)), in any IPv6 form that carries them (a local-use
+  NAT64 address, 64:ff9b:1::/48, is read at every place RFC 6052 allows),
+  unspecified, multicast, broadcast and reserved addresses.
 - Proxy environment variables are ignored by http feathers (the guard would
   see the proxy's address, not the destination's); an http feather cannot
   use a proxy.
 - Redirects are not followed unless `max_redirects` allows them; then each
-  is checked like the URL, https never goes to http, and `Authorization`,
+  is checked like the URL — a redirect from https to http is followed only
+  when the feather has `allow_http = true` (without it, never) — and `Authorization`,
   `Cookie` and the `[auth]` header are dropped as soon as the scheme, host
   or port changes; no `Referer` is ever sent.
 - Secrets go only where `[auth]` puts them: never in a query, never in a

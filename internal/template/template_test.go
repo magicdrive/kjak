@@ -139,9 +139,9 @@ func TestTemplateLimits(t *testing.T) {
 			t.Errorf("json %s: %v", src, err)
 		}
 	}
-	// a message template may range, within the output limit
+	// a message template renders within the output limit
 	big := map[string]string{"x": strings.Repeat("y", 1<<16)}
-	if _, err := Render("t", configure.TemplateConfig{Body: `{{range 100}}{{$.x}}{{end}}`}, big); !errors.Is(err, ErrTemplate) {
+	if _, err := Render("t", configure.TemplateConfig{Body: strings.Repeat("{{.x}}", 17)}, big); !errors.Is(err, ErrTemplate) || !strings.Contains(err.Error(), "longer than") {
 		t.Errorf("an output over the limit: %v", err)
 	}
 	if s, err := Text("t", `{{printf "%-10s|" .body | len}}`, map[string]string{"body": "a"}); err != nil || s != "11" {
