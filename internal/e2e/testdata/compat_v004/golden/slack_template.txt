@@ -1,0 +1,2 @@
+POST /services/T000/B000/LITERALSECRET application/json
+{"text":"[SUCCESS] Deploy api: api 1.4.2 deployed","attachments":[{"color":"#2EB67D","title":"Deploy api","title_link":"https://ci.example.com/api","text":"api 1.4.2 deployed","footer":"kjak · success"}]}

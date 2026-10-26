@@ -1,0 +1,13 @@
+MAIL FROM:<kjak@example.com>
+RCPT TO:<ops@example.com>
+RCPT TO:<oncall@example.com>
+
+From: kjak@example.com
+To: ops@example.com, oncall@example.com
+Subject: [kjak] CI
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+X-Kjak-Level: error
+
+tests failed

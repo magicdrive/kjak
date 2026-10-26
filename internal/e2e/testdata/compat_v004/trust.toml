@@ -1,0 +1,7 @@
+# Trusted kjak project configurations (written by `kjak config trust`).
+# An entry trusts exactly this content: any change needs a new trust.
+
+[[projects]]
+path = '@PATH@'
+sha256 = '@SHA256@'
+trusted_at = 2026-10-26T22:26:08Z

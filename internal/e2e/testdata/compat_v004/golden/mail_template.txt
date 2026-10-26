@@ -1,0 +1,15 @@
+MAIL FROM:<kjak@example.com>
+RCPT TO:<ops@example.com>
+RCPT TO:<oncall@example.com>
+
+From: kjak@example.com
+To: ops@example.com, oncall@example.com
+Subject: [kjak] Deploy api
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+X-Kjak-Level: success
+
+api 1.4.2 deployed
+
+https://ci.example.com/api
