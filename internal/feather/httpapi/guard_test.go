@@ -63,7 +63,17 @@ func TestClassify(t *testing.T) {
 		"::ffff:0:5db8:d822":       CatTunnel,
 		"192.88.99.1":              CatReserved,
 		"fd20:ce::254":             CatMetadata,
-		"64:ff9b:1::7f00:1":        CatTunnel,
+		// local-use NAT64 (RFC 8215): every place an IPv4 address can
+		// be embedded (RFC 6052) is checked
+		"64:ff9b:1::7f00:1":          CatLoopback, // /96 of 127.0.0.1
+		"64:ff9b:1::a9fe:a9fe":       CatMetadata, // /96 of 169.254.169.254
+		"64:ff9b:1:a9fe:a9:fe00::":   CatMetadata, // /48 of 169.254.169.254
+		"64:ff9b:1:0:a9:fea9:fe00:0": CatMetadata, // /64 of 169.254.169.254
+		"64:ff9b:1:5db8:d8:2200::":   CatTunnel,   // /48 of a public address
+		"168.63.129.16":              CatMetadata, // Azure WireServer
+		"::ffff:168.63.129.16":       CatMetadata,
+		"169.254.0.23":               CatMetadata, // Tencent Cloud
+		"64:ff9b::a83f:8110":         CatMetadata, // NAT64 of 168.63.129.16
 	}
 	for s, want := range cases {
 		a, err := netip.ParseAddr(s)

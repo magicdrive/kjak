@@ -7,7 +7,8 @@
 //	level = "success"
 //
 // A variable the template uses but the caller did not give is an error; no
-// function beyond text/template's built-ins is available.
+// function beyond text/template's built-ins is available, and a template
+// cannot loop (range, define/template/block).
 package template
 
 import (
@@ -105,17 +106,20 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 
 // render parses and executes src into a bounded buffer. printf refuses a
 // width or a precision of 4 digits or more (fmt would allocate it before
-// the buffer sees it). A body template (body) cannot use range: its data
-// are strings, and a range over a number could run without end.
+// the buffer sees it). No template can loop (range, template/define/block):
+// its data are strings, and a range over a number, or a recursion, could
+// run without end and without output for the buffer to bound.
 func render(name, src string, vars map[string]string, body bool) (string, error) {
 	tpl, err := template.New(name).Option("missingkey=error").Funcs(template.FuncMap{"printf": safePrintf}).Parse(src)
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrTemplate, err)
 	}
+	problem := configure.MessageTemplateProblem
 	if body {
-		if err := configure.BodyTemplateProblem(tpl); err != nil {
-			return "", fmt.Errorf("%w: %s: %v", ErrTemplate, name, err)
-		}
+		problem = configure.BodyTemplateProblem
+	}
+	if err := problem(tpl); err != nil {
+		return "", fmt.Errorf("%w: %s: %v", ErrTemplate, name, err)
 	}
 	var buf boundedBuffer
 	if err := tpl.Execute(&buf, vars); err != nil {
@@ -228,8 +232,12 @@ func Check(name string, t configure.TemplateConfig) (bool, error) {
 		return false, fmt.Errorf("%w: %s: body is required", ErrTemplate, name)
 	}
 	for _, src := range []string{t.Title, t.Body, t.Level, t.URL} {
-		if _, err := template.New(name).Option("missingkey=error").Parse(src); err != nil {
+		tpl, err := template.New(name).Option("missingkey=error").Parse(src)
+		if err != nil {
 			return false, fmt.Errorf("%w: %v", ErrTemplate, err)
+		}
+		if err := configure.MessageTemplateProblem(tpl); err != nil {
+			return false, fmt.Errorf("%w: %s: %v", ErrTemplate, name, err)
 		}
 	}
 	if t.Level != "" && !strings.Contains(t.Level, "{{") {
