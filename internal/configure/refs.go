@@ -91,11 +91,20 @@ func GrantName(r *credential.Ref) string {
 }
 
 // GatedType: a feather type that sends to a destination of the
-// configuration's choosing (a URL, a plugin) rather than to a provider's
-// own endpoint. In a project, its env and keychain references must be
-// allowed by name when the project is trusted, like its references to the
-// personal secrets file.
-func GatedType(t string) bool { return t == TypeHTTP || t == TypeExternal }
+// configuration's choosing. That is every type kjak has: an http feather
+// sends to its URL, an external one to its plugin, an email feather to its
+// SMTP host (which receives the password with AUTH), a slack or discord
+// feather to its webhook URL. In a project, the env and keychain references
+// of such a feather must be allowed by name when the project is trusted,
+// like its references to the personal secrets file: trusting the content
+// of a repository does not hand it the user's environment.
+func GatedType(t string) bool {
+	switch t {
+	case TypeSlack, TypeDiscord, TypeEmail, TypeHTTP, TypeExternal:
+		return true
+	}
+	return false
+}
 
 // GatedNames are the grant names of the env and keychain references of the
 // gated feathers of f, sorted, each once.

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // Source is the kind of a reference.
@@ -99,6 +100,10 @@ func (r *Ref) Validate() error {
 	case SourceKeychain:
 		if strings.TrimSpace(r.Keychain.Service) == "" || strings.TrimSpace(r.Keychain.Account) == "" {
 			return fmt.Errorf("%w: keychain needs both service and account", ErrCredential)
+		}
+		// they are printed (keychain:SERVICE/ACCOUNT): no escape sequence
+		if strings.IndexFunc(r.Keychain.Service+r.Keychain.Account, unicode.IsControl) >= 0 {
+			return fmt.Errorf("%w: keychain service and account must not contain a control character", ErrCredential)
 		}
 	case SourceLiteral:
 		if *r.Literal == "" {

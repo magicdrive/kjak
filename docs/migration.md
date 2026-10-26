@@ -1,5 +1,8 @@
 # Migrating literal secrets to a secrets file
 
+(For the change of the project trust in 0.0.5, see
+[Project env and keychain references need a grant](#project-env-and-keychain-references-need-a-grant).)
+
 [Configuration](configuration.md#77-secrets-files) · [Security](security.md#secrets-files)
 
 A `{ literal = "..." }` credential keeps the secret in the configuration
@@ -129,3 +132,57 @@ still followed.
   trust store with such an entry ("broken trust store"). Entries without
   them are written as before.
 - `--secret-stdin` still writes a literal (and warns): prefer `--secret-ref`.
+
+## Project env and keychain references need a grant
+
+Since 0.0.5 the `env` and `keychain` references of a project's **slack,
+discord and email** feathers must be allowed by name when the project is
+trusted, like those of its http and external feathers (before, trusting the
+file allowed them). Each of these feathers sends to a destination the
+project chooses — an SMTP host receives the password, a webhook URL
+receives the message — so a repository could otherwise hand one of your
+environment variables to a server of its choosing.
+
+A project trusted by an earlier kjak keeps its trust, but its grant does not
+name these references: `kjak send` refuses such a feather before anything is
+sent (exit 2), naming the reference:
+
+```
+kjak: feather "mail": password: credential error: env:SMTP_PASSWORD: the trust of the project does not allow its email feather "mail" to send env:SMTP_PASSWORD: review the project, then run `kjak config trust` and allow it (--allow-user-secrets with --yes)
+```
+
+To migrate, review the project file — its hosts, webhook URLs and the
+references it reads — then trust it again:
+
+```sh
+kjak config trust                               # interactive: answer the second question
+kjak config trust --yes --allow-user-secrets    # CI, after the review
+```
+
+Your global configuration is not affected: its feathers are yours.
+
+## A project's slack, discord and email feathers reach public addresses only
+
+Since 0.0.5 the slack, discord and email feathers of a **project** file
+connect through the address policy of the http feathers: public addresses
+only, no proxy. A project feather that sends to a local relay, a test
+server or a private SMTP server is refused with the code `blocked`
+(nothing is sent):
+
+```
+FAIL  mail (email) failed (1 attempt): connect: address 10.0.0.25 is private: allow it with allow_networks or allow_hosts
+```
+
+Review the destination, then allow it in the project file and trust the
+project again:
+
+```toml
+[feathers.mail]
+type = "email"
+host = "smtp.corp.example"
+allow_hosts = ["smtp.corp.example"]     # or allow_networks = ["10.0.0.0/24"]
+```
+
+A project webhook feather behind a mandatory HTTP proxy cannot use the
+proxy any more: define it in your global file. Global feathers are not
+affected.

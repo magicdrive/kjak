@@ -52,6 +52,17 @@ func Build(ctx context.Context, name string, fc configure.FeatherConfig, d Deps)
 	if httpClient == nil {
 		httpClient = webhook.NewClient()
 	}
+	// a slack, discord or email feather of a project sends to a
+	// destination the project chose: through the address policy of the
+	// http feathers (public addresses only, unless allow_networks or
+	// allow_hosts say otherwise; never metadata), without a proxy
+	guard, err := projectGuard(fc, d)
+	if err != nil {
+		return nil, fmt.Errorf("feather %q: %w", name, err)
+	}
+	if guard != nil {
+		httpClient = webhook.NewGuardedClient(guard.DialContext)
+	}
 	resolve := func(field string, ref *credential.Ref) (credential.Secret, error) {
 		s, err := d.Resolver.Resolve(ctx, ref)
 		if err != nil {
@@ -71,7 +82,7 @@ func Build(ctx context.Context, name string, fc configure.FeatherConfig, d Deps)
 		if err := checkResolvedURL(name, u); err != nil {
 			return nil, err
 		}
-		return &slack.Feather{WebhookURL: u, Poster: &webhook.Poster{Client: httpClient, Clock: d.Clock}}, nil
+		return &slack.Feather{WebhookURL: u, Poster: &webhook.Poster{Client: httpClient, Clock: d.Clock, Redactor: d.Redactor}}, nil
 	case configure.TypeDiscord:
 		u, err := resolve("webhook_url", fc.WebhookURL)
 		if err != nil {
@@ -88,6 +99,7 @@ func Build(ctx context.Context, name string, fc configure.FeatherConfig, d Deps)
 				Clock:          d.Clock,
 				RetryAfterBody: discord.RetryAfterBody,
 				Detail:         discord.Detail,
+				Redactor:       d.Redactor,
 			},
 		}, nil
 	case configure.TypeEmail:
@@ -100,9 +112,13 @@ func Build(ctx context.Context, name string, fc configure.FeatherConfig, d Deps)
 			To:            append([]string(nil), fc.To...),
 			SubjectPrefix: fc.SubjectPrefix,
 			Clock:         d.Clock,
+			Redactor:      d.Redactor,
 		}
 		if f.Security == "" {
 			f.Security = email.SecuritySTARTTLS
+		}
+		if guard != nil {
+			f.Dial = guard.DialContext
 		}
 		if fc.Password != nil {
 			p, err := resolve("password", fc.Password)
@@ -118,6 +134,24 @@ func Build(ctx context.Context, name string, fc configure.FeatherConfig, d Deps)
 		return buildExternal(name, fc, d, resolve)
 	}
 	return nil, fmt.Errorf("feather %q: unknown type %q", name, fc.Type)
+}
+
+// projectGuard is the address policy of a slack, discord or email feather
+// of a project (Deps.ProjectTrust set); nil for any other.
+func projectGuard(fc configure.FeatherConfig, d Deps) (*httpapi.Guard, error) {
+	if d.ProjectTrust == nil {
+		return nil, nil
+	}
+	switch fc.Type {
+	case configure.TypeSlack, configure.TypeDiscord, configure.TypeEmail:
+	default:
+		return nil, nil
+	}
+	networks, err := configure.ParseAllowNetworks(fc.AllowNetworks)
+	if err != nil {
+		return nil, err
+	}
+	return &httpapi.Guard{AllowNetworks: networks, AllowHosts: fc.AllowHosts, Resolver: d.HTTPAPI.Resolver}, nil
 }
 
 // buildExternal finds and checks the plugin's executable and resolves the
@@ -164,7 +198,7 @@ func buildExternal(name string, fc configure.FeatherConfig, d Deps, resolve func
 		}
 		secrets[k] = s
 	}
-	f, err := external.New(name, fc, exe, secrets, external.Options{LookupEnv: d.LookupEnv, Clock: d.Clock})
+	f, err := external.New(name, fc, exe, secrets, external.Options{LookupEnv: d.LookupEnv, Clock: d.Clock, Redactor: d.Redactor})
 	if err != nil {
 		return nil, fmt.Errorf("feather %q: %w", name, err)
 	}
@@ -228,6 +262,7 @@ func buildHTTP(name string, fc configure.FeatherConfig, d Deps, resolve func(str
 	}
 	opt := d.HTTPAPI
 	opt.Clock = d.Clock
+	opt.Redactor = d.Redactor
 	f, err := httpapi.New(name, fc, rawURL, auth, opt)
 	if err != nil {
 		return nil, fmt.Errorf("feather %q: %w", name, err)

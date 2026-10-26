@@ -2,12 +2,13 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/netip"
 	"strings"
 	"syscall"
+
+	"github.com/magicdrive/kjak/internal/feather"
 )
 
 // The SSRF policy of an http feather. A URL in a configuration (a project
@@ -226,17 +227,12 @@ type Resolver interface {
 }
 
 // BlockedError: the policy refused every address of a host (the request
-// was not sent).
-type BlockedError struct {
-	Reason string
-}
-
-func (e *BlockedError) Error() string { return e.Reason }
+// was not sent). It is feather.BlockedError, which every feather that
+// connects through a Guard reports as "blocked".
+type BlockedError = feather.BlockedError
 
 // ErrBlocked is the error of a refused address or redirect.
-var ErrBlocked = errors.New("refused by the address policy")
-
-func (e *BlockedError) Unwrap() error { return ErrBlocked }
+var ErrBlocked = feather.ErrBlocked
 
 // Allowed checks one address of host.
 func (g *Guard) Allowed(host string, a netip.Addr) error {

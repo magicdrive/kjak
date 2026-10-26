@@ -264,8 +264,24 @@ func loopProblem(t *template.Template, kind string) error {
 func httpFieldsSet(fc FeatherConfig) bool {
 	return fc.URL != "" || fc.URLSecret != nil || fc.Method != "" || len(fc.Headers) > 0 || len(fc.Query) > 0 ||
 		fc.Auth != nil || fc.Body != nil || len(fc.SuccessStatus) > 0 || fc.MaxResponseBytes != 0 ||
-		fc.AllowHTTP || len(fc.AllowNetworks) > 0 || len(fc.AllowHosts) > 0 || fc.MaxRedirects != 0 ||
+		fc.AllowHTTP || fc.MaxRedirects != 0 ||
 		fc.IdempotencyKey || fc.IdempotencyHeader != ""
+}
+
+// addressPolicyProblems checks allow_networks and allow_hosts: the address
+// policy of an http feather, and of a project's slack, discord and email
+// feathers.
+func addressPolicyProblems(fc FeatherConfig) []string {
+	var problems []string
+	if _, err := ParseAllowNetworks(fc.AllowNetworks); err != nil {
+		problems = append(problems, err.Error())
+	}
+	for _, h := range fc.AllowHosts {
+		if len(h) > 253 || !hostName.MatchString(strings.TrimSuffix(h, ".")) {
+			problems = append(problems, fmt.Sprintf("allow_hosts: %q is not a host name", h))
+		}
+	}
+	return problems
 }
 
 // HTTPMethod is the method of an http feather (POST when unset).
@@ -412,14 +428,7 @@ func httpProblems(fc FeatherConfig) []string {
 	if fc.MaxResponseBytes < 0 || fc.MaxResponseBytes > MaxMaxResponseBytes {
 		add("max_response_bytes must be between 1 and %d (0: %d)", MaxMaxResponseBytes, DefaultMaxResponseBytes)
 	}
-	if _, err := ParseAllowNetworks(fc.AllowNetworks); err != nil {
-		add("%v", err)
-	}
-	for _, h := range fc.AllowHosts {
-		if len(h) > 253 || !hostName.MatchString(strings.TrimSuffix(h, ".")) {
-			add("allow_hosts: %q is not a host name", h)
-		}
-	}
+	problems = append(problems, addressPolicyProblems(fc)...)
 	if fc.MaxRedirects < 0 || fc.MaxRedirects > MaxHTTPRedirects {
 		add("max_redirects must be between 0 and %d", MaxHTTPRedirects)
 	}

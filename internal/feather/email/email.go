@@ -62,6 +62,9 @@ type Feather struct {
 	SubjectPrefix string
 
 	Clock clock.Clock
+	// Redactor redacts the secrets of the feather from a server's reply
+	// before it is shortened for an error.
+	Redactor *credential.Redactor
 	// Rand is the source of Message-ID values (crypto/rand when nil).
 	Rand io.Reader
 	// TLSConfig overrides the TLS configuration (tests: a test CA).
@@ -139,13 +142,18 @@ func (s *session) close() {
 func (s *session) fail(what string, err error) feather.Outcome {
 	var te *textproto.Error
 	if errors.As(err, &te) && s.stage != stageData {
-		return replyOutcome(what, te.Code, te.Msg)
+		return replyOutcome(s.f.Redactor, what, te.Code, te.Msg)
 	}
 	if s.ctx.Err() != nil {
 		if s.stage == stageSent {
 			return feather.Unknown(core.ErrCodeAmbiguous, fmt.Errorf("%v while waiting for the reply to the message; the server may have accepted it", feather.ContextErr(s.ctx)))
 		}
 		return feather.Rejected(feather.ContextCode(s.ctx), 0, false, fmt.Errorf("%v during %s", feather.ContextErr(s.ctx), what))
+	}
+	var blocked *feather.BlockedError
+	if errors.As(err, &blocked) {
+		// the address policy refused the server: nothing was sent
+		return feather.Rejected(core.ErrCodeBlocked, 0, false, fmt.Errorf("%s: %s", what, blocked.Reason))
 	}
 	reason := describeNetError(err)
 	if s.stage == stageSent {
@@ -167,8 +175,8 @@ func (s *session) fail(what string, err error) feather.Outcome {
 
 // replyOutcome classifies a negative reply before the message was accepted:
 // 4xx is transient (retryable), 5xx permanent.
-func replyOutcome(what string, code int, msg string) feather.Outcome {
-	err := fmt.Errorf("%s: SMTP %d %s", what, code, sanitize(msg))
+func replyOutcome(rd *credential.Redactor, what string, code int, msg string) feather.Outcome {
+	err := fmt.Errorf("%s: SMTP %d %s", what, code, sanitize(rd, msg))
 	switch {
 	case code >= 400 && code < 500:
 		return feather.Rejected(core.ErrCodeServer, code, true, err)
@@ -369,7 +377,7 @@ func (s *session) transaction(content []byte) feather.Outcome {
 		if err != nil {
 			var te *textproto.Error
 			if errors.As(err, &te) {
-				return replyOutcome("RCPT TO <"+rcpt+">", code, msg)
+				return replyOutcome(s.f.Redactor, "RCPT TO <"+rcpt+">", code, msg)
 			}
 			return s.fail("RCPT TO", err)
 		}
@@ -404,7 +412,7 @@ func (s *session) transaction(content []byte) feather.Outcome {
 		return feather.Confirmed(code)
 	case code >= 400 && code < 600:
 		// an explicit refusal of the data: not accepted
-		return replyOutcome("message", code, msg)
+		return replyOutcome(s.f.Redactor, "message", code, msg)
 	}
 	return feather.Unknown(core.ErrCodeProtocol, fmt.Errorf("unexpected SMTP reply %d to the message; the server may have accepted it", code))
 }
@@ -565,10 +573,8 @@ func describeNetError(err error) string {
 	return "connection error"
 }
 
-func sanitize(s string) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if r := []rune(s); len(r) > 200 {
-		s = string(r[:200]) + "..."
-	}
-	return s
+// sanitize is a server's reply on one line and short, the secrets of rd
+// redacted before it is changed (credential.Redactor.Clip).
+func sanitize(rd *credential.Redactor, s string) string {
+	return rd.Clip(s, func(s string) string { return strings.Join(strings.Fields(s), " ") }, 200, false)
 }

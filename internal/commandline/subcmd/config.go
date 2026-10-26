@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"runtime"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -145,19 +147,19 @@ func configPath(ctx context.Context, rt *Runtime, args []string) int {
 		return ExitOK
 	}
 	tw := tabwriter.NewWriter(rt.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintf(tw, "global (%s)\t%s\n", p.GlobalFrom.Describe("--config", "KJAK_CONFIG"), p.Global)
+	fmt.Fprintf(tw, "global (%s)\t%s\n", p.GlobalFrom.Describe("--config", "KJAK_CONFIG"), output.Shown(p.Global))
 	if p.Project != "" {
-		fmt.Fprintf(tw, "project (current)\t%s (%s)\n", p.Project, state)
+		fmt.Fprintf(tw, "project (current)\t%s (%s)\n", output.Shown(p.Project), state)
 	} else {
 		fmt.Fprintf(tw, "project\t%s\n", state)
 	}
-	fmt.Fprintf(tw, "secrets (%s)\t%s (%s)\n", p.SecretsFrom.Describe("--secrets", "KJAK_SECRETS"), p.Secrets, secrets)
+	fmt.Fprintf(tw, "secrets (%s)\t%s (%s)\n", p.SecretsFrom.Describe("--secrets", "KJAK_SECRETS"), output.Shown(p.Secrets), secrets)
 	if p.ProjectSecrets != "" {
-		fmt.Fprintf(tw, "project secrets (current)\t%s (%s)\n", p.ProjectSecrets, projSecrets)
+		fmt.Fprintf(tw, "project secrets (current)\t%s (%s)\n", output.Shown(p.ProjectSecrets), projSecrets)
 	} else {
 		fmt.Fprintf(tw, "project secrets\t%s\n", projSecrets)
 	}
-	fmt.Fprintf(tw, "trust store\t%s\n", p.TrustStore)
+	fmt.Fprintf(tw, "trust store\t%s\n", output.Shown(p.TrustStore))
 	fmt.Fprintf(tw, "secrets checks\t%s\n", fileacl.Model)
 	_ = tw.Flush()
 	return ExitOK
@@ -211,9 +213,9 @@ func configShow(ctx context.Context, rt *Runtime, args []string) int {
 	if err != nil {
 		return rt.fail(ctx, err)
 	}
-	fmt.Fprintf(rt.Stdout, "# effective configuration (literal secrets redacted)\n# global:  %s\n", l.Global.Path)
+	fmt.Fprintf(rt.Stdout, "# effective configuration (literal secrets redacted)\n# global:  %s\n", output.Shown(l.Global.Path))
 	if l.ProjectTrusted {
-		fmt.Fprintf(rt.Stdout, "# project: %s (trusted)\n", l.Project.Path)
+		fmt.Fprintf(rt.Stdout, "# project: %s (trusted)\n", output.Shown(l.Project.Path))
 	}
 	fmt.Fprintf(rt.Stdout, "\n%s", body)
 	return ExitOK
@@ -284,7 +286,7 @@ func configValidate(ctx context.Context, rt *Runtime, args []string) int {
 		fmt.Fprintf(rt.Stdout, "%s: none\n", global.Path)
 	}
 	if project != nil && project.Exists {
-		fmt.Fprintf(rt.Stdout, "%s: OK (%s)%s\n", project.Path, state, note(project))
+		fmt.Fprintf(rt.Stdout, "%s: OK (%s)%s\n", output.Shown(project.Path), state, note(project))
 		if state != "trusted" {
 			fmt.Fprintln(rt.Stderr, "kjak: the project configuration is not trusted: a run refuses it until `kjak config trust`")
 		}
@@ -340,7 +342,7 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 		return rt.fail(ctx, err)
 	}
 	grant := configure.TrustGrant{}
-	fmt.Fprintf(rt.Stdout, "project configuration %s\nsha256 %s\n", canon, src.Hash)
+	fmt.Fprintf(rt.Stdout, "project configuration %s\nsha256 %s\n", output.Shown(canon), src.Hash)
 	if secrets.Exists {
 		if grant.SecretsPath, err = configure.CanonicalPath(secrets.Path); err != nil {
 			return rt.fail(ctx, err)
@@ -349,9 +351,9 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 		if err := configure.NotPersonal(p, secrets); err != nil {
 			return rt.fail(ctx, err)
 		}
-		fmt.Fprintf(rt.Stdout, "project secrets %s\nsha256 %s (values not shown)\n", grant.SecretsPath, secrets.Hash)
+		fmt.Fprintf(rt.Stdout, "project secrets %s\nsha256 %s (values not shown)\n", output.Shown(grant.SecretsPath), secrets.Hash)
 		for _, n := range secrets.Names() {
-			fmt.Fprintf(rt.Stdout, "  defines secret %s\n", n)
+			fmt.Fprintf(rt.Stdout, "  defines secret %s\n", output.Shown(n))
 		}
 	}
 	describeProject(rt, src.File)
@@ -374,7 +376,7 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 			return rt.fail(ctx, fmt.Errorf("config trust: feather %s: %s has SHA-256 %s, the configuration pins %s", name, exe.Real, exe.SHA256, fc.SHA256))
 		}
 		grant.Plugins = append(grant.Plugins, configure.TrustedPlugin{Name: fc.Plugin, Path: exe.Real, SHA256: exe.SHA256})
-		fmt.Fprintf(rt.Stdout, "plugin %s: %s\nsha256 %s\n", fc.Plugin, exe.Real, exe.SHA256)
+		fmt.Fprintf(rt.Stdout, "plugin %s: %s\nsha256 %s\n", output.Shown(fc.Plugin), output.Shown(exe.Real), exe.SHA256)
 	}
 	// the names the project reads from the personal secrets file: each one
 	// is shown and allowed explicitly
@@ -384,17 +386,18 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 		}
 	}
 	if len(grant.UserSecrets) > 0 {
-		fmt.Fprintf(rt.Stdout, "The project asks to read these secrets from YOUR %s secrets file %s:\n", p.SecretsFrom.Kind(), p.Secrets)
+		fmt.Fprintf(rt.Stdout, "The project asks to read these secrets from YOUR %s secrets file %s:\n", p.SecretsFrom.Kind(), output.Shown(p.Secrets))
 		for _, name := range grant.UserSecrets {
-			fmt.Fprintf(rt.Stdout, "  secret %s\n", name)
+			fmt.Fprintf(rt.Stdout, "  secret %s\n", output.Shown(name))
 		}
 	}
-	// the environment variables and keychain entries its http feathers
-	// send to a URL of the project's choosing
+	// the environment variables and keychain entries its feathers send to
+	// a destination of the project's choosing (a URL, an SMTP host, a
+	// plugin)
 	if gated := configure.GatedNames(src.File); len(gated) > 0 {
-		fmt.Fprintln(rt.Stdout, "The project asks to give these to destinations it chooses (http feathers, plugins):")
+		fmt.Fprintln(rt.Stdout, "The project asks to give these of YOUR environment variables and keychain entries to destinations it chooses (its webhook URLs, SMTP hosts, http URLs, plugins):")
 		for _, name := range gated {
-			fmt.Fprintf(rt.Stdout, "  %s\n", name)
+			fmt.Fprintf(rt.Stdout, "  %s\n", output.Shown(name))
 		}
 		grant.UserSecrets = append(grant.UserSecrets, gated...)
 	}
@@ -420,7 +423,7 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 	if err := configure.TrustWith(p.TrustStore, src.Path, src.Hash, rt.Clock.Now(), grant); err != nil {
 		return rt.fail(ctx, err)
 	}
-	fmt.Fprintf(rt.Stdout, "trusted %s\n", canon)
+	fmt.Fprintf(rt.Stdout, "trusted %s\n", output.Shown(canon))
 	return ExitOK
 }
 
@@ -439,23 +442,23 @@ func describeProject(rt *Runtime, f *configure.File) {
 		fc := f.Feathers[name]
 		switch fc.Type {
 		case configure.TypeExternal:
-			fmt.Fprintf(rt.Stdout, "  feather %s: external plugin %s (runs with your rights)\n", name, fc.Plugin)
+			fmt.Fprintf(rt.Stdout, "  feather %s: external plugin %s (runs with your rights)\n", output.Shown(name), output.Shown(fc.Plugin))
 			if s := describeSecrets(fc); len(s) > 0 {
-				fmt.Fprintf(rt.Stdout, "    secrets given to it: %s\n", strings.Join(s, ", "))
+				fmt.Fprintf(rt.Stdout, "    secrets given to it: %s\n", output.ShownList(s))
 			}
 			if len(fc.Env) > 0 {
-				fmt.Fprintf(rt.Stdout, "    environment variables given to it: %s\n", strings.Join(fc.Env, ", "))
+				fmt.Fprintf(rt.Stdout, "    environment variables given to it: %s\n", output.ShownList(fc.Env))
 			}
 			if len(fc.Settings) > 0 {
 				var kv []string
 				for _, k := range sortedNames(fc.Settings) {
-					kv = append(kv, k+"="+fc.Settings[k])
+					kv = append(kv, output.Shown(k)+"="+strconv.Quote(fc.Settings[k]))
 				}
 				fmt.Fprintf(rt.Stdout, "    settings: %s\n", strings.Join(kv, ", "))
 			}
 		case configure.TypeHTTP:
 			url, auth, policy := describeHTTP(fc)
-			fmt.Fprintf(rt.Stdout, "  feather %s: http %s %s, auth %s\n", name, fc.HTTPMethod(), url, auth)
+			fmt.Fprintf(rt.Stdout, "  feather %s: http %s %s, auth %s\n", output.Shown(name), fc.HTTPMethod(), output.Shown(url), output.Shown(auth))
 			if policy != "" {
 				fmt.Fprintf(rt.Stdout, "    address policy: %s\n", policy)
 			}
@@ -464,7 +467,7 @@ func describeProject(rt *Runtime, f *configure.File) {
 				m     map[string]string
 			}{{"header", fc.Headers}, {"query", fc.Query}} {
 				for _, k := range sortedNames(kind.m) {
-					fmt.Fprintf(rt.Stdout, "    %s %s: %q\n", kind.label, k, kind.m[k])
+					fmt.Fprintf(rt.Stdout, "    %s %s: %q\n", kind.label, output.Shown(k), kind.m[k])
 				}
 			}
 			if fc.Body != nil && fc.Body.Template != "" {
@@ -473,23 +476,60 @@ func describeProject(rt *Runtime, f *configure.File) {
 		case configure.TypeEmail:
 			secret := "no password"
 			if fc.Password != nil {
-				secret = "password from " + fc.Password.Describe()
+				secret = "password from " + output.Shown(fc.Password.Describe())
 			}
-			fmt.Fprintf(rt.Stdout, "  feather %s: email via %s, %s, to %s\n", name, fc.Host, secret, strings.Join(fc.To, ", "))
+			fmt.Fprintf(rt.Stdout, "  feather %s: email via %s, %s, to %s\n", output.Shown(name), output.Shown(fc.Host), secret, output.ShownList(fc.To))
+			fmt.Fprintf(rt.Stdout, "    address policy: %s\n", addressPolicy(fc))
 		default:
 			src := "(none)"
 			if fc.WebhookURL != nil {
-				src = fc.WebhookURL.Describe()
+				src = output.Shown(fc.WebhookURL.Describe())
+				if h := webhookHost(fc.WebhookURL); h != "" {
+					// where it sends: the host only (the path and the
+					// query of a webhook URL are its secret)
+					src += fmt.Sprintf(", to host %q", h)
+				}
 			}
-			fmt.Fprintf(rt.Stdout, "  feather %s: %s, webhook URL from %s\n", name, fc.Type, src)
+			fmt.Fprintf(rt.Stdout, "  feather %s: %s, webhook URL from %s\n", output.Shown(name), output.Shown(fc.Type), src)
+			fmt.Fprintf(rt.Stdout, "    address policy: %s\n", addressPolicy(fc))
 		}
 	}
 	for _, name := range sortedNames(f.Groups) {
-		fmt.Fprintf(rt.Stdout, "  group %s: %s\n", name, strings.Join(f.Groups[name].Feathers, ", "))
+		fmt.Fprintf(rt.Stdout, "  group %s: %s\n", output.Shown(name), output.ShownList(f.Groups[name].Feathers))
 	}
 	for _, name := range sortedNames(f.Templates) {
-		fmt.Fprintf(rt.Stdout, "  template %s\n", name)
+		fmt.Fprintf(rt.Stdout, "  template %s\n", output.Shown(name))
 	}
+}
+
+// addressPolicy describes where a project's slack, discord or email
+// feather may connect (the address policy of the http feathers).
+func addressPolicy(fc configure.FeatherConfig) string {
+	var p []string
+	if len(fc.AllowNetworks) > 0 {
+		p = append(p, "allows networks "+output.ShownList(fc.AllowNetworks))
+	}
+	if len(fc.AllowHosts) > 0 {
+		p = append(p, "allows private hosts "+output.ShownList(fc.AllowHosts))
+	}
+	if len(p) == 0 {
+		return "public addresses only"
+	}
+	return "public addresses; " + strings.Join(p, "; ")
+}
+
+// webhookHost is the host (and port) of a literal webhook URL, for the
+// trust to show where a project's feather sends; "" when the URL is not in
+// the file or is not a URL.
+func webhookHost(r *credential.Ref) string {
+	if r == nil || r.Literal == nil {
+		return ""
+	}
+	u, err := url.Parse(*r.Literal)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return u.Host
 }
 
 func configUntrust(ctx context.Context, rt *Runtime, args []string) int {
@@ -509,9 +549,9 @@ func configUntrust(ctx context.Context, rt *Runtime, args []string) int {
 		return rt.fail(ctx, err)
 	}
 	if removed {
-		fmt.Fprintf(rt.Stdout, "untrusted %s\n", p.Project)
+		fmt.Fprintf(rt.Stdout, "untrusted %s\n", output.Shown(p.Project))
 	} else {
-		fmt.Fprintf(rt.Stdout, "%s was not trusted\n", p.Project)
+		fmt.Fprintf(rt.Stdout, "%s was not trusted\n", output.Shown(p.Project))
 	}
 	return ExitOK
 }
