@@ -29,12 +29,17 @@ func openSecrets(path string, noFollow bool) (*os.File, error) {
 }
 
 // checkSecretsInfo checks the opened file: a regular file of the effective
-// user, with no permission for group or others.
-func checkSecretsInfo(path string, st os.FileInfo) error {
+// user, with no permission for group or others. With single (the project
+// file), a file with another name (a hard link) is refused too: it could be
+// the user's personal file under the project's name.
+func checkSecretsInfo(path string, st os.FileInfo, single bool) error {
 	if !st.Mode().IsRegular() {
 		return fmt.Errorf("%w: it is not a regular file", ErrInsecureSecrets)
 	}
 	if sys, ok := st.Sys().(*syscall.Stat_t); ok {
+		if single && sys.Nlink > 1 {
+			return fmt.Errorf("%w: it has %d names (hard links), which is refused here (it could be your own secrets file under the project's name)", ErrInsecureSecrets, sys.Nlink)
+		}
 		if uid := os.Geteuid(); int(sys.Uid) != uid {
 			return fmt.Errorf("%w: it is owned by uid %d, not by the user running kjak (uid %d)", ErrInsecureSecrets, sys.Uid, uid)
 		}

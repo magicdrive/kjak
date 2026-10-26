@@ -362,7 +362,7 @@ Trust this exact content? [y/N]
   stored in the trust store. **Any change** of the content, or another path,
   needs a new trust.
 - A `./.kjak.secrets.toml` next to it is trusted with it (its path and
-  SHA-256; its values are never shown). A secrets file that appears, changes
+  SHA-256; the names it defines are shown, its values never). A secrets file that appears, changes
   or goes after the trust withdraws it.
 - The `secret` references of the project file that the project secrets file
   does not define are read from **your** secrets file only when you allow
@@ -437,7 +437,7 @@ webhook_url = { secret = "dev_slack.webhook_url" }
 | values | strings only; an empty value is an error when it is used. Values are used as they are: nothing in them is expanded (`${...}`, `{ env = ... }` and `{{...}}` stay text) |
 | size | at most 1 MiB; unknown or non-string entries are errors that name the key, never the value |
 | permissions (Unix) | a regular file of the user running kjak, with no permission for group or others (`chmod 600`); otherwise refused before it is parsed. The check is made on the opened file (`fstat`), not on the path |
-| symbolic links | the personal file may be one (a dotfiles link): the file it leads to is checked. The project file must not be one (a repository could link it to your personal file): it is opened with `O_NOFOLLOW` |
+| links | the personal file may be a symbolic link (dotfiles): the file it leads to is checked. The project file must not be a symbolic link (opened with `O_NOFOLLOW`), must have one name only (no hard link), and must not be the personal file: a repository, or another user, could otherwise present your personal file as the project's |
 | FIFOs, devices | refused without waiting (`--secrets <(...)` does not work: use `env`) |
 | Windows | the file must be a regular file; its access control list is **not checked** (kjak does not read ACLs yet). A file under `%AppData%` is private by the profile's default ACL; keep it there. A project secrets file that is a reparse point is refused (checked on the path, before the open) |
 
