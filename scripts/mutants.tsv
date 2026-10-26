@@ -76,3 +76,6 @@ redact-basic-base64	internal/feather/builtin/builtin.go	./internal/feather/built
 escape-config-control	internal/configure/validate.go	./internal/configure ./internal/commandline	if HasControl(f.value) {	if false {	a free-text field of a feather may hold a terminal escape sequence
 escape-error-output	internal/commandline/subcmd/runtime.go	./internal/commandline	output.EscapeControls(msg))	msg)	an error quotes untrusted text with its terminal escapes
 escape-shown	internal/output/text.go	./internal/output ./internal/commandline	if !strconv.IsPrint(r) {	if false && r != 0 {	config trust prints a value with its control characters
+ssrf-project-webhook	internal/feather/builtin/builtin.go	./internal/feather/builtin ./internal/commandline	httpClient = webhook.NewGuardedClient(guard.DialContext)	_ = guard.DialContext	a project slack or discord feather connects without the address policy
+ssrf-project-email	internal/feather/builtin/builtin.go	./internal/feather/builtin ./internal/commandline	f.Dial = guard.DialContext	_ = f	a project email feather connects without the address policy
+ssrf-guarded-proxy	internal/feather/webhook/webhook.go	./internal/feather/webhook ./internal/commandline	tr.Proxy = nil	_ = tr	a guarded webhook client goes through the proxy of the environment
