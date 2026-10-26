@@ -16,9 +16,9 @@ func TestIsBrokenPipe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.Close()
+	_ = r.Close()
 	_, werr := w.Write([]byte("x"))
-	w.Close()
+	_ = w.Close()
 	if werr == nil || !isBrokenPipe(werr) || !isBrokenPipe(fmt.Errorf("writing the report: %w", werr)) {
 		t.Fatalf("a closed pipe: %v (%#v)", werr, werr)
 	}

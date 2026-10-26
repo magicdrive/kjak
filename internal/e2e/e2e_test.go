@@ -36,11 +36,11 @@ func TestMain(m *testing.M) {
 	build := exec.Command("go", "build", "-o", binary, "../..")
 	build.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, err := build.CombinedOutput(); err != nil {
-		os.Stderr.Write(out)
+		_, _ = os.Stderr.Write(out)
 		panic(err)
 	}
 	code := m.Run()
-	os.RemoveAll(dir)
+	_ = os.RemoveAll(dir)
 	os.Exit(code)
 }
 
@@ -209,7 +209,7 @@ func checkDocCommands(t *testing.T, path string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	s := newSandbox(t)
 	checked := map[string]bool{}
 	inCode := false
@@ -260,13 +260,13 @@ func TestBinaryClosedPipeIsQuiet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.Close()
+	_ = r.Close()
 	cmd := exec.Command(binary, "feather", "list", "-o", "json")
 	cmd.Dir, cmd.Env, cmd.Stdout = s.dir, s.env, w
 	var errOut bytes.Buffer
 	cmd.Stderr = &errOut
 	err = cmd.Run()
-	w.Close()
+	_ = w.Close()
 	var ee *exec.ExitError
 	if !errors.As(err, &ee) || ee.ExitCode() != 2 || errOut.Len() != 0 {
 		t.Fatalf("exit %v, stderr %q", err, errOut.String())

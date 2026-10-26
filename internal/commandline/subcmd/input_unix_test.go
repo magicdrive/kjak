@@ -40,11 +40,11 @@ func TestReadInputReadsToTheEnd(t *testing.T) {
 	go func() {
 		defer close(wrote)
 		_, _ = w.Write(make([]byte, maxInput+1))
-		w.Close()
+		_ = w.Close()
 	}()
 	_, err := readInput(context.Background(), r, "pipe")
-	r.Close() // ends the write blocked beyond the limit (EPIPE)
-	<-wrote   // and its close, not left to a later test's count of descriptors
+	_ = r.Close() // ends the write blocked beyond the limit (EPIPE)
+	<-wrote       // and its close, not left to a later test's count of descriptors
 	if err == nil {
 		t.Fatal("an input over the limit was read")
 	}
@@ -65,7 +65,7 @@ func highFDs(t *testing.T) {
 	var held []int
 	t.Cleanup(func() {
 		for _, fd := range held {
-			syscall.Close(fd)
+			_ = syscall.Close(fd)
 		}
 	})
 	for {
@@ -74,7 +74,7 @@ func highFDs(t *testing.T) {
 			t.Fatal(err)
 		}
 		if fd >= 1024 {
-			syscall.Close(fd)
+			_ = syscall.Close(fd)
 			return
 		}
 		held = append(held, fd)
@@ -157,7 +157,7 @@ func testReadInputCanceled(t *testing.T, high bool) {
 			settled(t, goroutines) // before the closes, which would end a read left behind
 			for _, f := range []*os.File{r, w} {
 				if f != nil {
-					f.Close()
+					_ = f.Close()
 				}
 			}
 			if after := fdSet(t); len(after) != len(before) {
@@ -185,7 +185,7 @@ func TestReadInputEnds(t *testing.T) {
 		}
 		_, _ = w.WriteString(`{"body":`)
 		_, _ = w.WriteString(`"x"}`)
-		w.Close()
+		_ = w.Close()
 	}()
 	if b, err := readFileLimited(context.Background(), fifo); err != nil || string(b) != `{"body":"x"}` {
 		t.Fatalf("fifo: %q %v", b, err)
@@ -195,14 +195,14 @@ func TestReadInputEnds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	if err := syscall.SetNonblock(int(r.Fd()), true); err != nil {
 		t.Fatal(err)
 	}
 	go func() {
 		_, _ = w.WriteString("part one, ")
 		_, _ = w.WriteString("part two")
-		w.Close()
+		_ = w.Close()
 	}()
 	if b, err := readStdin(context.Background(), r); err != nil || string(b) != "part one, part two" {
 		t.Fatalf("non-blocking pipe: %q %v", b, err)
@@ -212,7 +212,7 @@ func TestReadInputEnds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer null.Close()
+	defer func() { _ = null.Close() }()
 	b, err := readStdin(context.Background(), null)
 	if runtime.GOOS == "darwin" {
 		if err == nil || !strings.Contains(err.Error(), "cannot wait") {
@@ -244,7 +244,7 @@ func TestReadInputFIFOLimit(t *testing.T) {
 	_, err := readFileLimited(context.Background(), fifo)
 	if f, ok := <-w; ok {
 		<-wrote // a close during the write would happen when it ends, in a later test
-		f.Close()
+		_ = f.Close()
 	}
 	if err == nil || !strings.Contains(err.Error(), "larger than") {
 		t.Fatalf("err = %v", err)
@@ -275,16 +275,16 @@ func TestReadInputStdinNamedFIFO(t *testing.T) {
 	r, w := open(t)
 	go func(w *os.File) {
 		_, _ = w.WriteString("the body")
-		w.Close()
+		_ = w.Close()
 	}(w)
 	if b, err := readStdin(context.Background(), r); err != nil || string(b) != "the body" {
 		t.Fatalf("%q %v", b, err)
 	}
-	r.Close()
+	_ = r.Close()
 
 	r, w = open(t)
-	defer r.Close()
-	defer w.Close()
+	defer func() { _ = r.Close() }()
+	defer func() { _ = w.Close() }()
 	goroutines := runtime.NumGoroutine()
 	cause := errors.New("interrupted")
 	ctx, cancel := context.WithCancelCause(context.Background())

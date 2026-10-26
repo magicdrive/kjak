@@ -98,6 +98,10 @@ jobs:
       - name: Staticcheck
         run: make staticcheck  # version pinned in the Makefile (STATICCHECK)
 
+      # .golangci.yml, for linux, darwin and windows (GOOS)
+      - name: golangci-lint
+        run: make golangci-lint  # version pinned in the Makefile (GOLANGCI_LINT)
+
       - name: Go vet for windows
         run: GOOS=windows go vet ./...
 
