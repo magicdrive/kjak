@@ -55,10 +55,17 @@ func (f fakeInfo) Sys() any           { return &syscall.Stat_t{Uid: f.uid} }
 
 func TestSecretsFileOwner(t *testing.T) {
 	me := uint32(os.Geteuid())
-	if err := checkSecretsInfo("x", fakeInfo{mode: 0o600, uid: me}, true); err != nil {
+	path := filepath.Join(t.TempDir(), "secrets.toml")
+	write(t, path, "")
+	f, err := os.Open(path)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := checkSecretsInfo("x", fakeInfo{mode: 0o600, uid: me + 1}, false); !errors.Is(err, ErrInsecureSecrets) || !strings.Contains(err.Error(), "owned by uid") {
+	defer func() { _ = f.Close() }()
+	if err := checkPrivateFile(f, "x", fakeInfo{mode: 0o600, uid: me}, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkPrivateFile(f, "x", fakeInfo{mode: 0o600, uid: me + 1}, false); !errors.Is(err, ErrInsecureSecrets) || !strings.Contains(err.Error(), "owned by uid") {
 		t.Fatalf("another owner: %v", err)
 	}
 }

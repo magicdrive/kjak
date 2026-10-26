@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"os"
 	"syscall"
+
+	"github.com/magicdrive/kjak/internal/fileacl"
 )
 
 // openSecrets opens a secrets file for reading: without blocking on a FIFO
@@ -28,11 +30,13 @@ func openSecrets(path string, noFollow bool) (*os.File, error) {
 	return f, err
 }
 
-// checkSecretsInfo checks the opened file: a regular file of the effective
-// user, with no permission for group or others. With single (the project
-// file), a file with another name (a hard link) is refused too: it could be
-// the user's personal file under the project's name.
-func checkSecretsInfo(path string, st os.FileInfo, single bool) error {
+// checkPrivateFile checks the opened file: a regular file of the
+// effective user, with no permission for group or others, and no ACL entry
+// that gives anyone else access (fileacl: the POSIX ACL on Linux, the
+// extended security on macOS). With single (the project file), a file with
+// another name (a hard link) is refused too: it could be the user's
+// personal file under the project's name.
+func checkPrivateFile(f *os.File, path string, st os.FileInfo, single bool) error {
 	if !st.Mode().IsRegular() {
 		return fmt.Errorf("%w: it is not a regular file", ErrInsecureSecrets)
 	}
@@ -47,9 +51,18 @@ func checkSecretsInfo(path string, st os.FileInfo, single bool) error {
 	if perm := st.Mode().Perm(); perm&0o077 != 0 {
 		return fmt.Errorf("%w: group or others have access (mode %04o); run: chmod 600 %s", ErrInsecureSecrets, perm, path)
 	}
+	if err := fileacl.CheckFile(f, fileacl.Private); err != nil {
+		return fmt.Errorf("%w: %w", ErrInsecureSecrets, err)
+	}
 	return nil
 }
 
-// SecretsChecksPermissions: on Unix the owner and the mode of a secrets file
-// are checked.
+// createPrivate creates path exclusively (O_EXCL: never an existing file,
+// never through a link), readable and writable by the owner only.
+func createPrivate(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+}
+
+// SecretsChecksPermissions: the owner, the mode and the ACL of a secrets
+// file are checked.
 const SecretsChecksPermissions = true
