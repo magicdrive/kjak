@@ -50,7 +50,7 @@ func TestCritical_ProjectEmailReachesPublicAddressesOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	var accepted atomic.Int32
 	go func() {
 		for {
@@ -59,7 +59,7 @@ func TestCritical_ProjectEmailReachesPublicAddressesOnly(t *testing.T) {
 				return
 			}
 			accepted.Add(1)
-			c.Close()
+			_ = c.Close()
 		}
 	}()
 	port := ln.Addr().(*net.TCPAddr).Port
