@@ -35,6 +35,11 @@ func (fc *FeatherConfig) Credentials(feather string) []CredentialField {
 		add("auth.password", &fc.Auth.Password)
 		add("auth.value", &fc.Auth.Value)
 	}
+	for _, k := range sortedKeys(fc.PluginSecrets) {
+		if r := fc.PluginSecrets[k]; r != nil {
+			out = append(out, CredentialField{Feather: feather, Field: "secrets." + k, Ref: r, set: func(n *credential.Ref) { fc.PluginSecrets[k] = n }})
+		}
+	}
 	return out
 }
 

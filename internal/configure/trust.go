@@ -36,6 +36,27 @@ type TrustEntry struct {
 	// allowed them. Any other name it refers to must be in the project
 	// secrets file.
 	UserSecrets []string `toml:"user_secrets,omitempty"`
+	// Plugins are the executables of the project's external feathers as
+	// they were when the project was trusted: one that is another file, or
+	// changed, needs a new trust.
+	Plugins []TrustedPlugin `toml:"plugins,omitempty"`
+}
+
+// TrustedPlugin is the executable of a plugin a trusted project runs.
+type TrustedPlugin struct {
+	Name   string `toml:"name"`
+	Path   string `toml:"path"`
+	SHA256 string `toml:"sha256"`
+}
+
+// Plugin returns the trusted executable of a plugin.
+func (e TrustEntry) Plugin(name string) (TrustedPlugin, bool) {
+	for _, p := range e.Plugins {
+		if p.Name == name {
+			return p, true
+		}
+	}
+	return TrustedPlugin{}, false
 }
 
 // TrustGrant is what a trust covers besides the project file itself.
@@ -43,6 +64,7 @@ type TrustGrant struct {
 	SecretsPath   string // canonical; "" when there is no project secrets file
 	SecretsSHA256 string
 	UserSecrets   []string
+	Plugins       []TrustedPlugin
 }
 
 // AllowsUserSecret reports whether the project may read name from the
@@ -152,7 +174,7 @@ func retrust(storePath, path, hash string, now time.Time, refs []string) error {
 		if !ok {
 			return TrustGrant{}
 		}
-		g := TrustGrant{SecretsPath: old.SecretsPath, SecretsSHA256: old.SecretsSHA256}
+		g := TrustGrant{SecretsPath: old.SecretsPath, SecretsSHA256: old.SecretsSHA256, Plugins: old.Plugins}
 		for _, n := range old.UserSecrets {
 			if slices.Contains(refs, n) {
 				g.UserSecrets = append(g.UserSecrets, n)
@@ -188,6 +210,7 @@ func trust(storePath, path, hash string, now time.Time, grant func(old TrustEntr
 		ts.Projects = append(kept, TrustEntry{
 			Path: canon, SHA256: hash, TrustedAt: now.UTC().Truncate(time.Second),
 			SecretsPath: g.SecretsPath, SecretsSHA256: g.SecretsSHA256, UserSecrets: slices.Compact(users),
+			Plugins: g.Plugins,
 		})
 		sort.Slice(ts.Projects, func(i, j int) bool { return ts.Projects[i].Path < ts.Projects[j].Path })
 		return encodeTrustStore(ts)

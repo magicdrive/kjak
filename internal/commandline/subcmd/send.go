@@ -96,6 +96,7 @@ func Send(ctx context.Context, rt *Runtime, args []string) int {
 		Redactor:   redactor,
 		Clock:      rt.Clock,
 		HTTPClient: httpClient,
+		LookupEnv:  rt.LookupEnv,
 	}
 	targets := make([]delivery.Target, 0, len(plan.Entries))
 	for _, e := range plan.Entries {
@@ -104,7 +105,11 @@ func Send(ctx context.Context, rt *Runtime, args []string) int {
 			// a secret reference reads the secrets files of the file that
 			// defines the feather (configure.Loaded.SecretSource)
 			d := deps
-			d.Resolver = resolver.WithSecrets(l.SecretSource(l.Origin("feather", e.Name)))
+			origin := l.Origin("feather", e.Name)
+			d.Resolver = resolver.WithSecrets(l.SecretSource(origin))
+			if origin == "project" {
+				d.ProjectTrust = &l.ProjectTrust
+			}
 			f, err := builtin.Build(preflight, e.Name, e.Config, d)
 			if err != nil {
 				if ctx.Err() == nil && preflight.Err() != nil {

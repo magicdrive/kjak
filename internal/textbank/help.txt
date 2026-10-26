@@ -1,4 +1,4 @@
-kjak - deliver a notification to Slack, Discord, e-mail and HTTP APIs
+kjak - deliver a notification to Slack, Discord, e-mail, HTTP APIs and plugins
 
 Usage:
   kjak <command> [options]
@@ -17,7 +17,7 @@ Options:
 
 Run 'kjak <command> --help' for the options of a command.
 
-Feather types: slack, discord, email, http
+Feather types: slack, discord, email, http, external (a plugin)
 (OS-native notifications are not supported in v0.1.0.)
 
 Configuration:

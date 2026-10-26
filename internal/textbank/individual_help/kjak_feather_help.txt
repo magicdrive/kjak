@@ -6,9 +6,12 @@ Usage:
   kjak feather enable NAME [--scope global|project]
   kjak feather disable NAME [--scope global|project]
   kjak feather types
+  kjak feather plugins [-o text|json]
 
 A feather is one notification destination. An http feather (any HTTP API)
-is written in the configuration file: see docs/http.md.
+and an external feather (a plugin, kjak-feather-<name> on PATH) are written
+in the configuration file: see docs/http.md and docs/plugins.md. `plugins`
+lists the plugins of PATH; it runs none of them.
 
 Options of add:
       --type TYPE              slack, discord or email (required)

@@ -1,5 +1,7 @@
 package configure
 
+import "github.com/magicdrive/kjak/internal/credential"
+
 // Merge returns the configuration of global overlaid with project:
 //   - defaults: field by field (a field project sets wins);
 //   - feathers, groups, templates: by name, a project entry replaces the
@@ -79,6 +81,19 @@ func cloneFeather(f FeatherConfig) FeatherConfig {
 	if f.Timeout != nil {
 		d := *f.Timeout
 		f.Timeout = &d
+	}
+	f.Settings = cloneMap(f.Settings)
+	f.Env = append([]string(nil), f.Env...)
+	if f.PluginSecrets != nil {
+		m := make(map[string]*credential.Ref, len(f.PluginSecrets))
+		for k, v := range f.PluginSecrets {
+			if v != nil {
+				c := *v
+				v = &c
+			}
+			m[k] = v
+		}
+		f.PluginSecrets = m
 	}
 	return f
 }
