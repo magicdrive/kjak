@@ -75,6 +75,44 @@ func SecretNames(f *File) []string {
 	return names
 }
 
+// GrantName is how a trust allows an env or keychain reference of a
+// project ("env:NAME", "keychain:SERVICE/ACCOUNT"); "" for other sources.
+func GrantName(r *credential.Ref) string {
+	switch r.Source() {
+	case credential.SourceEnv, credential.SourceKeychain:
+		return r.Describe()
+	}
+	return ""
+}
+
+// GatedType: a feather type that sends to a destination of the
+// configuration's choosing (a URL, a plugin) rather than to a provider's
+// own endpoint. In a project, its env and keychain references must be
+// allowed by name when the project is trusted, like its references to the
+// personal secrets file.
+func GatedType(t string) bool { return t == TypeHTTP }
+
+// GatedNames are the grant names of the env and keychain references of the
+// gated feathers of f, sorted, each once.
+func GatedNames(f *File) []string {
+	seen := map[string]bool{}
+	var names []string
+	if f == nil {
+		return nil
+	}
+	for _, c := range Credentials(f) {
+		if !GatedType(f.Feathers[c.Feather].Type) {
+			continue
+		}
+		if n := GrantName(c.Ref); n != "" && !seen[n] {
+			seen[n] = true
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
 // Literals are the literal credentials of f (deprecated: they keep a
 // secret in the configuration file).
 func Literals(f *File) []CredentialField {

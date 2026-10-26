@@ -84,7 +84,7 @@ func Update(p Paths, scope Scope, now time.Time, fn func(*File) error) error {
 		return err
 	}
 	if scope == ScopeProject {
-		return retrust(p.TrustStore, path, newHash, now, SecretNames(written))
+		return retrust(p.TrustStore, path, newHash, now, append(SecretNames(written), GatedNames(written)...))
 	}
 	return nil
 }

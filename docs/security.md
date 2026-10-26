@@ -96,9 +96,12 @@ rules that keep your secrets from it:
    even in a trusted project. kjak's own edits of a trusted project file
    (`feather add --scope project`) keep the allowed names the new content
    still uses and allow no new one.
-5. `env` and `keychain` references of a project file are, as before, shown
-   by `config trust` and allowed by trusting the file: reviewing them is
-   your part.
+5. `env` and `keychain` references of a project's slack, discord and email
+   feathers are, as before, shown by `config trust` and allowed by trusting
+   the file: reviewing them is your part. Those of a project's **http**
+   feathers — which send to a URL the project chooses — are allowed by name
+   like the personal secrets above (`env:NAME`, `keychain:SERVICE/ACCOUNT`
+   in `user_secrets`); any other is refused when it is resolved.
 
 An allowed name means "this project may send this secret to the
 destinations it configures": review those destinations before you allow it.

@@ -419,7 +419,9 @@ Trust this exact content? [y/N]
   each name: `config trust` lists them and asks a second question (with
   `--yes`, `--allow-user-secrets` is required). Any other name is refused
   when a send resolves it, so a trusted repository cannot reach the rest of
-  your secrets.
+  your secrets. The `env` and `keychain` references of a project's `http`
+  feathers (which send to a URL of the project's choosing) are allowed the
+  same way, by name.
 - An untrusted project file is an error for every command that would use it
   (exit 2), never used and never ignored silently:
 

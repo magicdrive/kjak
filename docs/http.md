@@ -237,7 +237,10 @@ allow_networks = ["127.0.0.1/32"]
 
 `kjak config trust` shows the method, the URL (or where it comes from), the
 authentication source and every `allow_*`/redirect setting of a project's
-http feathers before you trust them.
+http feathers before you trust them. Their `env` and `keychain` references
+(and `secret` references to your own secrets file) must be allowed by name:
+`config trust` asks a second question for them (`--allow-user-secrets` with
+`--yes`), and a run refuses any other.
 
 ## Examples
 

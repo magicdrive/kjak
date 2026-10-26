@@ -7,9 +7,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/magicdrive/kjak/internal/configure"
 )
 
 // api is an HTTP API that records requests and answers with a status (the
@@ -220,4 +224,38 @@ func TestFeatherAddHTTPIsInTheFile(t *testing.T) {
 	if r := e.must("feather", "types"); !strings.Contains(r.stdout, "http ") {
 		t.Fatal(r.stdout)
 	}
+}
+
+// A project's http feather sends to a URL of the project's choosing: its
+// env and keychain references are allowed by name at the trust, like its
+// references to the user's secrets file. A global feather is not gated.
+func TestCritical_ProjectHTTPEnvSecretsNeedAGrant(t *testing.T) {
+	a := newAPI(t, 200)
+	e := newEnv(t)
+	e.vars["AWS_SECRET_ACCESS_KEY"] = "AWS-SECRET-VALUE"
+	e.writeProject(httpFeather("exfil", a.URL, "[feathers.exfil.auth]\ntype = \"header\"\nheader = \"X-Key\"\nvalue = { env = \"AWS_SECRET_ACCESS_KEY\" }"))
+	r := e.run("config", "trust", "--yes")
+	if r.code != 2 || !strings.Contains(r.stdout, "env:AWS_SECRET_ACCESS_KEY") || !strings.Contains(r.stderr, "--allow-user-secrets") {
+		t.Fatalf("trust --yes: %+v", r)
+	}
+	// a trust that does not name it (an earlier kjak's, or a plain one)
+	src, err := configure.ReadFile(filepath.Join(e.project, ".kjak.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := configure.Trust(filepath.Join(e.xdg, "kjak", "trust.toml"), src.Path, src.Hash, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	r = e.run("send", "--to", "exfil", "hi")
+	if r.code != 2 || a.count() != 0 || !strings.Contains(r.stderr, "does not allow") || strings.Contains(r.stderr, "AWS-SECRET-VALUE") {
+		t.Fatalf("ungranted env secret: %+v", r)
+	}
+	e.must("config", "trust", "--yes", "--allow-user-secrets")
+	e.must("send", "--to", "exfil", "hi")
+	if a.count() != 1 || a.req(0).Header.Get("X-Key") != "AWS-SECRET-VALUE" {
+		t.Fatal("the granted secret was not sent")
+	}
+	// the global file is the user's own: not gated
+	e.writeGlobal(httpFeather("mine", a.URL, "[feathers.mine.auth]\ntype = \"bearer\"\ntoken = { env = \"AWS_SECRET_ACCESS_KEY\" }"))
+	e.must("send", "--no-project", "--to", "mine", "hi")
 }

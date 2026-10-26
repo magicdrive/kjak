@@ -33,8 +33,10 @@ type TrustEntry struct {
 	SecretsSHA256 string `toml:"secrets_sha256,omitempty"`
 	// UserSecrets are the secret names the project configuration may read
 	// from the personal secrets file (explicit or user), as the user
-	// allowed them. Any other name it refers to must be in the project
-	// secrets file.
+	// allowed them; any other name it refers to must be in the project
+	// secrets file. They also hold the env and keychain references of its
+	// http feathers the user allowed ("env:NAME", "keychain:S/A",
+	// GatedNames).
 	UserSecrets []string `toml:"user_secrets,omitempty"`
 }
 
