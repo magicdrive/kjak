@@ -1,0 +1,5 @@
+title  Deploy api
+level  success
+url    https://ci.example.com/api
+body
+  api 1.4.2 deployed
