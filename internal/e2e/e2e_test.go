@@ -208,7 +208,7 @@ func TestBinaryExitCodes(t *testing.T) {
 // Every `kjak ...` command line in the README and the guides names a real
 // command and action: its --help succeeds.
 func TestReadmeCommandsExist(t *testing.T) {
-	for _, doc := range []string{"README.md", "README_ja.md", "docs/getting-started.md", "docs/getting-started_ja.md", "docs/configuration.md", "docs/configuration_ja.md"} {
+	for _, doc := range []string{"README.md", "README_ja.md", "docs/getting-started.md", "docs/getting-started_ja.md", "docs/configuration.md", "docs/configuration_ja.md", "docs/discord-e2e.md"} {
 		t.Run(doc, func(t *testing.T) { checkDocCommands(t, "../../"+doc) })
 	}
 }
