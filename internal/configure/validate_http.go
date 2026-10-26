@@ -240,7 +240,7 @@ func BodyTemplateProblem(t *template.Template) error {
 			return errors.New("define and block are not available in a body template")
 		}
 		if tt.Tree != nil {
-			if err := walk(tt.Tree.Root); err != nil {
+			if err := walk(tt.Root); err != nil {
 				return err
 			}
 		}

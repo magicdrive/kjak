@@ -33,11 +33,11 @@ func TestMain(m *testing.M) {
 	build := exec.Command("go", "build", "-o", built, "./testdata/plugin")
 	build.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, err := build.CombinedOutput(); err != nil {
-		os.Stderr.Write(out)
+		_, _ = os.Stderr.Write(out)
 		panic(err)
 	}
 	code := m.Run()
-	os.RemoveAll(dir)
+	_ = os.RemoveAll(dir)
 	os.Exit(code)
 }
 
@@ -310,15 +310,23 @@ func TestPluginTimeoutAndCancellation(t *testing.T) {
 	if d := time.Since(start); d > 10*time.Second {
 		t.Fatalf("the timeout took %s", d)
 	}
-	f = plugin(t, map[string]string{"mode": "sleep"}, nil)
+	// the plugin timeout is long: the cancellation, not the timeout, must
+	// stop the plugin
+	f = plugin(t, map[string]string{"mode": "sleep"}, func(fc *configure.FeatherConfig) {
+		fc.Timeout = &configure.Duration{Duration: time.Minute}
+	})
 	ctx, cancel := context.WithCancelCause(context.Background())
 	go func() {
 		time.Sleep(200 * time.Millisecond)
 		cancel(errors.New("interrupted"))
 	}()
+	start = time.Now()
 	o = f.Deliver(ctx, msg())
 	if o.Acceptance != core.AcceptanceUnknown || o.Code != core.ErrCodeCanceled {
 		t.Fatalf("canceled: %+v", o)
+	}
+	if d := time.Since(start); d > 20*time.Second {
+		t.Fatalf("the cancellation stopped the plugin after %s", d)
 	}
 }
 
@@ -389,11 +397,11 @@ func TestCritical_PluginIdentityRechecked(t *testing.T) {
 	last := []byte{0}
 	r, _ := os.Open(f.Exe.Real)
 	_, _ = r.ReadAt(last, st.Size()-1)
-	r.Close()
+	_ = r.Close()
 	if _, err := h.WriteAt([]byte{last[0] ^ 0xff}, st.Size()-1); err != nil {
 		t.Fatal(err)
 	}
-	h.Close()
+	_ = h.Close()
 	if err := os.Chtimes(f.Exe.Real, st.ModTime(), st.ModTime()); err != nil {
 		t.Fatal(err)
 	}

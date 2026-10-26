@@ -105,7 +105,7 @@ func (p *Poster) Post(ctx context.Context, url credential.Secret, payload []byte
 	if err != nil {
 		return transportOutcome(ctx, err, wrote.Load())
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	return p.classify(resp.StatusCode, resp.Header, body)
 }

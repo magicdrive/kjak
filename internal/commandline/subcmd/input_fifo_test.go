@@ -100,7 +100,7 @@ func TestFIFOCancelIgnoresItsPath(t *testing.T) {
 					if other, err = os.OpenFile(fifo, os.O_RDONLY|syscall.O_NONBLOCK, 0); err != nil {
 						t.Fatal(err)
 					}
-					defer other.Close()
+					defer func() { _ = other.Close() }()
 				case "a file":
 					target = fifo
 					fallthrough
@@ -118,7 +118,7 @@ func TestFIFOCancelIgnoresItsPath(t *testing.T) {
 				waitCanceled(t, done, cause)
 				settled(t, goroutines)
 				if w != nil {
-					w.Close()
+					_ = w.Close()
 				}
 				if other != nil {
 					if n, _ := other.Read(make([]byte, 8)); n != 0 {
@@ -179,7 +179,7 @@ func testFIFOCancelWithOtherReaders(t *testing.T, readers int, othersFirst bool)
 					got <- nil
 					return
 				}
-				defer r.Close()
+				defer func() { _ = r.Close() }()
 				b := make([]byte, 1)
 				n, _ := r.Read(b)
 				got <- b[:n]
@@ -203,7 +203,7 @@ func testFIFOCancelWithOtherReaders(t *testing.T, readers int, othersFirst bool)
 		others()
 		opened(t, st, readers+2)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 	cancel(cause)
 	waitCanceled(t, done, cause)
 	settled(t, goroutines+readers)
@@ -245,12 +245,12 @@ func TestFIFOCancelRacesTheEnd(t *testing.T) {
 			defer close(wrote)
 			_, _ = w.WriteString(doc[:10])
 			_, _ = w.WriteString(doc[10:])
-			w.Close()
+			_ = w.Close()
 		}()
 		cancel(cause)
 		select {
 		case r := <-done:
-			if !(r.err == nil && string(r.b) == doc) && !errors.Is(r.err, cause) {
+			if (r.err != nil || string(r.b) != doc) && !errors.Is(r.err, cause) {
 				t.Fatalf("%q %v", r.b, r.err)
 			}
 		case <-time.After(10 * time.Second):
@@ -326,7 +326,7 @@ func TestStdinFIFOWithoutItsPath(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer r.Close()
+			defer func() { _ = r.Close() }()
 			w := <-wc
 			if err := os.Remove(fifo); err != nil {
 				t.Fatal(err)
@@ -340,7 +340,7 @@ func TestStdinFIFOWithoutItsPath(t *testing.T) {
 			go func() {
 				defer close(wrote)
 				_, _ = w.WriteString("the body")
-				w.Close()
+				_ = w.Close()
 			}()
 			b, err := readStdin(context.Background(), r)
 			<-wrote // its close is not left to a later test's count of descriptors

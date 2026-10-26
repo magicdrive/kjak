@@ -48,7 +48,7 @@ func FuzzValidPluginName(f *testing.F) {
 			return
 		}
 		for _, r := range s {
-			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_' {
 				t.Fatalf("accepted %q", s)
 			}
 		}

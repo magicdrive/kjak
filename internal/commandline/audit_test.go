@@ -104,6 +104,7 @@ func TestCritical_RepeatedSendsCloseConnections(t *testing.T) {
 // outcome is the deliveries', not 130.
 func TestInterruptAfterCompletionIsNotCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	}))
@@ -161,8 +162,8 @@ func TestInterruptWhileReadingStdin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer stdin.Close()
-	defer w.Close()
+	defer func() { _ = stdin.Close() }()
+	defer func() { _ = w.Close() }()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	done := make(chan result, 1)
