@@ -148,6 +148,13 @@ func buildExternal(name string, fc configure.FeatherConfig, d Deps, resolve func
 			return nil, fmt.Errorf("feather %q: %w: its plugin %s is not the executable that was trusted (%s): review it, then run `kjak config trust`", name, configure.ErrUntrustedProject, fc.Plugin, exe.Real)
 		}
 		rehash = true
+		// a variable a project gives its plugin is one of the user's
+		// secrets, possibly: allowed by name like its env references
+		for _, e := range fc.Env {
+			if !d.ProjectTrust.AllowsUserSecret("env:" + e) {
+				return nil, fmt.Errorf("feather %q: %w: the trust of the project does not allow its plugin to get the environment variable %s: review the project, then run `kjak config trust`", name, credential.ErrCredential, e)
+			}
+		}
 	}
 	secrets := map[string]credential.Secret{}
 	for _, k := range sortedRefKeys(fc.PluginSecrets) {

@@ -225,7 +225,8 @@ feather of the same name. The secret of the type (Slack and Discord:
 |---|---|
 | `--secret-env VAR` | `{ env = "VAR" }` |
 | `--secret-keychain SERVICE/ACCOUNT` | `{ keychain = { service, account } }` |
-| `--secret-stdin` | `{ literal = "..." }`, read from standard input |
+| `--secret-ref NAME` | `{ secret = "NAME" }`, an entry of a secrets file |
+| `--secret-stdin` | `{ literal = "..." }`, read from standard input (deprecated: a literal; kjak warns) |
 
 The secret value is never a command-line argument (other processes and the
 shell history would see it).

@@ -55,10 +55,10 @@ func (f fakeInfo) Sys() any           { return &syscall.Stat_t{Uid: f.uid} }
 
 func TestSecretsFileOwner(t *testing.T) {
 	me := uint32(os.Geteuid())
-	if err := checkSecretsInfo("x", fakeInfo{mode: 0o600, uid: me}); err != nil {
+	if err := checkSecretsInfo("x", fakeInfo{mode: 0o600, uid: me}, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkSecretsInfo("x", fakeInfo{mode: 0o600, uid: me + 1}); !errors.Is(err, ErrInsecureSecrets) || !strings.Contains(err.Error(), "owned by uid") {
+	if err := checkSecretsInfo("x", fakeInfo{mode: 0o600, uid: me + 1}, false); !errors.Is(err, ErrInsecureSecrets) || !strings.Contains(err.Error(), "owned by uid") {
 		t.Fatalf("another owner: %v", err)
 	}
 }
@@ -137,5 +137,30 @@ func TestCreateSecretsFile(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(dir, "elsewhere.toml")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatal("the link target was created")
+	}
+}
+
+// A project secrets file with another name (a hard link: maybe the user's
+// own file) is refused; the personal file may have several.
+func TestCritical_ProjectSecretsHardLink(t *testing.T) {
+	fx := secretsFixture(t)
+	write(t, fx.paths.Secrets, "[slack]\nbot_token = \"xoxb-1\"\n")
+	if err := os.Link(fx.paths.Secrets, fx.paths.ProjectSecrets); err != nil {
+		t.Skip("hard links:", err)
+	}
+	if _, err := ReadSecretsFile(fx.paths.ProjectSecrets, true); !errors.Is(err, ErrInsecureSecrets) || !strings.Contains(err.Error(), "hard links") {
+		t.Fatalf("a linked project file: %v", err)
+	}
+	if _, err := ReadSecretsFile(fx.paths.Secrets, false); err != nil {
+		t.Fatalf("the personal file: %v", err)
+	}
+	// the same file seen twice (a bind mount, a path through a link) is
+	// refused as the project's
+	personal, _ := ReadSecretsFile(fx.paths.Secrets, false)
+	if !personal.SameFile(personal) {
+		t.Fatal("SameFile")
+	}
+	if err := NotPersonal(fx.paths, personal); !errors.Is(err, ErrInsecureSecrets) {
+		t.Fatalf("NotPersonal: %v", err)
 	}
 }

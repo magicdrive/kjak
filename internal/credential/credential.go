@@ -185,6 +185,16 @@ type Resolver struct {
 	lookupEnv func(string) (string, bool)
 	keychain  Keychain
 	secrets   SecretSource
+	gate      func(*Ref) error
+}
+
+// WithGate is a copy of res that asks gate before it resolves a reference:
+// an error of gate stops the resolution (a project's reference that its
+// trust does not allow).
+func (res *Resolver) WithGate(gate func(*Ref) error) *Resolver {
+	c := *res
+	c.gate = gate
+	return &c
 }
 
 // NewResolver resolves env references with lookupEnv (os.LookupEnv) and
@@ -206,6 +216,11 @@ func (res *Resolver) WithSecrets(src SecretSource) *Resolver {
 func (res *Resolver) Resolve(ctx context.Context, r *Ref) (Secret, error) {
 	if err := r.Validate(); err != nil {
 		return Secret{}, err
+	}
+	if res.gate != nil {
+		if err := res.gate(r); err != nil {
+			return Secret{}, fmt.Errorf("%w: %s: %v", ErrCredential, r.Describe(), err)
+		}
 	}
 	switch r.Source() {
 	case SourceEnv:

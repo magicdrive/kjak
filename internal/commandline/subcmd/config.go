@@ -346,7 +346,13 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 			return rt.fail(ctx, err)
 		}
 		grant.SecretsSHA256 = secrets.Hash
-		fmt.Fprintf(rt.Stdout, "project secrets %s\nsha256 %s (%d secret(s); values not shown)\n", grant.SecretsPath, secrets.Hash, len(secrets.Names()))
+		if err := configure.NotPersonal(p, secrets); err != nil {
+			return rt.fail(ctx, err)
+		}
+		fmt.Fprintf(rt.Stdout, "project secrets %s\nsha256 %s (values not shown)\n", grant.SecretsPath, secrets.Hash)
+		for _, n := range secrets.Names() {
+			fmt.Fprintf(rt.Stdout, "  defines secret %s\n", n)
+		}
 	}
 	describeProject(rt, src.File)
 	// the executables of its plugins, as they are now: a later change of
@@ -382,6 +388,17 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 		for _, name := range grant.UserSecrets {
 			fmt.Fprintf(rt.Stdout, "  secret %s\n", name)
 		}
+	}
+	// the environment variables and keychain entries its http feathers
+	// send to a URL of the project's choosing
+	if gated := configure.GatedNames(src.File); len(gated) > 0 {
+		fmt.Fprintln(rt.Stdout, "The project asks to give these to destinations it chooses (http feathers, plugins):")
+		for _, name := range gated {
+			fmt.Fprintf(rt.Stdout, "  %s\n", name)
+		}
+		grant.UserSecrets = append(grant.UserSecrets, gated...)
+	}
+	if len(grant.UserSecrets) > 0 {
 		fmt.Fprintln(rt.Stdout, "Its feathers would send them to the destinations listed above.")
 	}
 	if !opt.Yes {
@@ -393,12 +410,12 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 			fmt.Fprintln(rt.Stdout, "not trusted")
 			return ExitUsage
 		}
-		if len(grant.UserSecrets) > 0 && !ask(rt, in, fmt.Sprintf("Allow it to read the %d secret(s) above from your secrets file? [y/N] ", len(grant.UserSecrets))) {
+		if len(grant.UserSecrets) > 0 && !ask(rt, in, fmt.Sprintf("Allow it to read the %d secret(s) above? [y/N] ", len(grant.UserSecrets))) {
 			fmt.Fprintln(rt.Stdout, "not trusted")
 			return ExitUsage
 		}
 	} else if len(grant.UserSecrets) > 0 && !opt.AllowUserSecrets {
-		return rt.fail(ctx, fmt.Errorf("config trust: the project reads %d secret(s) from your secrets file (%s); review them, then pass --allow-user-secrets with --yes", len(grant.UserSecrets), strings.Join(grant.UserSecrets, ", ")))
+		return rt.fail(ctx, fmt.Errorf("config trust: the project reads %d of your secret(s) (%s); review them, then pass --allow-user-secrets with --yes", len(grant.UserSecrets), strings.Join(grant.UserSecrets, ", ")))
 	}
 	if err := configure.TrustWith(p.TrustStore, src.Path, src.Hash, rt.Clock.Now(), grant); err != nil {
 		return rt.fail(ctx, err)

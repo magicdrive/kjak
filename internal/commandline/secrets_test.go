@@ -329,3 +329,15 @@ func TestSecretReferenceInjectionIsInert(t *testing.T) {
 		t.Fatalf("body: %s", body)
 	}
 }
+
+// The names a project secrets file defines are shown at the trust (its
+// values are not).
+func TestTrustShowsProjectSecretNames(t *testing.T) {
+	e := newEnv(t)
+	e.writeProject(secretFeather("proj", "proj.hook"))
+	e.writeFile(e.projectSecrets(), "[proj]\nhook = \"https://hooks.example/VALUE-NOT-SHOWN\"\n", 0o600)
+	r := e.must("config", "trust", "--yes")
+	if !strings.Contains(r.stdout, "defines secret proj.hook") || strings.Contains(r.stdout, "VALUE-NOT-SHOWN") {
+		t.Fatal(r.stdout)
+	}
+}

@@ -110,6 +110,18 @@ func Send(ctx context.Context, rt *Runtime, args []string) int {
 			if origin == "project" {
 				d.ProjectTrust = &l.ProjectTrust
 			}
+			if origin == "project" && configure.GatedType(e.Config.Type) {
+				// an http or external feather of a project sends its env
+				// and keychain secrets to a destination of the project's
+				// choosing: only those the trust allowed by name
+				trust := l.ProjectTrust
+				d.Resolver = d.Resolver.WithGate(func(r *credential.Ref) error {
+					if n := configure.GrantName(r); n != "" && !trust.AllowsUserSecret(n) {
+						return fmt.Errorf("the trust of the project does not allow its %s feather %q to send %s: review the project, then run `kjak config trust`", e.Config.Type, e.Name, n)
+					}
+					return nil
+				})
+			}
 			f, err := builtin.Build(preflight, e.Name, e.Config, d)
 			if err != nil {
 				if ctx.Err() == nil && preflight.Err() != nil {

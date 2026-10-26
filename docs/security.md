@@ -57,10 +57,13 @@ What kjak checks, and why:
   a file swapped between a check and the read is not read: there is no
   separate check of the path. FIFOs and devices are refused without waiting
   (`O_NONBLOCK`). The size is limited to 1 MiB.
-- **Symbolic links.** The project file is opened with `O_NOFOLLOW`: a
-  repository could ship `.kjak.secrets.toml` as a link to your personal
-  file, which would make your secrets look like the project's. The personal
-  file may be a link (dotfiles); the file it leads to is checked. kjak does
+- **Links.** The project file is opened with `O_NOFOLLOW`: a repository
+  could ship `.kjak.secrets.toml` as a symbolic link to your personal file,
+  which would make your secrets look like the project's. For the same
+  reason it must have a single name (no hard link: another user of the
+  machine could make one in a directory you work in) and must not be the
+  personal file itself (checked with the file's identity). The personal
+  file may be a symbolic link (dotfiles); the file it leads to is checked. kjak does
   not check the directories above a secrets file: keep them yours.
 - **Windows.** The access control list is not read (not implemented in this
   version): only "a regular file" and the size are checked, and a project
@@ -82,7 +85,7 @@ rules that keep your secrets from it:
 
 1. The project configuration is used only once trusted, as before.
 2. The project secrets file is part of that trust (its canonical path and
-   SHA-256; `config trust` shows the number of secrets, not their values). A
+   SHA-256; `config trust` shows the names it defines, never the values). A
    project secrets file that appears, changes or disappears after the trust
    withdraws it, so it cannot be swapped after your review.
 3. The global configuration never reads the project secrets file: a
@@ -96,9 +99,12 @@ rules that keep your secrets from it:
    even in a trusted project. kjak's own edits of a trusted project file
    (`feather add --scope project`) keep the allowed names the new content
    still uses and allow no new one.
-5. `env` and `keychain` references of a project file are, as before, shown
-   by `config trust` and allowed by trusting the file: reviewing them is
-   your part.
+5. `env` and `keychain` references of a project's slack, discord and email
+   feathers are, as before, shown by `config trust` and allowed by trusting
+   the file: reviewing them is your part. Those of a project's **http**
+   feathers — which send to a URL the project chooses — are allowed by name
+   like the personal secrets above (`env:NAME`, `keychain:SERVICE/ACCOUNT`
+   in `user_secrets`); any other is refused when it is resolved.
 
 An allowed name means "this project may send this secret to the
 destinations it configures": review those destinations before you allow it.

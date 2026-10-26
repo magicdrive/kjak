@@ -114,7 +114,7 @@ feather は1つの通知先です。Slack の Incoming Webhook、Discord の Web
 
 | キー | CLI | 意味 |
 |---|---|---|
-| `webhook_url` | `--secret-env`、`--secret-keychain`、`--secret-stdin` | Incoming Webhook の URL（[認証情報](#71-認証情報の参照)） |
+| `webhook_url` | `--secret-env`、`--secret-keychain`、`--secret-ref`、`--secret-stdin` | Incoming Webhook の URL（[認証情報](#71-認証情報の参照)） |
 
 ```toml
 [feathers.dev_slack]
@@ -129,7 +129,7 @@ levels = ["warning", "error", "critical"]
 
 | キー | CLI | 意味 |
 |---|---|---|
-| `webhook_url` | `--secret-env`、`--secret-keychain`、`--secret-stdin` | Webhook の URL |
+| `webhook_url` | `--secret-env`、`--secret-keychain`、`--secret-ref`、`--secret-stdin` | Webhook の URL |
 | `username` | `--username` | メッセージの表示名（任意） |
 
 ```toml
@@ -149,7 +149,7 @@ username = "kjak"
 | `port` | `--port` | 587 / 465 / 25 | `security` に応じる：`starttls` / `tls` / `none` |
 | `security` | `--security` | `"starttls"` | `starttls`（必須。平文に戻らない）、`tls`（最初から TLS）、`none` |
 | `user` | `--user` | — | SMTP ユーザー。`password` と組で使う |
-| `password` | `--secret-env`、`--secret-keychain`、`--secret-stdin` | — | 認証情報 |
+| `password` | `--secret-env`、`--secret-keychain`、`--secret-ref`、`--secret-stdin` | — | 認証情報 |
 | `from` | `--from` | 必須 | 送信元（アドレスのみ） |
 | `to` | `--mail-to` | 必須 | 宛先（アドレスのみ） |
 | `subject_prefix` | `--subject-prefix` | — | すべての件名の先頭に付ける文字列 |
@@ -319,7 +319,7 @@ feather の秘密情報（Slack や Discord の Webhook URL。URL 自体が認�
 - 参照元が2つ、または1つもない場合はエラーです。単なる文字列（`webhook_url = "https://..."`）もエラーになります。
 - Webhook URL は `https` である必要があります（`http` は `localhost` のみ）。ユーザー情報を含む URL は使えません。
 - 解決できない認証情報があると、何も送信せずに終了します（exit 2）。
-- `feather add` は秘密情報を引数として受け取りません。参照で指定するか、`--secret-stdin` で標準入力から渡します。
+- `feather add` は秘密情報を引数として受け取りません。参照で指定するか、`--secret-stdin` で標準入力から渡します（literal になるため非推奨）。
 
 **どれを使うか**
 
@@ -372,8 +372,8 @@ Trust this exact content? [y/N]
 ```
 
 - Trust の対象は、ファイルの正規化されたパスと内容の SHA-256 で、Trust ストアに保存されます。内容が**少しでも**変わったり、パスが変わったりした場合は、Trust し直す必要があります。
-- 同じディレクトリの `./.kjak.secrets.toml` も一緒に Trust されます（パスと SHA-256。値は表示しません）。Trust の後に secrets ファイルが現れた、変わった、なくなった場合は、Trust が取り消されます。
-- プロジェクト設定の `secret` 参照のうち、プロジェクトの secrets ファイルにない名前は、名前ごとに許可した場合に限り**あなたの** secrets ファイルから読みます。`config trust` はその名前を一覧表示し、2つ目の質問で許可を求めます（`--yes` のときは `--allow-user-secrets` が必要）。許可していない名前は送信時にエラーになるので、Trust したリポジトリでも、それ以外の秘密情報には届きません。
+- 同じディレクトリの `./.kjak.secrets.toml` も一緒に Trust されます（パスと SHA-256。定義している名前は表示し、値は表示しません）。Trust の後に secrets ファイルが現れた、変わった、なくなった場合は、Trust が取り消されます。
+- プロジェクト設定の `secret` 参照のうち、プロジェクトの secrets ファイルにない名前は、名前ごとに許可した場合に限り**あなたの** secrets ファイルから読みます。`config trust` はその名前を一覧表示し、2つ目の質問で許可を求めます（`--yes` のときは `--allow-user-secrets` が必要）。許可していない名前は送信時にエラーになるので、Trust したリポジトリでも、それ以外の秘密情報には届きません。プロジェクトの `http` feather（プロジェクトが選んだ URL に送る）の `env` と `keychain` の参照も、同じく名前ごとに許可が必要です。
 - Trust していないプロジェクト設定は、それを使うすべてのコマンドでエラーになります（exit 2）。黙って使われることも、黙って無視されることもありません。
 
   ```
@@ -424,7 +424,7 @@ webhook_url = { secret = "dev_slack.webhook_url" }
 | 値 | 文字列のみ。空の値は使うときにエラー。値はそのまま使い、中身を展開しない（`${...}`、`{ env = ... }`、`{{...}}` はただの文字列） |
 | サイズ | 最大 1 MiB。不明な項目や文字列以外の項目はエラーで、キー名だけを示し、値は示さない |
 | 権限（Unix） | kjak を実行しているユーザーが所有する通常ファイルで、グループとその他に権限がないこと（`chmod 600`）。そうでなければ解析前に拒否する。検査はパスではなく開いたファイルに対して行う（`fstat`） |
-| シンボリックリンク | 個人のファイルはリンクでもよい（dotfiles）。リンク先のファイルを検査する。プロジェクトのファイルはリンクであってはならない（リポジトリがあなたの個人のファイルへリンクできるため）。`O_NOFOLLOW` で開く |
+| リンク | 個人のファイルはシンボリックリンクでもよい（dotfiles）。リンク先のファイルを検査する。プロジェクトのファイルはシンボリックリンク不可（`O_NOFOLLOW` で開く）、名前は1つだけ（ハードリンク不可）、個人のファイルそのものも不可。そうでないと、リポジトリや他のユーザーがあなたの個人のファイルをプロジェクトのものとして見せられるため |
 | FIFO、デバイス | 待たずに拒否する（`--secrets <(...)` は使えない。`env` を使う） |
 | Windows | 通常ファイルであることのみ検査し、アクセス制御リスト（ACL）は**検査しない**（kjak はまだ ACL を読まない）。`%AppData%` の下のファイルはプロファイルの既定の ACL で本人専用になるので、そこに置くこと。リパースポイントであるプロジェクトの secrets ファイルは拒否する（開く前にパスで検査） |
 
