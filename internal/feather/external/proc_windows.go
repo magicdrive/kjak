@@ -21,6 +21,12 @@ func checkFile(real string, st os.FileInfo) error {
 	return nil
 }
 
+func openNoBlock(path string) (*os.File, error) { return os.Open(path) }
+
+// checkPlace: the access control lists of the directories are not checked
+// on Windows (docs/plugins.md).
+func checkPlace(path, real string) error { return nil }
+
 // setProcessGroup: Windows has no process group kill in kjak (no Job
 // Object): a cancel kills the plugin's process only; a child it started
 // may outlive it (docs/plugins.md).

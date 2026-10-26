@@ -76,9 +76,15 @@ must be:
 | a regular file, executable | |
 | owned by root or by the user running kjak | |
 | not writable by group or others | someone else could replace its content |
-| in a directory others cannot write to, unless it is sticky | someone else could replace the file |
+| the `PATH` directory that holds the name, and the directory of the file a link leads to: owned by root or the user, not writable by group or others (sticky or not) | someone else could put a file, or a link to any program, there |
+| every directory above those: owned by root or the user, writable by group or others only when sticky (`/tmp`) | someone else could rename the directory away |
+| a `PATH` entry that is a symbolic link: the link owned by root or the user | |
+| a FIFO or a device named like a plugin is refused without waiting | |
 
-On Windows: a regular `.exe` file; ACLs are not checked.
+On Windows: a regular `.exe` file; ACLs of the file and the directories
+are not checked. A distribution whose `/usr/local/bin` is group-writable
+(the old Debian `staff` setup) needs `path =` to a plugin elsewhere, or a
+directory without group write.
 
 kjak records the file's identity (device and inode, size, modification
 time) and SHA-256 when the feather is built, and checks the identity again
@@ -278,7 +284,9 @@ Guidelines:
 - Never print a secret, on stdout or stderr. kjak redacts the secrets it
   passed, but not what you derive from them.
 - Do not leave processes behind: kjak kills the process group on Unix, not
-  on Windows.
+  on Windows. (kjak kills the group once more after the plugin exited; if
+  the group is gone by then, the kill finds nothing — the identifier of a
+  group that ended could in theory have been reused in that instant.)
 - Treat `settings` as input you validate: on a project, they come from the
   repository.
 

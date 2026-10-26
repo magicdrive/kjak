@@ -43,16 +43,46 @@ func TestCritical_PluginFileChecks(t *testing.T) {
 	if err := os.Chmod(p, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(dir, 0o777); err != nil {
+	// the directory that holds it: not writable by group or others, sticky
+	// or not (someone else could put a link to any program there)
+	for _, mode := range []os.FileMode{0o777, 0o775, 0o777 | os.ModeSticky} {
+		if err := os.Chmod(dir, mode); err != nil {
+			t.Fatal(err)
+		}
+		check("writable by group or others")
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	check("writable by others")
-	if err := os.Chmod(dir, 0o777|os.ModeSticky); err != nil {
+	// a directory above it: writable by others only when sticky
+	if err := os.Chmod(root, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	check("above it is writable")
+	if err := os.Chmod(root, 0o777|os.ModeSticky); err != nil {
 		t.Fatal(err)
 	}
 	check("")
-	if err := os.Chmod(dir, 0o755); err != nil {
+	if err := os.Chmod(root, 0o700); err != nil {
 		t.Fatal(err)
+	}
+	// a FIFO named like a plugin is refused at once
+	fifoDir := filepath.Join(root, "fifo")
+	if err := os.Mkdir(fifoDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(filepath.Join(fifoDir, configure.PluginFile("q", runtime.GOOS)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { _, err := Resolve("q", "", fifoDir, runtime.GOOS); done <- err }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("a FIFO was taken for a plugin")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("a FIFO on PATH blocked the search")
 	}
 	// a directory named like a plugin is no plugin
 	if err := os.Mkdir(filepath.Join(root, "d"), 0o755); err != nil {

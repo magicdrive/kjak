@@ -135,7 +135,10 @@ func check(name, path string) (*Executable, error) {
 		}
 		return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, path, err)
 	}
-	f, err := os.Open(real)
+	if err := checkPlace(path, real); err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, path, err)
+	}
+	f, err := openNoBlock(real)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, path, err)
 	}
@@ -170,7 +173,7 @@ func digest(r io.Reader) (string, error) {
 // checked (same identity; same digest when pinned). The file can still be
 // replaced between this check and the exec: docs/plugins.md.
 func (e *Executable) Verify(rehash bool) error {
-	f, err := os.Open(e.Real)
+	f, err := openNoBlock(e.Real)
 	if err != nil {
 		return fmt.Errorf("%w: %s: %v", ErrPlugin, e.Real, err)
 	}

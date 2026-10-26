@@ -65,6 +65,8 @@ What kjak checks, and why:
   personal file itself (checked with the file's identity). The personal
   file may be a symbolic link (dotfiles); the file it leads to is checked. kjak does
   not check the directories above a secrets file: keep them yours.
+- **macOS ACLs** on a secrets file are not read (only the mode bits and
+  the owner); do not add ACL entries that grant others access.
 - **Windows.** The access control list is not read (not implemented in this
   version): only "a regular file" and the size are checked, and a project
   file that is a link or reparse point is refused by a check of the path
@@ -244,8 +246,12 @@ controls which executable runs and what it is given ([plugins.md](plugins.md)):
   two directories as different files is an error unless `path` pins one. A
   refused candidate is an error, never skipped for a later one.
 - **The file.** A regular, executable file (symbolic links resolved) of root
-  or the user, not writable by group or others, in a directory others cannot
-  write to unless sticky. Its identity (device, inode, size, mtime) and
+  or the user, not writable by group or others; the `PATH` directory that
+  holds the name and the directory of the real file owned by root or the
+  user and not writable by group or others; every directory above them owned
+  by root or the user and writable by others only when sticky; a `PATH`
+  entry that is a link owned by root or the user. FIFOs are refused without
+  waiting. Its identity (device, inode, size, mtime) and
   SHA-256 are recorded when the feather is built and the identity is checked
   again before every run; the SHA-256 too when it is pinned (`sha256`, or a
   project's trust). **TOCTOU limit:** the file is executed by path after the
