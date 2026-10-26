@@ -12,6 +12,7 @@ package template
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -84,15 +85,122 @@ func renderOne(name, src string, vars map[string]string) (string, error) {
 	if src == "" {
 		return "", nil
 	}
-	tpl, err := template.New(name).Option("missingkey=error").Parse(src)
+	return render(name, src, vars, false)
+}
+
+// MaxRendered bounds what one template renders.
+const MaxRendered = 1 << 20
+
+// errTooLong ends a rendering that goes past MaxRendered.
+var errTooLong = fmt.Errorf("the rendered text is longer than %d bytes", MaxRendered)
+
+type boundedBuffer struct{ bytes.Buffer }
+
+func (b *boundedBuffer) Write(p []byte) (int, error) {
+	if b.Len()+len(p) > MaxRendered {
+		return 0, errTooLong
+	}
+	return b.Buffer.Write(p)
+}
+
+// render parses and executes src into a bounded buffer. printf refuses a
+// width or a precision of 4 digits or more (fmt would allocate it before
+// the buffer sees it). A body template (body) cannot use range: its data
+// are strings, and a range over a number could run without end.
+func render(name, src string, vars map[string]string, body bool) (string, error) {
+	tpl, err := template.New(name).Option("missingkey=error").Funcs(template.FuncMap{"printf": safePrintf}).Parse(src)
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrTemplate, err)
 	}
-	var buf bytes.Buffer
+	if body {
+		if err := configure.BodyTemplateProblem(tpl); err != nil {
+			return "", fmt.Errorf("%w: %s: %v", ErrTemplate, name, err)
+		}
+	}
+	var buf boundedBuffer
 	if err := tpl.Execute(&buf, vars); err != nil {
 		return "", fmt.Errorf("%w: %v", ErrTemplate, err)
 	}
 	return buf.String(), nil
+}
+
+var bigVerb = regexp.MustCompile(`%[-+# 0]*(\d{4,}|\*|\[)|\.(\d{4,}|\*)`)
+
+func safePrintf(format string, args ...any) (string, error) {
+	if bigVerb.MatchString(format) {
+		return "", errors.New("printf: a width or precision of 1000 or more, '*' or an argument index is not allowed")
+	}
+	s := fmt.Sprintf(format, args...)
+	if len(s) > MaxRendered {
+		return "", errTooLong
+	}
+	return s, nil
+}
+
+// Text renders src (a body template of an http feather) with data, as
+// text. A value of data is never parsed as a template.
+func Text(name, src string, data map[string]string) (string, error) {
+	if src == "" {
+		return "", nil
+	}
+	return render(name, src, data, true)
+}
+
+// JSON renders a JSON document whose strings are templates: each string
+// value is rendered with data and the document is encoded again, so a value
+// can never change its structure (no key or element can be injected). Keys
+// are kept as they are.
+func JSON(name, src string, data map[string]string) ([]byte, error) {
+	// numbers stay as written (json.Number), not float64
+	dec := json.NewDecoder(strings.NewReader(src))
+	dec.UseNumber()
+	var doc any
+	if err := dec.Decode(&doc); err != nil {
+		return nil, fmt.Errorf("%w: %s: not a JSON document: %v", ErrTemplate, name, err)
+	}
+	if dec.More() {
+		return nil, fmt.Errorf("%w: %s: more than one JSON document", ErrTemplate, name)
+	}
+	var walk func(any) (any, error)
+	walk = func(v any) (any, error) {
+		switch t := v.(type) {
+		case string:
+			if t == "" {
+				return t, nil
+			}
+			return render(name, t, data, true)
+		case []any:
+			for i, e := range t {
+				r, err := walk(e)
+				if err != nil {
+					return nil, err
+				}
+				t[i] = r
+			}
+			return t, nil
+		case map[string]any:
+			for k, e := range t {
+				r, err := walk(e)
+				if err != nil {
+					return nil, err
+				}
+				t[k] = r
+			}
+			return t, nil
+		}
+		return v, nil
+	}
+	out, err := walk(doc)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(out); err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", ErrTemplate, name, err)
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 // ParseFile reads a template file: a TOML document with the keys of a

@@ -104,7 +104,20 @@ func Send(ctx context.Context, rt *Runtime, args []string) int {
 			// a secret reference reads the secrets files of the file that
 			// defines the feather (configure.Loaded.SecretSource)
 			d := deps
-			d.Resolver = resolver.WithSecrets(l.SecretSource(l.Origin("feather", e.Name)))
+			origin := l.Origin("feather", e.Name)
+			d.Resolver = resolver.WithSecrets(l.SecretSource(origin))
+			if origin == "project" && configure.GatedType(e.Config.Type) {
+				// an http feather of a project sends its env and keychain
+				// secrets to a URL of the project's choosing: only those
+				// the trust allowed by name
+				trust := l.ProjectTrust
+				d.Resolver = d.Resolver.WithGate(func(r *credential.Ref) error {
+					if n := configure.GrantName(r); n != "" && !trust.AllowsUserSecret(n) {
+						return fmt.Errorf("the trust of the project does not allow its http feather %q to send %s: review the project, then run `kjak config trust`", e.Name, n)
+					}
+					return nil
+				})
+			}
 			f, err := builtin.Build(preflight, e.Name, e.Config, d)
 			if err != nil {
 				if ctx.Err() == nil && preflight.Err() != nil {

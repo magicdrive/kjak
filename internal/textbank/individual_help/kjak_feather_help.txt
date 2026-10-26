@@ -7,7 +7,8 @@ Usage:
   kjak feather disable NAME [--scope global|project]
   kjak feather types
 
-A feather is one notification destination.
+A feather is one notification destination. An http feather (any HTTP API)
+is written in the configuration file: see docs/http.md.
 
 Options of add:
       --type TYPE              slack, discord or email (required)

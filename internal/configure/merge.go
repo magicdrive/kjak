@@ -59,5 +59,37 @@ func cloneFeather(f FeatherConfig) FeatherConfig {
 	}
 	f.Levels = append([]string(nil), f.Levels...)
 	f.To = append([]string(nil), f.To...)
+	f.Headers = cloneMap(f.Headers)
+	f.Query = cloneMap(f.Query)
+	f.SuccessStatus = append([]string(nil), f.SuccessStatus...)
+	f.AllowNetworks = append([]string(nil), f.AllowNetworks...)
+	f.AllowHosts = append([]string(nil), f.AllowHosts...)
+	if f.Auth != nil {
+		a := *f.Auth
+		f.Auth = &a
+	}
+	if f.Body != nil {
+		b := *f.Body
+		f.Body = &b
+	}
+	if f.Retry != nil {
+		r := *f.Retry
+		f.Retry = &r
+	}
+	if f.Timeout != nil {
+		d := *f.Timeout
+		f.Timeout = &d
+	}
 	return f
+}
+
+func cloneMap(m map[string]string) map[string]string {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }

@@ -27,6 +27,12 @@
 | `kjak: warning: ... keeps N secret(s) in the file as literal (deprecated)` | `{ literal = "..." }` in a configuration | `kjak config migrate-secrets` ([migration.md](migration.md)) |
 | `... exists: kjak does not overwrite it` (migrate-secrets) | the secrets file or `<file>.migrated` exists already | `--secrets-out NEW_FILE` / `--config-out NEW_FILE`, or move the secrets by hand |
 | `type "os": OS-native notifications are not supported in kjak v0.1.0` | | not available yet |
+| `the request was not sent: address 10.0.0.5 is private: allow it with allow_networks or allow_hosts` (`error.code: blocked`) | an http feather's host resolves to a private, loopback or link-local address | if it is meant, add the network (`allow_networks`) or the host (`allow_hosts`) ([http.md](http.md#the-address-policy-ssrf)) |
+| `... is cloud metadata: never allowed` | an http feather (or a redirect) points at an instance metadata endpoint | not possible on purpose |
+| `url: must be https (http needs allow_http = true)` | an `http://` URL | use https, or `allow_http = true` for a local relay |
+| `HTTP 302: a redirect that is not followed (max_redirects)` | the API redirects | use the final URL, or `max_redirects = N` |
+| `(not retried: POST is not repeated without an idempotency key; retry.policy)` | a POST refused with a transient status | `idempotency_key = true` if the API supports it, or `retry.policy = "always"` if a duplicate is acceptable |
+| `feather add: an http feather is configured in the file` | `feather add --type http` | write `[feathers.NAME]` with `type = "http"` ([http.md](http.md)) |
 | `webhook_url: ... must be https (http is accepted for localhost only ...)` | an `http://` webhook URL to another host | use the `https` URL the provider gave |
 | `--json-input: key "body" given twice` | a JSON key repeated | give each key once |
 | `the file is larger than 1048576 bytes` | a configuration file over 1 MiB | split it, or check that `.kjak.toml` is what you think |

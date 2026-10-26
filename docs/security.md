@@ -99,9 +99,12 @@ rules that keep your secrets from it:
    even in a trusted project. kjak's own edits of a trusted project file
    (`feather add --scope project`) keep the allowed names the new content
    still uses and allow no new one.
-5. `env` and `keychain` references of a project file are, as before, shown
-   by `config trust` and allowed by trusting the file: reviewing them is
-   your part.
+5. `env` and `keychain` references of a project's slack, discord and email
+   feathers are, as before, shown by `config trust` and allowed by trusting
+   the file: reviewing them is your part. Those of a project's **http**
+   feathers — which send to a URL the project chooses — are allowed by name
+   like the personal secrets above (`env:NAME`, `keychain:SERVICE/ACCOUNT`
+   in `user_secrets`); any other is refused when it is resolved.
 
 An allowed name means "this project may send this secret to the
 destinations it configures": review those destinations before you allow it.
@@ -175,9 +178,54 @@ Trust this exact content? [y/N]
   STARTTLS (a response injection) ends the session. The text of an AUTH
   refusal is never shown (a server may repeat the encoded password); at most
   1 MiB of replies is read per session.
+- HTTP feathers: see [HTTP feathers and SSRF](#http-feathers-and-ssrf).
 - Message content: Slack text is escaped and Discord mentions are disabled,
   so a message cannot ping `@channel`/`@everyone`; a title cannot contain a
   line break (it becomes an e-mail header).
+
+## HTTP feathers and SSRF
+
+An `http` feather sends to a URL of the configuration, a trusted project's
+included. Without limits, that would let a configuration reach what only
+this machine can reach: its own services, the cloud metadata endpoint
+(which hands out credentials), the private network. kjak's rules
+([http.md](http.md#the-address-policy-ssrf)):
+
+- `https` only, unless `allow_http = true`; no user information in a URL
+  (refused, never sent); TLS 1.2 or later, certificates verified, no option
+  to skip that.
+- Every connection — redirects included — goes through one dialer: the host
+  is resolved once, every address is classified, and the connection is made
+  to a checked address (no second lookup: DNS rebinding cannot swap the
+  address after the check); the socket's address is checked again before
+  `connect(2)`; only TCP (no Unix socket).
+- Refused by default: loopback, link-local, private networks (RFC 1918,
+  CGNAT, ULA, ...), IPv6 transition addresses (NAT64, 6to4, Teredo,
+  classified by the IPv4 address they carry), IPv4-mapped forms of all of
+  them. `allow_networks` (CIDR) allows them explicitly; `allow_hosts` allows
+  private addresses for named hosts. **Never** allowed: the cloud metadata
+  addresses (169.254.169.254, fd00:ec2::254, 169.254.170.2, 100.100.100.200,
+  192.0.0.192), unspecified, multicast, broadcast and reserved addresses.
+- Proxy environment variables are ignored by http feathers (the guard would
+  see the proxy's address, not the destination's); an http feather cannot
+  use a proxy.
+- Redirects are not followed unless `max_redirects` allows them; then each
+  is checked like the URL, https never goes to http, and `Authorization`,
+  `Cookie` and the `[auth]` header are dropped as soon as the scheme, host
+  or port changes; no `Referer` is ever sent.
+- Secrets go only where `[auth]` puts them: never in a query, never in a
+  static header, never in a template. Tokens, passwords, the encoded basic
+  credentials, header values and a secret URL (with its path and query) are
+  redacted from errors and reports, including a response that echoes them.
+- The request body of a JSON template is built by encoding: a message
+  cannot add keys or break out of a string (template injection). A message
+  is never parsed as a template.
+- `config trust` shows a project's http feathers with their method, URL or
+  its source, authentication source and every `allow_*`/redirect setting.
+
+Limits: a host name allowed with `allow_hosts` is trusted for every private
+address its DNS returns. The guard cannot see through an HTTP proxy, which
+is why none is used. Responses are read up to `max_response_bytes`.
 
 ## Reporting a vulnerability
 

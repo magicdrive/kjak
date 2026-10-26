@@ -1,9 +1,11 @@
 package template
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/magicdrive/kjak/internal/configure"
@@ -69,5 +71,80 @@ func TestCheck(t *testing.T) {
 	}
 	if _, err := Check("t", configure.TemplateConfig{Body: "x", Level: "loud"}); err == nil {
 		t.Fatal("bad level accepted")
+	}
+}
+
+func TestJSONBodyTemplate(t *testing.T) {
+	data := map[string]string{"title": `a"b`, "body": "{{.title}}\n", "level": "info"}
+	out, err := JSON("t", `{"text": "{{.title}} {{.body}}", "list": ["{{.level}}", 1.50, true, null], "k{{.level}}": "x"}`, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(out, &doc); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if doc["text"] != "a\"b {{.title}}\n" || doc["k{{.level}}"] != "x" || !strings.Contains(string(out), "1.50") {
+		t.Fatalf("%s", out)
+	}
+	for _, bad := range []string{`{"a": `, `{"a": "{{.missing}}"}`, `{} {}`, `{"a": "{{.title"}`} {
+		if _, err := JSON("t", bad, data); !errors.Is(err, ErrTemplate) {
+			t.Errorf("%s: %v", bad, err)
+		}
+	}
+	if s, err := Text("t", "[{{.level}}] {{.body}}", data); err != nil || s != "[info] {{.title}}\n" {
+		t.Fatalf("%q %v", s, err)
+	}
+}
+
+// Whatever the message holds, a JSON template renders to JSON of the same
+// shape: a value never adds a key or an element.
+func FuzzJSONBodyTemplate(f *testing.F) {
+	f.Add(`x", "admin": true, "y": "`, "{{.title}}")
+	f.Add(" </script>\x00", `\"`)
+	f.Fuzz(func(t *testing.T, title, body string) {
+		out, err := JSON("t", `{"text": "{{.title}}", "nested": {"b": ["{{.body}}"]}}`, map[string]string{"title": title, "body": body})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc struct {
+			Text   string              `json:"text"`
+			Nested map[string][]string `json:"nested"`
+		}
+		dec := json.NewDecoder(strings.NewReader(string(out)))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&doc); err != nil {
+			t.Fatalf("%v: %s", err, out)
+		}
+		if len(doc.Nested) != 1 || len(doc.Nested["b"]) != 1 {
+			t.Fatalf("shape changed: %s", out)
+		}
+	})
+}
+
+// A template cannot make kjak allocate without bound: printf widths, a
+// range in a body template, an output over the limit.
+func TestTemplateLimits(t *testing.T) {
+	data := map[string]string{"body": strings.Repeat("x", 1000)}
+	for _, src := range []string{`{{printf "%999999999d" 1}}`, `{{printf "%.99999f" 1.0}}`, `{{printf "%*d" 999999999 1}}`, `{{printf "%[1]*d" 999999999 1}}`} {
+		if _, err := Text("t", src, data); !errors.Is(err, ErrTemplate) {
+			t.Errorf("%s: %v", src, err)
+		}
+	}
+	for _, src := range []string{`{{range 100000000000}}{{$.body}}{{end}}`, `{{if .body}}{{range 5}}x{{end}}{{end}}`, `{{define "a"}}x{{end}}{{template "a"}}`} {
+		if _, err := Text("t", src, data); !errors.Is(err, ErrTemplate) {
+			t.Errorf("%s: %v", src, err)
+		}
+		if _, err := JSON("t", `{"a": "`+strings.ReplaceAll(src, `"`, `\"`)+`"}`, data); !errors.Is(err, ErrTemplate) {
+			t.Errorf("json %s: %v", src, err)
+		}
+	}
+	// a message template may range, within the output limit
+	big := map[string]string{"x": strings.Repeat("y", 1<<16)}
+	if _, err := Render("t", configure.TemplateConfig{Body: `{{range 100}}{{$.x}}{{end}}`}, big); !errors.Is(err, ErrTemplate) {
+		t.Errorf("an output over the limit: %v", err)
+	}
+	if s, err := Text("t", `{{printf "%-10s|" .body | len}}`, map[string]string{"body": "a"}); err != nil || s != "11" {
+		t.Errorf("printf: %q %v", s, err)
 	}
 }

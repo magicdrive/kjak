@@ -365,6 +365,17 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 		for _, name := range grant.UserSecrets {
 			fmt.Fprintf(rt.Stdout, "  secret %s\n", name)
 		}
+	}
+	// the environment variables and keychain entries its http feathers
+	// send to a URL of the project's choosing
+	if gated := configure.GatedNames(src.File); len(gated) > 0 {
+		fmt.Fprintln(rt.Stdout, "The project asks to send these to URLs it chooses (http feathers):")
+		for _, name := range gated {
+			fmt.Fprintf(rt.Stdout, "  %s\n", name)
+		}
+		grant.UserSecrets = append(grant.UserSecrets, gated...)
+	}
+	if len(grant.UserSecrets) > 0 {
 		fmt.Fprintln(rt.Stdout, "Its feathers would send them to the destinations listed above.")
 	}
 	if !opt.Yes {
@@ -376,12 +387,12 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 			fmt.Fprintln(rt.Stdout, "not trusted")
 			return ExitUsage
 		}
-		if len(grant.UserSecrets) > 0 && !ask(rt, in, fmt.Sprintf("Allow it to read the %d secret(s) above from your secrets file? [y/N] ", len(grant.UserSecrets))) {
+		if len(grant.UserSecrets) > 0 && !ask(rt, in, fmt.Sprintf("Allow it to read the %d secret(s) above? [y/N] ", len(grant.UserSecrets))) {
 			fmt.Fprintln(rt.Stdout, "not trusted")
 			return ExitUsage
 		}
 	} else if len(grant.UserSecrets) > 0 && !opt.AllowUserSecrets {
-		return rt.fail(ctx, fmt.Errorf("config trust: the project reads %d secret(s) from your secrets file (%s); review them, then pass --allow-user-secrets with --yes", len(grant.UserSecrets), strings.Join(grant.UserSecrets, ", ")))
+		return rt.fail(ctx, fmt.Errorf("config trust: the project reads %d of your secret(s) (%s); review them, then pass --allow-user-secrets with --yes", len(grant.UserSecrets), strings.Join(grant.UserSecrets, ", ")))
 	}
 	if err := configure.TrustWith(p.TrustStore, src.Path, src.Hash, rt.Clock.Now(), grant); err != nil {
 		return rt.fail(ctx, err)
@@ -404,6 +415,23 @@ func describeProject(rt *Runtime, f *configure.File) {
 	for _, name := range sortedNames(f.Feathers) {
 		fc := f.Feathers[name]
 		switch fc.Type {
+		case configure.TypeHTTP:
+			url, auth, policy := describeHTTP(fc)
+			fmt.Fprintf(rt.Stdout, "  feather %s: http %s %s, auth %s\n", name, fc.HTTPMethod(), url, auth)
+			if policy != "" {
+				fmt.Fprintf(rt.Stdout, "    address policy: %s\n", policy)
+			}
+			for _, kind := range []struct {
+				label string
+				m     map[string]string
+			}{{"header", fc.Headers}, {"query", fc.Query}} {
+				for _, k := range sortedNames(kind.m) {
+					fmt.Fprintf(rt.Stdout, "    %s %s: %q\n", kind.label, k, kind.m[k])
+				}
+			}
+			if fc.Body != nil && fc.Body.Template != "" {
+				fmt.Fprintf(rt.Stdout, "    body template: %q\n", fc.Body.Template)
+			}
 		case configure.TypeEmail:
 			secret := "no password"
 			if fc.Password != nil {

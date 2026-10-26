@@ -87,3 +87,24 @@ func FuzzParseSecrets(f *testing.F) {
 		}
 	})
 }
+
+// An accepted http feather URL is https (or http with the opt-in), has a
+// host and carries no user information.
+func FuzzCheckHTTPURL(f *testing.F) {
+	for _, s := range []string{"https://api.example.com/x?a=1", "http://10.0.0.1:8080/", "https://u:p@h/", "unix:///x", "https://[::1]:443/", "//x"} {
+		f.Add(s, false)
+		f.Add(s, true)
+	}
+	f.Fuzz(func(t *testing.T, s string, allowHTTP bool) {
+		u, err := CheckHTTPURL(s, allowHTTP)
+		if err != nil {
+			if strings.Contains(err.Error(), s) && len(s) > 8 {
+				t.Fatalf("the error quotes the URL: %v", err)
+			}
+			return
+		}
+		if u.User != nil || u.Hostname() == "" || (u.Scheme != "https" && !(allowHTTP && u.Scheme == "http")) {
+			t.Fatalf("accepted %q", s)
+		}
+	})
+}

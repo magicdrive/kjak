@@ -108,6 +108,19 @@ func (p *Poster) Post(ctx context.Context, url credential.Secret, payload []byte
 	return p.classify(resp.StatusCode, resp.Header, body)
 }
 
+// TransportOutcome classifies an error of a request without a response by
+// how far the request got (wrote: it was fully written): the same rules for
+// every HTTP feather (docs/delivery.md).
+func TransportOutcome(ctx context.Context, err error, wrote bool) feather.Outcome {
+	return transportOutcome(ctx, err, wrote)
+}
+
+// DescribeTransportError describes err without the URL.
+func DescribeTransportError(err error) string { return describeTransportError(err) }
+
+// Sanitize keeps a provider's error text short and printable.
+func Sanitize(s string) string { return sanitize(s) }
+
 // transportOutcome classifies an error without a response.
 func transportOutcome(ctx context.Context, err error, wrote bool) feather.Outcome {
 	reason := describeTransportError(err)

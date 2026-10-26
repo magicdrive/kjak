@@ -126,7 +126,7 @@ partial: 1 delivered, 2 failed (1 with unknown acceptance), 1 skipped
 | `results[]` | one per target, in the order of the targets |
 | `status` | `delivered`, `failed`, `skipped`, `planned` (dry run) |
 | `acceptance` | `confirmed`, `rejected`, `unknown`, `none` (no attempt) |
-| `error.code` | `rejected`, `rate_limited`, `server_error`, `network`, `ambiguous`, `deadline`, `canceled`, `protocol`, `internal` |
+| `error.code` | `rejected`, `rate_limited`, `server_error`, `network`, `ambiguous`, `deadline`, `canceled`, `protocol`, `blocked` (an http feather's address policy refused the address or a redirect: nothing was sent), `internal` |
 | `skipped.reason` | `disabled`, `level_filter` |
 
 Within schema version 1, fields are only added, never removed or renamed.

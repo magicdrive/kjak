@@ -12,6 +12,7 @@ import (
 	"github.com/magicdrive/kjak/internal/commandline/option"
 	"github.com/magicdrive/kjak/internal/configure"
 	"github.com/magicdrive/kjak/internal/credential"
+	"github.com/magicdrive/kjak/internal/output"
 	"github.com/magicdrive/kjak/internal/textbank"
 )
 
@@ -58,6 +59,45 @@ type featherView struct {
 	From          string   `json:"from,omitempty"`
 	To            []string `json:"to,omitempty"`
 	SubjectPrefix string   `json:"subject_prefix,omitempty"`
+	// http
+	URL    string `json:"url,omitempty"`
+	Method string `json:"method,omitempty"`
+	Auth   string `json:"auth,omitempty"`
+	Policy string `json:"policy,omitempty"`
+}
+
+// describeHTTP tells what an http feather sends where, with its secrets by
+// their source only (a url_secret is not shown).
+func describeHTTP(fc configure.FeatherConfig) (url, auth, policy string) {
+	url = fc.URL
+	if fc.URLSecret != nil {
+		url = "from " + fc.URLSecret.Describe()
+	}
+	auth = "none"
+	if a := fc.Auth; a != nil {
+		switch a.Type {
+		case configure.AuthBearer:
+			auth = "bearer from " + a.Token.Describe()
+		case configure.AuthBasic:
+			auth = "basic " + a.Username + " from " + a.Password.Describe()
+		case configure.AuthHeader:
+			auth = "header " + a.Header + " from " + a.Value.Describe()
+		}
+	}
+	var p []string
+	if fc.AllowHTTP {
+		p = append(p, "allows http")
+	}
+	if len(fc.AllowNetworks) > 0 {
+		p = append(p, "allows networks "+strings.Join(fc.AllowNetworks, ","))
+	}
+	if len(fc.AllowHosts) > 0 {
+		p = append(p, "allows private hosts "+strings.Join(fc.AllowHosts, ","))
+	}
+	if fc.MaxRedirects > 0 {
+		p = append(p, fmt.Sprintf("follows %d redirect(s)", fc.MaxRedirects))
+	}
+	return url, auth, strings.Join(p, "; ")
 }
 
 func viewFeather(l *configure.Loaded, name string, fc configure.FeatherConfig) featherView {
@@ -74,6 +114,10 @@ func viewFeather(l *configure.Loaded, name string, fc configure.FeatherConfig) f
 	}
 	if fc.Password != nil {
 		v.Password = fc.Password.Describe()
+	}
+	if fc.Type == configure.TypeHTTP {
+		v.URL, v.Auth, v.Policy = describeHTTP(fc)
+		v.Method = fc.HTTPMethod()
 	}
 	return v
 }
@@ -163,6 +207,10 @@ func featherShow(ctx context.Context, rt *Runtime, args []string) int {
 	row("from", v.From)
 	row("to", strings.Join(v.To, ", "))
 	row("subject_prefix", v.SubjectPrefix)
+	row("method", v.Method)
+	row("url", v.URL)
+	row("auth", v.Auth)
+	row("policy", v.Policy)
 	_ = tw.Flush()
 	return ExitOK
 }
@@ -174,6 +222,9 @@ func featherAdd(ctx context.Context, rt *Runtime, args []string) int {
 	}
 	if err := configure.ValidName(opt.Name); err != nil {
 		return rt.fail(ctx, err)
+	}
+	if opt.Type == configure.TypeHTTP {
+		return rt.fail(ctx, withCode(output.CodeUsage, fmt.Errorf("feather add: an http feather is configured in the file ([feathers.%s] type = \"http\", docs/http.md); then run kjak config validate", opt.Name)))
 	}
 	fc := configure.FeatherConfig{Type: opt.Type, Levels: opt.Levels}
 	if opt.Disabled {
@@ -315,6 +366,7 @@ func featherTypes(rt *Runtime) int {
 	fmt.Fprintln(rt.Stdout, "slack    Slack incoming webhook (secret: webhook_url)")
 	fmt.Fprintln(rt.Stdout, "discord  Discord webhook (secret: webhook_url)")
 	fmt.Fprintln(rt.Stdout, "email    E-mail over SMTP (secret: password)")
+	fmt.Fprintln(rt.Stdout, "http     Any HTTP API: method, headers, auth, body (secrets: url_secret, auth); configured in the file")
 	fmt.Fprintln(rt.Stdout, "")
 	fmt.Fprintln(rt.Stdout, "Not supported in v0.1.0: OS-native notifications (a future feather).")
 	return ExitOK

@@ -49,6 +49,7 @@ const (
 	ErrCodeDeadline    ErrorCode = "deadline"     // the delivery deadline passed
 	ErrCodeCanceled    ErrorCode = "canceled"     // interrupted (SIGINT)
 	ErrCodeProtocol    ErrorCode = "protocol"     // an unexpected answer (redirect, malformed reply)
+	ErrCodeBlocked     ErrorCode = "blocked"      // kjak's own policy refused the request before it was sent (http: an address or a redirect)
 	ErrCodeInternal    ErrorCode = "internal"
 )
 
