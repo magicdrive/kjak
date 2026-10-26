@@ -81,7 +81,8 @@ func (rt *Runtime) fail(ctx context.Context, err error) int {
 	if ctx.Err() != nil {
 		code, status, msg = output.CodeInterrupted, ExitInterrupted, "interrupted"
 	}
-	fmt.Fprintf(rt.Stderr, "kjak: %s\n", msg)
+	// an error may quote text of an untrusted file: no terminal escape
+	fmt.Fprintf(rt.Stderr, "kjak: %s\n", output.EscapeControls(msg))
 	if rt.jsonErrors {
 		if werr := output.WriteErrorJSON(rt.Stdout, rt.jsonReport, code, msg); werr != nil {
 			fmt.Fprintf(rt.Stderr, "kjak: cannot write the result: %v\n", werr)

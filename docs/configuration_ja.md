@@ -175,6 +175,10 @@ levels = ["error", "critical"]
 - 件名は、`subject_prefix` の後にタイトル、タイトルがなければ `[LEVEL] 本文の1行目` です。本文は UTF-8 の quoted-printable テキストで、末尾に URL が付きます。
 - 宛先が1つでも拒否されると、メッセージ全体が拒否され、誰にも送信されません。
 
+### プロジェクトの slack・discord・email の宛先制限
+
+**プロジェクト**設定の slack、discord、email の feather は、宛先（webhook URL、SMTP ホスト）をプロジェクトが選ぶため、http feather と同じアドレスポリシーで接続します。既定では公開アドレスにだけ接続し、プロキシの環境変数は使いません。このマシンやプライベートネットワーク上の中継サーバーや SMTP サーバーに送るには、プロジェクト設定で `allow_networks`（CIDR）または `allow_hosts`（ホスト名）で明示的に許可します。`config trust` はその設定を `address policy: ...` として表示します。クラウドのメタデータアドレスは、どの設定でも許可されません。グローバル設定の feather は制限されず、プロキシの環境変数も従来どおり使います。
+
 ### http
 
 任意の HTTP API や Webhook に送ります。ガイドは [http.md](http.md)（英語）です。設定ファイルに書きます（`feather add` では作成できません）。

@@ -3,6 +3,8 @@ package configure
 import (
 	"strings"
 	"testing"
+
+	"github.com/magicdrive/kjak/internal/credential"
 )
 
 const httpBase = "[feathers.api]\ntype = \"http\"\n"
@@ -120,6 +122,32 @@ func TestHTTPBodyTemplateRefusesRange(t *testing.T) {
 		doc := httpBase + "url = \"https://a.example/\"\n[feathers.api.body]\nformat = \"text\"\ntemplate = '" + tpl + "'\n"
 		if _, err := Parse([]byte(doc)); err == nil {
 			t.Errorf("%s accepted", tpl)
+		}
+	}
+}
+
+// allow_networks and allow_hosts are the address policy of http feathers
+// and of a project's slack, discord and email feathers; a plugin makes its
+// own connections.
+func TestAddressPolicyFields(t *testing.T) {
+	nets := []string{"127.0.0.1/32"}
+	hook := "HOOK"
+	for _, fc := range []FeatherConfig{
+		{Type: TypeSlack, WebhookURL: &credential.Ref{Env: &hook}, AllowNetworks: nets, AllowHosts: []string{"relay.internal"}},
+		{Type: TypeDiscord, WebhookURL: &credential.Ref{Env: &hook}, AllowNetworks: nets},
+		{Type: TypeEmail, Host: "smtp.internal", From: "a@example.com", To: []string{"b@example.com"}, AllowHosts: []string{"smtp.internal"}},
+	} {
+		if err := ValidateFeather(fc); err != nil {
+			t.Errorf("%s: %v", fc.Type, err)
+		}
+	}
+	for _, fc := range []FeatherConfig{
+		{Type: TypeSlack, WebhookURL: &credential.Ref{Env: &hook}, AllowNetworks: []string{"not-a-cidr"}},
+		{Type: TypeEmail, Host: "smtp", From: "a@example.com", To: []string{"b@example.com"}, AllowHosts: []string{"bad host"}},
+		{Type: TypeExternal, Plugin: "p", AllowNetworks: nets},
+	} {
+		if err := ValidateFeather(fc); err == nil {
+			t.Errorf("%s accepted: %+v", fc.Type, fc)
 		}
 	}
 }
