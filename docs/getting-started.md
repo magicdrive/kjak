@@ -224,7 +224,8 @@ An `export` lasts for one shell session. To keep the secret:
 |---|---|---|
 | OS keychain (macOS, Linux desktop) | store it once, then `--secret-keychain SERVICE/ACCOUNT` | your own machine |
 | environment variable | set by your CI's secret store, a service manager, or a file your shell reads | CI, servers, cron |
-| the configuration file | `--secret-stdin` (the file is created with mode 0600) | quick local use; never for a file you share |
+| a secrets file (`~/.config/kjak/secrets.toml`, mode 0600) | add `[dev_slack] webhook_url = "..."` to it, then `--secret-ref dev_slack.webhook_url` | your own machine, any OS; a file for CI (`--secrets FILE`) |
+| the configuration file | `--secret-stdin` (a literal; **deprecated**: kjak warns, `config migrate-secrets` moves it) | nothing new: prefer a secrets file |
 
 macOS keychain (the `-w` at the end makes `security` prompt for the URL):
 
@@ -243,7 +244,16 @@ kjak feather add dev_slack --type slack --secret-keychain kjak/dev_slack --force
 
 Windows has no keychain support in kjak: use an environment variable.
 
-From standard input, stored in the file as a literal:
+A secrets file (create it private, then add the URL with an editor):
+
+```sh
+install -m 600 /dev/null ~/.config/kjak/secrets.toml   # if it does not exist yet
+"${EDITOR:-vi}" ~/.config/kjak/secrets.toml            # [dev_slack]  webhook_url = "https://hooks.slack.com/..."
+kjak feather add dev_slack --type slack --secret-ref dev_slack.webhook_url --force
+```
+
+From standard input, stored in the configuration file as a literal
+(deprecated; see [migration.md](migration.md)):
 
 ```sh
 read -rs URL && printf '%s\n' "$URL" | kjak feather add dev_slack --type slack --secret-stdin --force; unset URL
@@ -323,7 +333,7 @@ From your mail provider or administrator:
 | SMTP host | `--host` | required |
 | port | `--port` | default 587 for `starttls`, 465 for `tls`, 25 for `none` |
 | security | `--security` | `starttls` (default): plain connection upgraded with STARTTLS, required; `tls`: TLS from the start (usually port 465); `none`: no encryption, for a local relay only |
-| user and password | `--user`, `--secret-env` / `--secret-keychain` / `--secret-stdin` | AUTH PLAIN, else AUTH LOGIN; refused with `security none` |
+| user and password | `--user`, `--secret-env` / `--secret-keychain` / `--secret-ref` / `--secret-stdin` | AUTH PLAIN, else AUTH LOGIN; refused with `security none` |
 | sender | `--from` | a bare address: `kjak@example.com` |
 | recipients | `--mail-to` | one or more bare addresses |
 

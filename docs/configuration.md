@@ -141,7 +141,7 @@ A key that does not belong to the type is an error.
 
 | key | CLI | meaning |
 |---|---|---|
-| `webhook_url` | `--secret-env`, `--secret-keychain`, `--secret-stdin` | the incoming webhook URL (a [credential](#71-credential-references)) |
+| `webhook_url` | `--secret-env`, `--secret-keychain`, `--secret-ref`, `--secret-stdin` | the incoming webhook URL (a [credential](#71-credential-references)) |
 
 ```toml
 [feathers.dev_slack]
@@ -160,7 +160,7 @@ it was created for.
 
 | key | CLI | meaning |
 |---|---|---|
-| `webhook_url` | `--secret-env`, `--secret-keychain`, `--secret-stdin` | the webhook URL |
+| `webhook_url` | `--secret-env`, `--secret-keychain`, `--secret-ref`, `--secret-stdin` | the webhook URL |
 | `username` | `--username` | display name of the messages (optional) |
 
 ```toml
@@ -183,7 +183,7 @@ longer than 4096 characters is cut and ends with `…`.
 | `port` | `--port` | 587 / 465 / 25 | by `security`: `starttls` / `tls` / `none` |
 | `security` | `--security` | `"starttls"` | `starttls` (required, never falls back), `tls` (implicit TLS), `none` |
 | `user` | `--user` | — | SMTP user; goes with `password` |
-| `password` | `--secret-env`, `--secret-keychain`, `--secret-stdin` | — | a credential |
+| `password` | `--secret-env`, `--secret-keychain`, `--secret-ref`, `--secret-stdin` | — | a credential |
 | `from` | `--from` | required | sender, a bare address |
 | `to` | `--mail-to` | required | recipients, bare addresses |
 | `subject_prefix` | `--subject-prefix` | — | put before every subject |
@@ -345,7 +345,7 @@ resolved when a send runs:
 - A credential that does not resolve stops the send before anything is sent
   (exit 2).
 - `feather add` never takes the secret as an argument: by reference, or on
-  standard input with `--secret-stdin`.
+  standard input with `--secret-stdin` (a literal: deprecated).
 
 **Which source to use**
 
@@ -412,7 +412,7 @@ Trust this exact content? [y/N]
   stored in the trust store. **Any change** of the content, or another path,
   needs a new trust.
 - A `./.kjak.secrets.toml` next to it is trusted with it (its path and
-  SHA-256; its values are never shown). A secrets file that appears, changes
+  SHA-256; the names it defines are shown, its values never). A secrets file that appears, changes
   or goes after the trust withdraws it.
 - The `secret` references of the project file that the project secrets file
   does not define are read from **your** secrets file only when you allow
@@ -489,7 +489,7 @@ webhook_url = { secret = "dev_slack.webhook_url" }
 | values | strings only; an empty value is an error when it is used. Values are used as they are: nothing in them is expanded (`${...}`, `{ env = ... }` and `{{...}}` stay text) |
 | size | at most 1 MiB; unknown or non-string entries are errors that name the key, never the value |
 | permissions (Unix) | a regular file of the user running kjak, with no permission for group or others (`chmod 600`); otherwise refused before it is parsed. The check is made on the opened file (`fstat`), not on the path |
-| symbolic links | the personal file may be one (a dotfiles link): the file it leads to is checked. The project file must not be one (a repository could link it to your personal file): it is opened with `O_NOFOLLOW` |
+| links | the personal file may be a symbolic link (dotfiles): the file it leads to is checked. The project file must not be a symbolic link (opened with `O_NOFOLLOW`), must have one name only (no hard link), and must not be the personal file: a repository, or another user, could otherwise present your personal file as the project's |
 | FIFOs, devices | refused without waiting (`--secrets <(...)` does not work: use `env`) |
 | Windows | the file must be a regular file; its access control list is **not checked** (kjak does not read ACLs yet). A file under `%AppData%` is private by the profile's default ACL; keep it there. A project secrets file that is a reparse point is refused (checked on the path, before the open) |
 

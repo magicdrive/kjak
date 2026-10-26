@@ -29,7 +29,7 @@ func openSecrets(path string, noFollow bool) (*os.File, error) {
 // control list is not checked: kjak v0.x does not read Windows ACLs
 // (docs/security.md); a file under %AppData% is private to the user by the
 // default ACL of the profile.
-func checkSecretsInfo(_ string, st os.FileInfo) error {
+func checkSecretsInfo(_ string, st os.FileInfo, _ bool) error {
 	if !st.Mode().IsRegular() {
 		return fmt.Errorf("%w: it is not a regular file", ErrInsecureSecrets)
 	}

@@ -63,6 +63,7 @@ type SecretsFile struct {
 	Exists bool
 	Hash   string // SHA-256 of the content read
 	values map[string]string
+	info   os.FileInfo
 }
 
 // Names are the secret names the file defines, sorted.
@@ -109,7 +110,7 @@ func ReadSecretsFile(path string, noFollow bool) (*SecretsFile, error) {
 	if err != nil {
 		return nil, secretsErr(path, err)
 	}
-	if err := checkSecretsInfo(path, st); err != nil {
+	if err := checkSecretsInfo(path, st, noFollow); err != nil {
 		return nil, secretsErr(path, err)
 	}
 	content, err := io.ReadAll(io.LimitReader(f, MaxConfigSize+1))
@@ -123,8 +124,13 @@ func ReadSecretsFile(path string, noFollow bool) (*SecretsFile, error) {
 	if err != nil {
 		return nil, secretsErr(path, err)
 	}
-	sf.Exists, sf.Hash, sf.values = true, Hash(content), values
+	sf.Exists, sf.Hash, sf.values, sf.info = true, Hash(content), values, st
 	return sf, nil
+}
+
+// SameFile reports whether two secrets files that were read are one file.
+func (s *SecretsFile) SameFile(o *SecretsFile) bool {
+	return s != nil && o != nil && s.info != nil && o.info != nil && os.SameFile(s.info, o.info)
 }
 
 // ParseSecrets decodes a secrets document into its names and values. Every
@@ -362,6 +368,26 @@ func CheckProjectSecrets(p Paths, e TrustEntry) (*SecretsFile, error) {
 		if canon != e.SecretsPath {
 			return nil, untrusted("its secrets file is not the one that was trusted")
 		}
+		if err := NotPersonal(p, sf); err != nil {
+			return nil, err
+		}
 	}
 	return sf, nil
+}
+
+// NotPersonal refuses a project secrets file that is the personal secrets
+// file itself (a link of any kind): the project would read every personal
+// secret as its own.
+func NotPersonal(p Paths, project *SecretsFile) error {
+	if project == nil || !project.Exists {
+		return nil
+	}
+	personal, err := ReadSecretsFile(p.Secrets, false)
+	if err != nil || !personal.Exists {
+		return nil // nothing to be confused with (a refused personal file fails where it is used)
+	}
+	if project.SameFile(personal) {
+		return secretsErr(project.Path, fmt.Errorf("%w: it is your personal secrets file %s", ErrInsecureSecrets, p.Secrets))
+	}
+	return nil
 }

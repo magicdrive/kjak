@@ -191,7 +191,8 @@ kjak feather add dev_slack --type slack --secret-env KJAK_DEV_SLACK_WEBHOOK
 |---|---|---|
 | OS のキーチェーン（macOS、Linux デスクトップ） | 一度登録し、`--secret-keychain SERVICE/ACCOUNT` で参照する | 自分のマシン |
 | 環境変数 | CI のシークレット管理、サービスマネージャー、シェルが読み込むファイルで設定する | CI、サーバー、cron |
-| 設定ファイル | `--secret-stdin`（ファイルはモード 0600 で作成される） | 手元での簡単な利用。共有するファイルには使わない |
+| secrets ファイル（`~/.config/kjak/secrets.toml`、モード 0600） | `[dev_slack] webhook_url = "..."` を書き、`--secret-ref dev_slack.webhook_url` で参照する | 自分のマシン（OS を問わない）、CI 用のファイル（`--secrets FILE`） |
+| 設定ファイル | `--secret-stdin`（literal。**非推奨**：kjak が警告し、`config migrate-secrets` で移せる） | 新規には使わず、secrets ファイルを使う |
 
 macOS のキーチェーン（末尾の `-w` により、`security` が URL の入力を求めます）：
 
@@ -209,7 +210,15 @@ kjak feather add dev_slack --type slack --secret-keychain kjak/dev_slack --force
 
 Windows では kjak はキーチェーンに対応していません。環境変数を使ってください。
 
-標準入力から渡して、設定ファイルにリテラルとして保存する場合：
+secrets ファイル（本人専用で作成してから、エディタで URL を書きます）：
+
+```sh
+install -m 600 /dev/null ~/.config/kjak/secrets.toml   # まだない場合
+"${EDITOR:-vi}" ~/.config/kjak/secrets.toml            # [dev_slack]  webhook_url = "https://hooks.slack.com/..."
+kjak feather add dev_slack --type slack --secret-ref dev_slack.webhook_url --force
+```
+
+標準入力から渡して、設定ファイルにリテラルとして保存する場合（非推奨。[migration.md](migration.md)（英語）を参照）：
 
 ```sh
 read -rs URL && printf '%s\n' "$URL" | kjak feather add dev_slack --type slack --secret-stdin --force; unset URL
@@ -281,7 +290,7 @@ kjak send --to dev_discord --title "kjak" --level warning "Discord works"
 | SMTP ホスト | `--host` | 必須 |
 | ポート | `--port` | 既定値：`starttls` なら 587、`tls` なら 465、`none` なら 25 |
 | 暗号化方式 | `--security` | `starttls`（既定）：平文で接続してから STARTTLS で暗号化。STARTTLS は必須。`tls`：最初から TLS（通常はポート 465）。`none`：暗号化なし。ローカルのリレー専用 |
-| ユーザーとパスワード | `--user`、`--secret-env` / `--secret-keychain` / `--secret-stdin` | AUTH PLAIN、使えなければ AUTH LOGIN。`security none` では使えない |
+| ユーザーとパスワード | `--user`、`--secret-env` / `--secret-keychain` / `--secret-ref` / `--secret-stdin` | AUTH PLAIN、使えなければ AUTH LOGIN。`security none` では使えない |
 | 送信元 | `--from` | アドレスのみ：`kjak@example.com` |
 | 宛先 | `--mail-to` | 1つ以上のアドレス（アドレスのみ） |
 

@@ -344,7 +344,13 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 			return rt.fail(ctx, err)
 		}
 		grant.SecretsSHA256 = secrets.Hash
-		fmt.Fprintf(rt.Stdout, "project secrets %s\nsha256 %s (%d secret(s); values not shown)\n", grant.SecretsPath, secrets.Hash, len(secrets.Names()))
+		if err := configure.NotPersonal(p, secrets); err != nil {
+			return rt.fail(ctx, err)
+		}
+		fmt.Fprintf(rt.Stdout, "project secrets %s\nsha256 %s (values not shown)\n", grant.SecretsPath, secrets.Hash)
+		for _, n := range secrets.Names() {
+			fmt.Fprintf(rt.Stdout, "  defines secret %s\n", n)
+		}
 	}
 	describeProject(rt, src.File)
 	// the names the project reads from the personal secrets file: each one
