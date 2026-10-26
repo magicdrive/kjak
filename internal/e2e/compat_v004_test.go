@@ -488,11 +488,14 @@ func TestCompatV004ProjectTrust(t *testing.T) {
 		t.Fatalf("project template sent %q", got)
 	}
 
-	// the project feather's env reference
+	// the project feather's env reference, to a loopback webhook
 	r = e.kjak("", "send", "--to", "proj_slack", "--dry-run", "x")
 	if e.v004 {
 		if r.code != 0 {
 			t.Fatalf("v0.0.4: project env reference: exit %d %s", r.code, r.stderr)
+		}
+		if r := e.kjak("", "send", "--to", "proj_slack", "x"); r.code != 0 {
+			t.Fatalf("v0.0.4: project webhook on loopback: exit %d %s", r.code, r.stderr)
 		}
 		return
 	}
@@ -505,6 +508,23 @@ func TestCompatV004ProjectTrust(t *testing.T) {
 	}
 	if r := e.kjak("", "send", "--to", "proj_slack", "--dry-run", "x"); r.code != 0 {
 		t.Fatalf("after the new trust: exit %d %s", r.code, r.stderr)
+	}
+	// a project's webhook reaches public addresses only (#24): loopback is
+	// refused before anything is sent, until the project allows it
+	before := len(e.slack.all())
+	r = e.kjak("", "send", "--to", "proj_slack", "-o", "json", "x")
+	if r.code != 1 || !strings.Contains(r.stdout, `"code": "blocked"`) || len(e.slack.all()) != before {
+		t.Fatalf("project webhook on loopback: exit %d\n%s%s", r.code, r.stdout, r.stderr)
+	}
+	project = strings.Replace(project, "type = \"slack\"\n", "type = \"slack\"\nallow_networks = [\"127.0.0.1/32\", \"::1/128\"]\n", 1)
+	if err := os.WriteFile(projectPath, []byte(project), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if r := e.kjak("", "config", "trust", "--yes", "--allow-user-secrets"); r.code != 0 {
+		t.Fatalf("config trust: exit %d %s", r.code, r.stderr)
+	}
+	if r := e.kjak("", "send", "--to", "proj_slack", "x"); r.code != 0 || len(e.slack.all()) != before+1 {
+		t.Fatalf("project webhook allowed on loopback: exit %d %s%s", r.code, r.stdout, r.stderr)
 	}
 	if runtime.GOOS != "windows" {
 		if fi, err := os.Stat(filepath.Join(e.xdg, "trust.toml")); err != nil || fi.Mode().Perm() != 0o600 {
@@ -542,5 +562,39 @@ func TestCompatV004InitFile(t *testing.T) {
 	}
 	if r := e.kjak("", "config", "validate"); r.code != 0 {
 		t.Fatalf("config validate: exit %d %s", r.code, r.stderr)
+	}
+}
+
+// A message template of v0.0.4 that loops (range, define/template) is
+// refused now (#25): `template set` and every render refuse it, before
+// anything is sent. A template without them renders as before.
+func TestCompatV004TemplateLoops(t *testing.T) {
+	e := newCompatEnv(t)
+	config := "[feathers.dev_slack]\ntype = 'slack'\nwebhook_url = {literal = '" + e.slack.URL + "/services/T000/B000/LITERALSECRET'}\n\n" +
+		"[templates.loop]\nbody = \"{{range 3}}x{{end}} {{.v}}\"\n\n" +
+		"[templates.def]\nbody = '{{define \"a\"}}A{{end}}{{template \"a\"}}'\n\n" +
+		"[templates.plain]\nbody = \"{{.v}} {{if .v}}set{{end}}\"\n"
+	if err := os.WriteFile(filepath.Join(e.xdg, "config.toml"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if r := e.kjak("", "template", "render", "plain", "--var", "v=1"); r.code != 0 || !strings.Contains(r.stdout, "1 set") {
+		t.Fatalf("plain template: exit %d %s%s", r.code, r.stdout, r.stderr)
+	}
+	want := 2
+	if e.v004 {
+		want = 0
+	}
+	for _, args := range [][]string{
+		{"template", "render", "loop", "--var", "v=1"},
+		{"template", "render", "def"},
+		{"send", "--to", "dev_slack", "--template", "loop", "--var", "v=1"},
+		{"template", "set", "again", "--body", "{{range 2}}y{{end}}"},
+	} {
+		if r := e.kjak("", args...); r.code != want {
+			t.Errorf("%v: exit %d, want %d\n%s%s", args, r.code, want, r.stdout, r.stderr)
+		}
+	}
+	if !e.v004 && len(e.slack.all()) != 0 {
+		t.Error("a refused template sent something")
 	}
 }
