@@ -222,9 +222,14 @@ nothing on stdout, exit 2.
 
 ### Other commands
 
-The documents of `feather list|show|plugins`, `group list|show`,
-`template list|show|render` and `config path|show|validate` carry
-`schema_version` 1 and are additive in the same way. Their top-level keys:
+The documents of `feather list|plugins`, `group list`, `template list` and
+`config path|show|validate` carry `schema_version` 1 and are additive in the
+same way. The documents of `feather show`, `group show`, `template show` and
+`template render` are the object itself, without `schema_version`, as
+v0.0.4 printed them (the same keys and values for the slack, discord and
+email feathers, checked against the v0.0.4 binary); they are additive in
+the same way. Their top-level keys, and the keys a document has only when
+they are set:
 
 `config validate -o json` prints its document only when the files are valid
 (exit 0): `valid` is `true`, `global_exists` says whether the global file
@@ -243,15 +248,33 @@ lower-case names of the configuration file and of `group list|show` and
 lower-case name may only be added beside them, never replace them, in 1.x.
 
 <!-- contract: command-document-keys -->
-| command | top-level keys |
-|---|---|
-| `kjak feather list` | `schema_version`, `feathers` |
-| `kjak feather plugins` | `schema_version`, `plugins`, `skipped_path_elements` |
-| `kjak group list` | `schema_version`, `groups` |
-| `kjak template list` | `schema_version`, `templates` |
-| `kjak config path` | `schema_version`, `global`, `global_source`, `project`, `project_state`, `secrets`, `secrets_source`, `secrets_state`, `project_secrets`, `project_secrets_state`, `secrets_permissions_checked`, `secrets_permission_model`, `trust_store` |
-| `kjak config show` | `schema_version`, `sources`, `defaults`, `feathers`, `groups`, `templates` |
-| `kjak config validate` | `schema_version`, `valid`, `global`, `global_exists`, `project`, `project_state`, `literal_secrets` |
+| command | top-level keys | only when set |
+|---|---|---|
+| `kjak feather list` | `schema_version`, `feathers` | |
+| `kjak feather show NAME` | `name`, `origin`, `type`, `enabled`, `levels` | `webhook_url`, `username`, `host`, `port`, `security`, `user`, `password`, `from`, `to`, `subject_prefix`, `url`, `method`, `auth`, `policy`, `plugin`, `path`, `sha256`, `secrets`, `env` |
+| `kjak feather plugins` | `schema_version`, `plugins`, `skipped_path_elements` | |
+| `kjak group list` | `schema_version`, `groups` | |
+| `kjak group show NAME` | `name`, `origin`, `feathers` | |
+| `kjak template list` | `schema_version`, `templates` | |
+| `kjak template show NAME` | `name`, `origin`, `title`, `body`, `level`, `url` | |
+| `kjak template render NAME` | `body`, `level` | `title`, `url` |
+| `kjak config path` | `schema_version`, `global`, `global_source`, `project`, `project_state`, `secrets`, `secrets_source`, `secrets_state`, `project_secrets`, `project_secrets_state`, `secrets_permissions_checked`, `secrets_permission_model`, `trust_store` | |
+| `kjak config show` | `schema_version`, `sources`, `defaults`, `feathers`, `groups`, `templates` | |
+| `kjak config validate` | `schema_version`, `valid`, `global`, `global_exists`, `project`, `project_state`, `literal_secrets` | |
+
+`feather show` and the entries of `feather list` are the same object: a
+credential is shown by its source only (`env:NAME`, `secret:FILE.KEY`, …),
+never its value. The keys only when set follow the feather's type: slack
+and discord `webhook_url` (and discord `username`); email `host`, `port`,
+`security`, `user`, `password`, `from`, `to`, `subject_prefix`; http `url`,
+`method`, `auth` (`none`, or the scheme and the source of its secret) and
+`policy` (what its address policy allows beyond public addresses);
+external
+`plugin`, `path`, `sha256`, `secrets` (`NAME from SOURCE`), `env`. `levels`
+is `[]` when every level is sent. `template show` has every key, `""` when
+unset; `template render` prints the rendered message, its `level` `info`
+when the template sets none (`TestContractCommandDocuments`,
+`TestContractShowDocuments`).
 
 ### Enumerations
 

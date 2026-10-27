@@ -3,6 +3,7 @@ package commandline_test
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -53,7 +54,29 @@ func (e *env) installPlugin(dir, name string) string {
 	if err := os.WriteFile(p, b, 0o755); err != nil {
 		e.t.Fatal(err)
 	}
+	settlePlugin(e.t, p)
 	return p
+}
+
+// settlePlugin runs a new copy of the test plugin once, to its end and with
+// no deadline, before kjak runs it under a timeout: the first exec of an
+// executable just written waits for the system's scan of it (macOS:
+// seconds under load; see settle in internal/feather/external), which is
+// the machine's time, not the plugin's. With an empty request the plugin
+// exits 8.
+func settlePlugin(t testing.TB, path string) {
+	t.Helper()
+	start := time.Now()
+	cmd := exec.Command(path)
+	cmd.Dir = filepath.Dir(path)
+	err := cmd.Run()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() != 8 {
+		t.Fatalf("the first run of %s: %v, want exit status 8", path, err)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Logf("the first run of %s took %s (the system's scan of a new executable)", path, d)
+	}
 }
 
 func (e *env) pluginDir() string { return filepath.Join(filepath.Dir(e.project), "plugins") }
