@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -208,6 +209,9 @@ func TestContractCommandDocuments(t *testing.T) {
 // schema_version, the object itself.
 func TestContractShowDocuments(t *testing.T) {
 	e := newEnv(t)
+	// an absolute path on every OS (not run: show reads the configuration)
+	pluginPath := filepath.Join(t.TempDir(), "kjak-feather-pager")
+	pathJSON, _ := json.Marshal(pluginPath)
 	e.writeGlobal(`[feathers.s]
 type = "slack"
 webhook_url = { env = "H" }
@@ -240,7 +244,7 @@ allow_networks = ["10.0.0.0/8"]
 [feathers.x]
 type = "external"
 plugin = "pager"
-path = "/usr/local/bin/kjak-feather-pager"
+path = ` + strconv.Quote(pluginPath) + `
 sha256 = "` + strings.Repeat("0", 64) + `"
 secrets = { routing_key = { env = "RK" } }
 env = ["ALLOWED_X"]
@@ -322,7 +326,7 @@ body = "B"
 		"method": `"PUT"`, "auth": `"bearer from env:T"`, "policy": `"allows networks 10.0.0.0/8"`})
 	values("feather show x", check("kjak feather show NAME", "feather", "show", "x"), map[string]string{
 		"name": `"x"`, "origin": `"global"`, "type": `"external"`, "enabled": `true`, "levels": `[]`, "plugin": `"pager"`,
-		"path": `"/usr/local/bin/kjak-feather-pager"`, "sha256": `"` + strings.Repeat("0", 64) + `"`,
+		"path": string(pathJSON), "sha256": `"` + strings.Repeat("0", 64) + `"`,
 		"secrets": `["routing_key from env:RK"]`, "env": `["ALLOWED_X"]`})
 	// every key listed only when set was seen set: the list is not stale
 	for _, command := range []string{"kjak feather show NAME", "kjak template render NAME"} {
