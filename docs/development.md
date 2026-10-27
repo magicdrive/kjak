@@ -201,7 +201,7 @@ to main and every pull request:
 
 | job | runs |
 |---|---|
-| test (ubuntu x64/arm64, macos arm64/intel, windows) | gofmt (Linux), `go vet`, `go test -count=1 ./...`, `-race` (not Windows: no cgo there), CLI smoke test of a release-built binary (`scripts/smoke.sh`) |
+| test (ubuntu x64/arm64, macos arm64/intel, windows) | gofmt (Linux), `go vet`, `go test -count=1 -json ./...` (the log shows the failed tests and every skipped test with its reason, `scripts/test-report.sh`, also in the job summary; the JSON is kept as the artifact `test-report-<os>`), `-race` (not Windows: no cgo there), CLI smoke test of a release-built binary (`scripts/smoke.sh`) |
 | lint | `go mod verify`, `go mod tidy -diff`, `make staticcheck`, `make golangci-lint`, `GOOS=windows go vet`, windows/arm64 cross-compile, shellcheck, `make actionlint`, `make mutation-check` |
 | renovate | `make renovate-check` (`renovate-config-validator --strict`) |
 | fuzz | `make fuzz` |

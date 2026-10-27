@@ -57,9 +57,26 @@ jobs:
         run: go vet ./...
 
       # Includes the end-to-end tests of the built binary (internal/e2e).
-      # -count=1: no cached results.
+      # -count=1: no cached results. -json keeps every test's result: the
+      # log shows the failed tests' output and every skipped test with its
+      # reason (scripts/test-report.sh; also in the job summary), and the
+      # file is kept as an artifact. The step fails when go test fails.
       - name: Test
-        run: go test -count=1 ./...
+        shell: bash
+        run: |
+          status=0
+          go test -count=1 -json ./... > test-report.json || status=$?
+          sh scripts/test-report.sh test-report.json || status=1
+          exit "$status"
+
+      - name: Keep the test report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-report-${{ matrix.os }}
+          path: test-report.json
+          if-no-files-found: error
+          retention-days: 30
 
       # the race detector needs cgo, which the Windows image lacks
       - name: Test (race)
