@@ -80,6 +80,10 @@ type containment struct {
 	job windows.Handle // 0 once closed
 }
 
+// testHookStarted, when set (tests only), runs right after the plugin was
+// created suspended, before it is put in its job and resumed.
+var testHookStarted func(pid int)
+
 // newContainment creates the job and prepares cmd to start suspended.
 func newContainment(cmd *exec.Cmd) (*containment, error) {
 	job, err := windows.CreateJobObject(nil, nil)
@@ -104,6 +108,9 @@ func (c *containment) start() error {
 	if err := c.cmd.Start(); err != nil {
 		c.close()
 		return err
+	}
+	if testHookStarted != nil {
+		testHookStarted(c.cmd.Process.Pid)
 	}
 	pid := c.cmd.Process.Pid
 	err := errors.New("the plugin's pid is out of range")
