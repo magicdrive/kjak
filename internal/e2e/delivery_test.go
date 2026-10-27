@@ -2,17 +2,20 @@ package e2e
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // The end-to-end delivery tests: the built kjak against local HTTP APIs
@@ -179,6 +182,7 @@ func (s *sandbox) installPlugin(name string) {
 	if err := os.WriteFile(filepath.Join(dir, file), b, 0o755); err != nil {
 		s.t.Fatal(err)
 	}
+	settlePlugin(s.t, filepath.Join(dir, file))
 	for i, kv := range s.env {
 		if strings.HasPrefix(kv, "PATH=") && !strings.Contains(kv, dir) {
 			s.env[i] = "PATH=" + dir + string(os.PathListSeparator) + strings.TrimPrefix(kv, "PATH=")
@@ -417,5 +421,26 @@ func TestBinaryPluginDeadline(t *testing.T) {
 	}
 	if x.Error.Code != "deadline" || x.Acceptance != "unknown" {
 		t.Fatalf("deadline: %+v", x)
+	}
+}
+
+// settlePlugin runs a new copy of the test plugin once, to its end and with
+// no deadline, before kjak runs it under a timeout: the first exec of an
+// executable just written waits for the system's scan of it (macOS:
+// seconds under load; see settle in internal/feather/external), which is
+// the machine's time, not the plugin's. With an empty request the plugin
+// exits 8.
+func settlePlugin(t testing.TB, path string) {
+	t.Helper()
+	start := time.Now()
+	cmd := exec.Command(path)
+	cmd.Dir = filepath.Dir(path)
+	err := cmd.Run()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() != 8 {
+		t.Fatalf("the first run of %s: %v, want exit status 8", path, err)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Logf("the first run of %s took %s (the system's scan of a new executable)", path, d)
 	}
 }

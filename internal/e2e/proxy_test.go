@@ -23,37 +23,49 @@ import (
 	"time"
 )
 
-// The proxy environment variables, with real connections (docs/security.md
-// "http feathers and SSRF", docs/configuration.md "Address policy of a
-// project's slack, discord and email feathers"):
+// The proxy environment variables, with the kjak binary and real
+// connections (docs/security.md "http feathers and SSRF",
+// docs/configuration.md "Address policy of a project's slack, discord and
+// email feathers"):
 //
-//   - http feathers (global or project) never use a proxy;
-//   - a project's slack, discord and email feathers never use a proxy (the
-//     address policy checks the destination, which a proxy would hide);
 //   - a global slack or discord feather uses HTTPS_PROXY / HTTP_PROXY;
+//   - http feathers (global or project) never use a proxy;
+//   - a project's slack, discord and email feathers never use a proxy;
 //   - email speaks SMTP directly: no HTTP proxy applies to it.
 //
-// The kjak binary runs with HTTP_PROXY, HTTPS_PROXY (and the lower-case
-// names, and ALL_PROXY) pointing at a recording CONNECT proxy. The
-// destinations listen on a non-loopback address of this machine: Go never
-// uses a proxy for a loopback destination (net/http.ProxyFromEnvironment),
-// so a test against 127.0.0.1 would pass whatever kjak did. The global
-// slack and discord feathers are the control: the proxy must see their
-// CONNECT, which shows the binary did read the variables.
+// The binary runs with HTTP_PROXY, HTTPS_PROXY (and the lower-case names,
+// and ALL_PROXY) pointing at a recording CONNECT proxy on 127.0.0.1. Every
+// destination is a name under example.test (RFC 6761: no resolver knows
+// it). net/http decides whether to use a proxy by the destination's name,
+// never for "localhost" or a loopback address: a test against 127.0.0.1
+// would pass whatever kjak did, a test against a name sees the real
+// decision. Only the proxy knows the names (they are 127.0.0.1 to it), so:
 //
-// TLS: the destinations' certificate is issued by a CA of the test, given
-// to kjak by SSL_CERT_FILE (read on every platform since Go 1.27, which
-// go.mod pins; on macOS and Windows it replaces the system verifier). Every
-// send is checked to be delivered, and the destination records the peer of
-// every ClientHello: kjak itself, or the proxy's tunnel. Without
-// SSL_CERT_FILE the same send must fail: kjak verifies the certificate.
+//   - a feather that uses the proxy reaches its destination through the
+//     tunnel and delivers: the proxy records CONNECT <name>:<port>, the
+//     destination the handshake from the tunnel (the control: the binary
+//     read the variables);
+//   - a feather that connects directly asks the system's resolver for the
+//     name and fails before anything is sent: the proxy records nothing,
+//     the destinations receive nothing.
+//
+// Nothing needs a route other than loopback. That the direct feathers do
+// connect, by name, to their destination is shown in-process with a test
+// resolver and dialer (internal/feather/builtin TestProxyDecisionByConnection).
+//
+// TLS: the destination's certificate is for its name, issued by a CA of the
+// test given to kjak by SSL_CERT_FILE (read on every platform since Go
+// 1.27, which go.mod pins). Without SSL_CERT_FILE the same send through the
+// proxy must fail: kjak verifies the certificate.
 func TestProxyEnvironment(t *testing.T) {
-	ip := nonLoopbackIPv4(t)
-	ca := newTestCA(t, ip)
-	proxy := newRecordingProxy(t)
-	tlsDest := newTLSDestination(t, ip, ca)
-	plainDest := newPlainDestination(t, ip)
-	smtp := newSMTPOn(t, net.JoinHostPort(ip.String(), "0"))
+	ca := newTestCA(t, destHost)
+	proxy := newRecordingProxy(t, map[string]string{destHost: "127.0.0.1", plainDestHost: "127.0.0.1", mailDestHost: "127.0.0.1"})
+	tlsDest := newTLSDestination(t, ca)
+	plainDest := newPlainDestination(t)
+	smtp := newSMTPOn(t, "127.0.0.1:0")
+	tlsPort := tlsDest.Listener.Addr().(*net.TCPAddr).Port
+	plainPort := plainDest.Listener.Addr().(*net.TCPAddr).Port
+	tlsURL := fmt.Sprintf("https://%s:%d", destHost, tlsPort)
 
 	s := newSandbox(t)
 	xdg := filepath.Join(filepath.Dir(s.dir), "xdg", "kjak")
@@ -72,20 +84,20 @@ func TestProxyEnvironment(t *testing.T) {
 		"NO_PROXY=", "no_proxy=",
 		"SSL_CERT_FILE="+caFile,
 	)
-	allow := fmt.Sprintf("allow_networks = [%q]\n", ip.String()+"/32")
+	allow := "allow_networks = [\"127.0.0.1/32\"]\n"
 	feathers := func(prefix string) string {
 		var b strings.Builder
 		fmt.Fprintf(&b, "[feathers.%[1]s_slack]\ntype = \"slack\"\nwebhook_url = { env = \"HOOK_%[1]s_SLACK\" }\n%[2]s\n", prefix, allow)
 		fmt.Fprintf(&b, "[feathers.%[1]s_discord]\ntype = \"discord\"\nwebhook_url = { env = \"HOOK_%[1]s_DISCORD\" }\n%[2]s\n", prefix, allow)
-		fmt.Fprintf(&b, "[feathers.%s_mail]\ntype = \"email\"\nhost = %q\nport = %d\nsecurity = \"none\"\nfrom = \"kjak@example.com\"\nto = [\"ops@example.com\"]\n%s\n", prefix, ip.String(), smtp.port(), allow)
-		fmt.Fprintf(&b, "[feathers.%s_http]\ntype = \"http\"\nurl = %q\n%s\n", prefix, tlsDest.URL+"/http/"+prefix, allow)
-		fmt.Fprintf(&b, "[feathers.%s_plain]\ntype = \"http\"\nurl = %q\nallow_http = true\n%s\n", prefix, plainDest.URL+"/plain/"+prefix, allow)
+		fmt.Fprintf(&b, "[feathers.%s_mail]\ntype = \"email\"\nhost = %q\nport = %d\nsecurity = \"none\"\nfrom = \"kjak@example.com\"\nto = [\"ops@example.com\"]\n%s\n", prefix, mailDestHost, smtp.port(), allow)
+		fmt.Fprintf(&b, "[feathers.%s_http]\ntype = \"http\"\nurl = %q\n%s\n", prefix, tlsURL+"/http/"+prefix, allow)
+		fmt.Fprintf(&b, "[feathers.%s_plain]\ntype = \"http\"\nurl = %q\nallow_http = true\n%s\n", prefix, fmt.Sprintf("http://%s:%d/plain/%s", plainDestHost, plainPort, prefix), allow)
 		return b.String()
 	}
 	for _, prefix := range []string{"global", "project"} {
 		s.env = append(s.env,
-			"HOOK_"+prefix+"_SLACK="+tlsDest.URL+"/slack/"+prefix,
-			"HOOK_"+prefix+"_DISCORD="+tlsDest.URL+"/discord/"+prefix)
+			"HOOK_"+prefix+"_SLACK="+tlsURL+"/slack/"+prefix,
+			"HOOK_"+prefix+"_DISCORD="+tlsURL+"/discord/"+prefix)
 	}
 	if err := os.WriteFile(filepath.Join(xdg, "config.toml"), []byte(feathers("global")), 0o600); err != nil {
 		t.Fatal(err)
@@ -95,87 +107,75 @@ func TestProxyEnvironment(t *testing.T) {
 	}
 	s.must("config", "trust", "--yes", "--allow-user-secrets")
 
-	type want struct {
-		proxied bool   // the proxy sees a CONNECT to the destination
-		dest    string // "tls", "plain" or "smtp": where the direct connection lands
-	}
 	cases := []struct {
 		feather string
-		want
+		proxied bool // through the proxy (and delivered), else directly (by name: not found)
 	}{
 		// the control: a global webhook feather uses the proxy
-		{"global_slack", want{proxied: true, dest: "tls"}},
-		{"global_discord", want{proxied: true, dest: "tls"}},
-		{"global_mail", want{dest: "smtp"}},
-		{"global_http", want{dest: "tls"}},
-		{"global_plain", want{dest: "plain"}},
-		{"project_slack", want{dest: "tls"}},
-		{"project_discord", want{dest: "tls"}},
-		{"project_mail", want{dest: "smtp"}},
-		{"project_http", want{dest: "tls"}},
-		{"project_plain", want{dest: "plain"}},
+		{"global_slack", true},
+		{"global_discord", true},
+		{"global_mail", false},
+		{"global_http", false},
+		{"global_plain", false},
+		{"project_slack", false},
+		{"project_discord", false},
+		{"project_mail", false},
+		{"project_http", false},
+		{"project_plain", false},
 	}
 	for _, c := range cases {
 		t.Run(c.feather, func(t *testing.T) {
 			proxy.reset()
-			tlsDest.reset()
-			hellosBefore, plainBefore, mailBefore := len(tlsDest.hellos()), len(plainDest.paths()), len(smtp.all())
-			r := s.kjak("", "send", "--to", c.feather, "-o", "json", "proxy check")
+			hellos, requests, plain, mails := len(tlsDest.hellos()), len(tlsDest.requests()), len(plainDest.paths()), len(smtp.all())
+			r := s.kjak("", "send", "--to", c.feather, "--timeout", "20s", "-o", "json", "proxy check")
 			rep := parseReport(t, r.stdout)
 			res := rep.result(t, c.feather)
 			conns := proxy.connections()
-			dest := tlsDest.Listener.Addr().String()
-			if c.proxied {
-				if len(conns) == 0 {
-					t.Fatalf("the proxy saw no connection: kjak ignored HTTPS_PROXY for a global %s feather\n%s%s", res.Type, r.stdout, r.stderr)
+			if !c.proxied {
+				if len(conns) != 0 {
+					t.Fatalf("the proxy saw %q: a %s feather must connect directly\n%s%s", conns, c.feather, r.stdout, r.stderr)
 				}
-				for _, line := range conns {
-					if line != "CONNECT "+dest {
-						t.Errorf("the proxy saw %q, want CONNECT %s", line, dest)
-					}
+				// directly, the name is the system's to resolve: nothing
+				// is sent anywhere
+				if res.Status == "delivered" || r.code == 0 {
+					t.Fatalf("delivered to a name no resolver knows: status %s, exit %d\n%s%s", res.Status, r.code, r.stdout, r.stderr)
 				}
-			} else if len(conns) != 0 {
-				t.Fatalf("the proxy saw %q: a %s feather must connect directly\n%s%s", conns, c.feather, r.stdout, r.stderr)
+				if len(tlsDest.hellos()) != hellos || len(tlsDest.requests()) != requests || len(plainDest.paths()) != plain || len(smtp.all()) != mails {
+					t.Fatalf("a destination was reached without the proxy\n%s%s", r.stdout, r.stderr)
+				}
+				return
 			}
-			switch c.dest {
-			case "tls":
-				hellos := tlsDest.hellos()[hellosBefore:]
-				if len(hellos) == 0 {
-					t.Fatalf("the destination saw no TLS handshake\n%s%s", r.stdout, r.stderr)
+			target := fmt.Sprintf("%s:%d", destHost, tlsPort)
+			if len(conns) == 0 {
+				t.Fatalf("the proxy saw no connection: kjak ignored HTTPS_PROXY for a global %s feather\n%s%s", res.Type, r.stdout, r.stderr)
+			}
+			for _, line := range conns {
+				if line != "CONNECT "+target {
+					t.Errorf("the proxy saw %q, want CONNECT %s", line, target)
 				}
-				for _, h := range hellos {
-					// through the CONNECT tunnel the peer is the proxy's
-					// outgoing connection, else kjak itself
-					if got := proxy.dialedFrom(h.peer); got != c.proxied {
-						t.Errorf("handshake from %s: through the proxy %v, want %v", h.peer, got, c.proxied)
-					}
+			}
+			got := tlsDest.hellos()[hellos:]
+			if len(got) == 0 {
+				t.Fatalf("the destination saw no TLS handshake\n%s%s", r.stdout, r.stderr)
+			}
+			for _, h := range got {
+				// through the CONNECT tunnel the peer is the proxy's
+				// outgoing connection
+				if !proxy.dialedFrom(h.peer) {
+					t.Errorf("handshake from %s, not from the proxy's tunnel", h.peer)
 				}
-				if res.Status != "delivered" || r.code != 0 {
-					t.Fatalf("status %s, exit %d\n%s%s", res.Status, r.code, r.stdout, r.stderr)
-				}
-				if got := tlsDest.requests(); len(got) != 1 || !strings.Contains(got[0], "proxy check") {
-					t.Fatalf("the destination received %q", got)
-				}
-			case "plain":
-				if r.code != 0 || res.Status != "delivered" {
-					t.Fatalf("status %s, exit %d\n%s%s", res.Status, r.code, r.stdout, r.stderr)
-				}
-				if got := plainDest.paths()[plainBefore:]; len(got) != 1 || got[0] != "/plain/"+strings.TrimSuffix(c.feather, "_plain") {
-					t.Fatalf("the plain destination received %q", got)
-				}
-			case "smtp":
-				if r.code != 0 || res.Status != "delivered" {
-					t.Fatalf("status %s, exit %d\n%s%s", res.Status, r.code, r.stdout, r.stderr)
-				}
-				if got := smtp.all()[mailBefore:]; len(got) != 1 || !strings.Contains(got[0], "proxy check") {
-					t.Fatalf("the SMTP server received %q", got)
-				}
+			}
+			if res.Status != "delivered" || r.code != 0 {
+				t.Fatalf("status %s, exit %d\n%s%s", res.Status, r.code, r.stdout, r.stderr)
+			}
+			if got := tlsDest.requests()[requests:]; len(got) != 1 || !strings.Contains(got[0], "proxy check") {
+				t.Fatalf("the destination received %q", got)
 			}
 		})
 	}
 
-	// the control of the TLS checks: without the test CA, the certificate
-	// is refused, directly or through the tunnel, and nothing is received
+	// the control of the TLS check: without the test CA, the certificate
+	// is refused through the tunnel, and nothing is received
 	var env []string
 	for _, kv := range s.env {
 		if !strings.HasPrefix(kv, "SSL_CERT_FILE=") {
@@ -183,64 +183,31 @@ func TestProxyEnvironment(t *testing.T) {
 		}
 	}
 	s.env = env
-	for _, name := range []string{"global_slack", "project_slack", "project_http"} {
-		tlsDest.reset()
-		r := s.kjak("", "send", "--to", name, "-o", "json", "untrusted")
-		if res := parseReport(t, r.stdout).result(t, name); r.code == 0 || res.Status == "delivered" || len(tlsDest.requests()) != 0 {
-			t.Errorf("%s without the test CA: exit %d, status %s, received %q\n%s", name, r.code, res.Status, tlsDest.requests(), r.stdout)
+	for _, name := range []string{"global_slack", "global_discord"} {
+		proxy.reset()
+		requests := len(tlsDest.requests())
+		r := s.kjak("", "send", "--to", name, "--timeout", "20s", "-o", "json", "untrusted")
+		res := parseReport(t, r.stdout).result(t, name)
+		if r.code == 0 || res.Status == "delivered" || len(tlsDest.requests()) != requests || len(proxy.connections()) == 0 {
+			t.Errorf("%s without the test CA: exit %d, status %s, received %q, proxy %q\n%s", name, r.code, res.Status, tlsDest.requests()[requests:], proxy.connections(), r.stdout)
 		}
 	}
 }
 
-// nonLoopbackIPv4 is an address of this machine that is not loopback (nor
-// link-local), on which a test server can listen.
-func nonLoopbackIPv4(t *testing.T) net.IP {
-	t.Helper()
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-		for _, a := range addrs {
-			n, ok := a.(*net.IPNet)
-			if !ok {
-				continue
-			}
-			ip := n.IP.To4()
-			if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
-				continue
-			}
-			ln, err := net.Listen("tcp", net.JoinHostPort(ip.String(), "0"))
-			if err != nil {
-				continue
-			}
-			_ = ln.Close()
-			return ip
-		}
-	}
-	// CI runners always have one; a machine without a network has nothing
-	// a proxy could be asked for
-	if os.Getenv("CI") != "" {
-		t.Fatal("no non-loopback IPv4 address to listen on")
-	}
-	t.Skip("no non-loopback IPv4 address to listen on (a proxy is never used for loopback)")
-	return nil
-}
+// The names of the destinations: only the proxy of the test knows them.
+const (
+	destHost      = "hooks.example.test"
+	plainDestHost = "plain.example.test"
+	mailDestHost  = "mail.example.test"
+)
 
 type testCA struct {
 	pem  []byte
 	leaf tls.Certificate
 }
 
-// newTestCA is a CA and a certificate it issued for ip.
-func newTestCA(t *testing.T, ip net.IP) testCA {
+// newTestCA is a CA and a certificate it issued for the name host.
+func newTestCA(t *testing.T, host string) testCA {
 	t.Helper()
 	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -265,9 +232,9 @@ func newTestCA(t *testing.T, ip net.IP) testCA {
 		t.Fatal(err)
 	}
 	tmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: ip.String()},
+		SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: host},
 		NotBefore: now.Add(-time.Hour), NotAfter: now.Add(time.Hour),
-		IPAddresses: []net.IP{ip}, KeyUsage: x509.KeyUsageDigitalSignature,
+		DNSNames: []string{host}, KeyUsage: x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, &key.PublicKey, caKey)
@@ -291,7 +258,7 @@ type tlsDestination struct {
 	reqs []string
 }
 
-func newTLSDestination(t *testing.T, ip net.IP, ca testCA) *tlsDestination {
+func newTLSDestination(t *testing.T, ca testCA) *tlsDestination {
 	d := &tlsDestination{}
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
@@ -304,12 +271,6 @@ func newTLSDestination(t *testing.T, ip net.IP, ca testCA) *tlsDestination {
 		}
 		_, _ = io.WriteString(w, "ok")
 	}))
-	ln, err := net.Listen("tcp", net.JoinHostPort(ip.String(), "0"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = srv.Listener.Close()
-	srv.Listener = ln
 	srv.TLS = &tls.Config{
 		Certificates: []tls.Certificate{ca.leaf},
 		MinVersion:   tls.VersionTLS12,
@@ -324,12 +285,6 @@ func newTLSDestination(t *testing.T, ip net.IP, ca testCA) *tlsDestination {
 	t.Cleanup(srv.Close)
 	d.Server = srv
 	return d
-}
-
-func (d *tlsDestination) reset() {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.reqs = nil
 }
 
 func (d *tlsDestination) hellos() []hello {
@@ -352,7 +307,7 @@ type plainDestination struct {
 	ps []string
 }
 
-func newPlainDestination(t *testing.T, ip net.IP) *plainDestination {
+func newPlainDestination(t *testing.T) *plainDestination {
 	d := &plainDestination{}
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 1<<20))
@@ -361,12 +316,6 @@ func newPlainDestination(t *testing.T, ip net.IP) *plainDestination {
 		d.mu.Unlock()
 		_, _ = io.WriteString(w, "ok")
 	}))
-	ln, err := net.Listen("tcp", net.JoinHostPort(ip.String(), "0"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = srv.Listener.Close()
-	srv.Listener = ln
 	srv.Start()
 	t.Cleanup(srv.Close)
 	d.Server = srv
@@ -380,21 +329,23 @@ func (d *plainDestination) paths() []string {
 }
 
 // recordingProxy is an HTTP proxy: it records the request line of every
-// connection it accepts, tunnels a CONNECT to its target, and answers
-// anything else (an absolute-form request through HTTP_PROXY) with 502.
+// connection it accepts, tunnels a CONNECT to a name it knows (names: the
+// address of each, never asked of the system), and answers anything else
+// (an absolute-form request through HTTP_PROXY, an unknown name) with 502.
 type recordingProxy struct {
 	ln    net.Listener
+	names map[string]string
 	mu    sync.Mutex
 	lines []string
 	local map[string]bool // the local addresses of the tunnels it dialed
 }
 
-func newRecordingProxy(t *testing.T) *recordingProxy {
+func newRecordingProxy(t *testing.T, names map[string]string) *recordingProxy {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := &recordingProxy{ln: ln, local: map[string]bool{}}
+	p := &recordingProxy{ln: ln, names: names, local: map[string]bool{}}
 	go func() {
 		for {
 			c, err := ln.Accept()
@@ -423,7 +374,14 @@ func (p *recordingProxy) serve(c net.Conn) {
 		_, _ = io.WriteString(c, "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
 		return
 	}
-	upstream, err := net.DialTimeout("tcp", req.Host, 10*time.Second)
+	host, port, _ := net.SplitHostPort(req.Host)
+	ip, ok := p.names[host]
+	if !ok {
+		p.record("CONNECT " + req.Host + " (not a name of the test)")
+		_, _ = io.WriteString(c, "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n")
+		return
+	}
+	upstream, err := net.DialTimeout("tcp", net.JoinHostPort(ip, port), 10*time.Second)
 	if err != nil {
 		p.record("CONNECT " + req.Host + " (dial: " + err.Error() + ")")
 		_, _ = io.WriteString(c, "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n")

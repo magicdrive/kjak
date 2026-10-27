@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,7 +59,44 @@ func install(t *testing.T, dir, name string) string {
 	if err := os.Chmod(p, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	settle(t, p)
 	return p
+}
+
+// settle runs a new copy of the test plugin once, to its end and with no
+// deadline, before a test runs it under a plugin timeout. The first exec of
+// an executable just written is held until the system has scanned it
+// (macOS: XProtect, an endpoint security agent): about half a second when
+// idle, but seconds under load, one copy at a time machine-wide. Measured
+// on macOS under load: median 3s and up to the full 10s from exec to the
+// plugin's main for a new copy, 12ms for the next run of the same copy; a
+// copy killed by a short plugin timeout while it was being scanned held up
+// the scan of the next new copy for about 10s. That wait belongs to the
+// machine, not to kjak: counted inside a plugin timeout, it made a test of
+// the protocol time out. Run here, it is not counted, and no copy is ever
+// killed before its main.
+func settle(t testing.TB, path string) {
+	t.Helper()
+	start := time.Now()
+	if err := runOnce(path); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Logf("the first run of %s took %s (the system's scan of a new executable)", path, d)
+	}
+}
+
+// runOnce runs the test plugin with an empty request: it reads nothing it
+// can decode and exits 8.
+func runOnce(path string) error {
+	cmd := exec.Command(path)
+	cmd.Dir = filepath.Dir(path)
+	err := cmd.Run()
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && ee.ExitCode() == 8 {
+		return nil
+	}
+	return fmt.Errorf("the first run of %s: %v, want exit status 8", path, err)
 }
 
 func tempDir(t *testing.T) string {
@@ -93,7 +131,11 @@ var sharedDir = sync.OnceValues(func() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return dir, os.WriteFile(filepath.Join(dir, configure.PluginFile("test", runtime.GOOS)), b, 0o755)
+	p := filepath.Join(dir, configure.PluginFile("test", runtime.GOOS))
+	if err := os.WriteFile(p, b, 0o755); err != nil {
+		return "", err
+	}
+	return dir, runOnce(p) // settled, as install does
 })
 
 // sharedPlugin is plugin with the shared copy of the test plugin.
