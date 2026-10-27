@@ -20,7 +20,6 @@ ACTIONLINT := github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 #   read Go 1.27 export data (v2.5.0 fails so).
 GOLANGCI_LINT := github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 TOOLS_DIR = $(BUILD_DIR)/tools
-RENOVATE_VERSION := 44.164.1
 
 # Release tooling: Hephaestus builds, archives, checksums and publishes the
 # release (hephaestus.yaml). The version is kept in step with the commit SHA
@@ -131,10 +130,19 @@ lint: staticcheck golangci-lint
 actionlint:
 	@$(GO) run $(ACTIONLINT)
 
-# Validate renovate.json with the pinned Renovate (needs Node.js / npx)
+# Validate renovate.json (needs Node.js, of .github/renovate-check/.node-version,
+# and npm). Renovate and its whole dependency tree are pinned by
+# .github/renovate-check/package-lock.json and installed with `npm ci`, which
+# Renovate updates (npm manager, lockFileMaintenance).
 .PHONY: renovate-check
 renovate-check:
-	@npx --yes --package renovate@$(RENOVATE_VERSION) -- renovate-config-validator --strict renovate.json
+	@$(CURDIR)/.github/renovate-check/run.sh
+
+# The failure-injection tests of renovate-check's install (a fake registry:
+# lockfile pinning, 404 and integrity failures)
+.PHONY: renovate-check-test
+renovate-check-test:
+	@python3 $(CURDIR)/.github/renovate-check/test_run.py
 
 # Run the pinned govulncheck (the standard library of the toolchain included)
 .PHONY: vulncheck
@@ -326,6 +334,7 @@ help:
 	@echo "  make vulncheck         - Run the pinned govulncheck"
 	@echo "  make actionlint        - Lint the workflows with the pinned actionlint"
 	@echo "  make renovate-check    - Validate renovate.json with the pinned Renovate"
+	@echo "  make renovate-check-test - Test renovate-check's pinned install (fake registry)"
 	@echo "  make fuzz              - Run every fuzz target for FUZZTIME (10s)"
 	@echo "  make mutation          - Mutation testing of the security-critical paths (MUTANTS=regex)"
 	@echo "  make mutation-check    - Check that every mutant still applies (no test run)"
