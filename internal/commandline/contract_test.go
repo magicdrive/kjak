@@ -1,6 +1,7 @@
 package commandline_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"go/ast"
 	"go/parser"
@@ -149,12 +150,13 @@ func TestContractCommandDocuments(t *testing.T) {
 	}
 }
 
-// config show -o json names the keys of a group and a template as the
-// configuration does (v0.0.4 printed the Go field names, "Feathers" and
-// "Body").
+// config show -o json names the keys of a group and a template as v0.0.4
+// did: the Go field names ("Feathers"; "Title", "Body", "Level", "URL",
+// every one present even when empty). They are part of the v1 contract
+// (docs/stability.md): a script written for v0.0.4 keeps reading them.
 func TestContractConfigShowKeys(t *testing.T) {
 	e := newEnv(t)
-	e.writeGlobal("[feathers.a]\ntype = \"slack\"\nwebhook_url = { env = \"H\" }\n\n[groups.g]\nfeathers = [\"a\"]\n\n[templates.t]\ntitle = \"T\"\nbody = \"B\"\nlevel = \"info\"\nurl = \"https://example.com\"\n")
+	e.writeGlobal("[feathers.a]\ntype = \"slack\"\nwebhook_url = { env = \"H\" }\n\n[groups.g]\nfeathers = [\"a\"]\n\n[templates.t]\ntitle = \"T\"\nbody = \"B\"\nlevel = \"info\"\nurl = \"https://example.com\"\n\n[templates.only_body]\nbody = \"B\"\n")
 	r := e.must("config", "show", "-o", "json")
 	var doc struct {
 		Groups    map[string]map[string]json.RawMessage `json:"groups"`
@@ -171,10 +173,32 @@ func TestContractConfigShowKeys(t *testing.T) {
 		sort.Strings(out)
 		return out
 	}
-	if got := keys(doc.Groups["g"]); !slices.Equal(got, []string{"feathers"}) {
-		t.Errorf("group keys %v", got)
+	compact := func(raw json.RawMessage) string {
+		var b bytes.Buffer
+		if err := json.Compact(&b, raw); err != nil {
+			return string(raw)
+		}
+		return b.String()
 	}
-	if got := keys(doc.Templates["t"]); !slices.Equal(got, []string{"body", "level", "title", "url"}) {
-		t.Errorf("template keys %v", got)
+	if got := keys(doc.Groups["g"]); !slices.Equal(got, []string{"Feathers"}) {
+		t.Errorf("group keys %v, want [Feathers] (v0.0.4)", got)
+	}
+	if got := compact(doc.Groups["g"]["Feathers"]); got != `["a"]` {
+		t.Errorf("group Feathers %s", got)
+	}
+	want := []string{"Body", "Level", "Title", "URL"}
+	for name, values := range map[string]map[string]string{
+		"t":         {"Title": `"T"`, "Body": `"B"`, "Level": `"info"`, "URL": `"https://example.com"`},
+		"only_body": {"Title": `""`, "Body": `"B"`, "Level": `""`, "URL": `""`},
+	} {
+		tpl := doc.Templates[name]
+		if got := keys(tpl); !slices.Equal(got, want) {
+			t.Errorf("template %s keys %v, want %v (v0.0.4)", name, got, want)
+		}
+		for k, v := range values {
+			if got := compact(tpl[k]); got != v {
+				t.Errorf("template %s %s = %s, want %s", name, k, got, v)
+			}
+		}
 	}
 }
