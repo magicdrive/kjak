@@ -65,7 +65,8 @@ has such changes compared to v0.0.4: see [migration.md](migration.md).
   JSON document there instead.
 - **`config show -o json` beyond its top-level keys** (`schema_version`,
   `sources`, `defaults`, `feathers`, `groups`, `templates`): the entries
-  follow the configuration and may gain keys.
+  of `feathers` follow the configuration and may gain keys. The keys of a
+  group and a template entry are stable ([below](#other-commands)).
 - **Platform support** follows the [platform table](#platforms): a
   platform may be added in a minor release.
 - **Go packages.** kjak is a command; everything under `internal/` is
@@ -227,6 +228,14 @@ nothing on stdout, exit 2.
 The documents of `feather list|show|plugins`, `group list|show`,
 `template list|show|render` and `config path|show` carry `schema_version` 1
 and are additive in the same way. Their top-level keys:
+
+In `config show -o json`, an entry of `groups` has the key `Feathers` and
+an entry of `templates` the keys `Title`, `Body`, `Level` and `URL` (each
+present, `""` when unset): the Go field names v0.0.4 printed, unlike the
+lower-case names of the configuration file and of `group list|show` and
+`template list|show`. They are kept for compatibility
+(`TestContractConfigShowKeys`, `internal/e2e/compat_v004_test.go`); a
+lower-case name may only be added beside them, never replace them, in 1.x.
 
 <!-- contract: command-document-keys -->
 | command | top-level keys |

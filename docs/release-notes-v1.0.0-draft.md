@@ -1,10 +1,15 @@
 <!--
-DRAFT of the notes of the v1.0.0 release. Not used by the release workflow:
-hephaestus.yaml sets `release.github.generate_notes: true` and no
-`notes_file`, so the release gets GitHub's generated notes. To publish this
-text instead, paste it into the release after it is created, or set
-`release.github.notes_file` (mutually exclusive with `notes`) to a copy of it
-in a release preparation PR.
+DRAFT of the notes of the v1.0.0 release. Not used by the release workflow
+yet: hephaestus.yaml sets `release.github.generate_notes: true` and no
+`notes_file`, so a release gets GitHub's generated notes.
+
+Plan for v1.0.0: the release preparation PR copies this text, without this
+comment, to a file that names the release (for example
+docs/release-notes/v1.0.0.md), sets `release.github.notes_file` to it and
+removes `generate_notes` (Hephaestus ignores it when `notes_file` is set,
+and `notes_file` is mutually exclusive with `notes`). `make preflight
+tag=v1.0.0` then fails unless that file names the tag
+(config.release-notes), so a later release cannot reuse it unchanged.
 -->
 
 # kjak v1.0.0
@@ -71,9 +76,6 @@ the [migration guide](https://github.com/magicdrive/kjak/blob/v1.0.0/docs/migrat
 - **Configuration files must be regular files.** A configuration file, a
   project file or the trust store that is a FIFO, a device or a directory is
   refused (a symbolic link to a regular file still works).
-- **`config show -o json`**: the entries of `groups` and `templates` use
-  the configuration's key names (`feathers`, `title`, `body`, `level`,
-  `url`); v0.0.4 printed Go field names (`Feathers`, `Title`, ...).
 - **Downgrade:** once a trust entry uses the new keys (a project secrets
   file, allowed names, plugins), v0.0.4 cannot read the trust store
   ("broken trust store"). Keep a copy of `trust.toml` if you may go back.
@@ -101,8 +103,6 @@ bodies sent to Slack, Discord and e-mail.
    reference; add `allow_networks`/`allow_hosts` to project feathers that
    send to a local or private address.
 4. Replace `range`/`define`/`template`/`block` in message templates.
-5. Scripts that read `config show -o json` groups or templates: use the
-   lower-case keys.
 
 Details: [docs/migration.md](https://github.com/magicdrive/kjak/blob/v1.0.0/docs/migration.md).
 

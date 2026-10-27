@@ -28,10 +28,10 @@ or freeze the output contract. Each is refused **before anything is sent**
    ([details](#a-projects-slack-discord-and-email-feathers-reach-public-addresses-only)).
 6. **Rewrite looping templates** (`range`, `define`, `template`, `block`)
    ([details](#message-templates-cannot-loop)).
-7. **Scripts:** `config show -o json` names group and template keys in lower
-   case ([details](#config-show--o-json-keys)); a configuration file that is
-   a FIFO or a device is refused
-   ([details](#configuration-files-must-be-regular-files)).
+7. **Scripts:** a configuration file that is a FIFO or a device is refused
+   ([details](#configuration-files-must-be-regular-files)). The JSON
+   documents keep their keys
+   ([`config show -o json`](#config-show--o-json-keys)).
 8. Check: `kjak send --to NAME --dry-run test`, then a real send.
 
 | change | affects | what you see | fix |
@@ -41,7 +41,6 @@ or freeze the output contract. Each is refused **before anything is sent**
 | project address policy | project slack, discord, email feathers | `blocked`, nothing sent | `allow_networks`, `allow_hosts` |
 | templates cannot loop | message templates | exit 2 at `template set`, render or send | write the text out |
 | regular files only | configuration, project file, trust store | exit 2, "not a regular file" | use a regular file |
-| `config show -o json` keys | scripts | `feathers`, `title`, `body`, `level`, `url` instead of `Feathers`, `Title`, ... | read the new keys |
 
 Not changed: configurations without literals, the `env` and `keychain`
 references of the global configuration, groups, the JSON report of `send`
@@ -233,11 +232,13 @@ affected.
 
 ## `config show -o json` keys
 
-v0.0.4 printed the entries of `groups` and `templates` with Go field names
-(`{"Feathers": [...]}`, `{"Title": ..., "Body": ...}`). v1.0.0 uses the
-names of the configuration file, like every other document:
-`{"feathers": [...]}`, `{"title", "body", "level", "url"}`. The top-level
-keys and the other documents are unchanged.
+Unchanged. As in v0.0.4, the entries of `groups` and `templates` use Go
+field names, not the names of the configuration file:
+`{"Feathers": [...]}` and `{"Title", "Body", "Level", "URL"}` (every one
+present, `""` when unset). v1.0.0 keeps them for the whole 1.x line
+([stability](stability.md#json-output)), so a script written for
+v0.0.4 keeps working. `group show -o json` and `template show -o json` use
+lower-case names (`feathers`, `title`, ...) as before.
 
 ## Downgrading to v0.0.4
 
