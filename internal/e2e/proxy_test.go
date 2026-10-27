@@ -17,7 +17,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -43,12 +42,11 @@ import (
 // CONNECT, which shows the binary did read the variables.
 //
 // TLS: the destinations' certificate is issued by a CA of the test, given
-// to kjak by SSL_CERT_FILE. Go reads it on Linux only (macOS and Windows
-// verify with the system's roots), so there a TLS send fails verification
-// after the handshake started: the destination still records the
-// ClientHello of the direct connection, which is what is checked, and the
-// delivery itself is checked on Linux and by the plain-http and SMTP
-// feathers on every platform.
+// to kjak by SSL_CERT_FILE (read on every platform since Go 1.27, which
+// go.mod pins; on macOS and Windows it replaces the system verifier). Every
+// send is checked to be delivered, and the destination records the peer of
+// every ClientHello: kjak itself, or the proxy's tunnel. Without
+// SSL_CERT_FILE the same send must fail: kjak verifies the certificate.
 func TestProxyEnvironment(t *testing.T) {
 	ip := nonLoopbackIPv4(t)
 	ca := newTestCA(t, ip)
@@ -56,7 +54,6 @@ func TestProxyEnvironment(t *testing.T) {
 	tlsDest := newTLSDestination(t, ip, ca)
 	plainDest := newPlainDestination(t, ip)
 	smtp := newSMTPOn(t, net.JoinHostPort(ip.String(), "0"))
-	verifies := runtime.GOOS == "linux" // SSL_CERT_FILE is read
 
 	s := newSandbox(t)
 	xdg := filepath.Join(filepath.Dir(s.dir), "xdg", "kjak")
@@ -153,17 +150,11 @@ func TestProxyEnvironment(t *testing.T) {
 						t.Errorf("handshake from %s: through the proxy %v, want %v", h.peer, got, c.proxied)
 					}
 				}
-				if verifies {
-					if res.Status != "delivered" || r.code != 0 {
-						t.Fatalf("status %s, exit %d\n%s%s", res.Status, r.code, r.stdout, r.stderr)
-					}
-					if got := tlsDest.requests(); len(got) != 1 || !strings.Contains(got[0], "proxy check") {
-						t.Fatalf("the destination received %q", got)
-					}
-				} else if res.Status == "delivered" {
-					// the test CA is not trusted here: a delivery would mean
-					// kjak skipped the verification
-					t.Fatalf("delivered without a trusted certificate\n%s", r.stdout)
+				if res.Status != "delivered" || r.code != 0 {
+					t.Fatalf("status %s, exit %d\n%s%s", res.Status, r.code, r.stdout, r.stderr)
+				}
+				if got := tlsDest.requests(); len(got) != 1 || !strings.Contains(got[0], "proxy check") {
+					t.Fatalf("the destination received %q", got)
 				}
 			case "plain":
 				if r.code != 0 || res.Status != "delivered" {
@@ -181,6 +172,23 @@ func TestProxyEnvironment(t *testing.T) {
 				}
 			}
 		})
+	}
+
+	// the control of the TLS checks: without the test CA, the certificate
+	// is refused, directly or through the tunnel, and nothing is received
+	var env []string
+	for _, kv := range s.env {
+		if !strings.HasPrefix(kv, "SSL_CERT_FILE=") {
+			env = append(env, kv)
+		}
+	}
+	s.env = env
+	for _, name := range []string{"global_slack", "project_slack", "project_http"} {
+		tlsDest.reset()
+		r := s.kjak("", "send", "--to", name, "-o", "json", "untrusted")
+		if res := parseReport(t, r.stdout).result(t, name); r.code == 0 || res.Status == "delivered" || len(tlsDest.requests()) != 0 {
+			t.Errorf("%s without the test CA: exit %d, status %s, received %q\n%s", name, r.code, res.Status, tlsDest.requests(), r.stdout)
+		}
 	}
 }
 
