@@ -12,7 +12,7 @@ import (
 
 func chmodACL(t *testing.T, args ...string) {
 	t.Helper()
-	if out, err := exec.Command("chmod", args...).CombinedOutput(); err != nil {
+	if out, err := exec.Command("/bin/chmod", args...).CombinedOutput(); err != nil {
 		t.Fatalf("chmod %v: %v %s", args, err, out)
 	}
 }
