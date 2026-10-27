@@ -5,9 +5,15 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
+
+// heldLock keeps the lock of TestHelperHoldLock reachable until the process
+// is killed.
+var heldLock func()
 
 // TestHelperHoldLock is not a test: run by TestCritical_LockReleasedWhenHolderDies
 // as another process, it takes the lock of KJAK_LOCK_PATH, says "locked" and
@@ -22,7 +28,14 @@ func TestHelperHoldLock(t *testing.T) {
 		_, _ = os.Stdout.WriteString("error " + err.Error() + "\n")
 		os.Exit(3)
 	}
-	_ = unlock // never released: the process is killed
+	// Never released: the process is killed. The lock must stay reachable,
+	// or the finalizer of its *os.File closes the descriptor at the next
+	// collection and the flock goes with it (macos-15-intel, run
+	// 40469622700). Collect now so that a regression fails every run.
+	heldLock = unlock
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(50 * time.Millisecond) // finalizers run on their own goroutine
 	_, _ = os.Stdout.WriteString("locked\n")
 	select {}
 }
