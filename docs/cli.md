@@ -269,7 +269,8 @@ the message without sending it.
 ```sh
 kjak config path [-o json]      # the files, how each was chosen, trust and secrets state
 kjak config show [-o json]      # the effective configuration, literal secrets redacted
-kjak config validate [--strict] # both files, whether or not the project file is trusted, and the secrets files
+kjak config validate [--strict] [-o json]
+                                # both files, whether or not the project file is trusted, and the secrets files
 kjak config init [--force]      # create the global file
 kjak config trust [--yes [--allow-user-secrets]]
                                 # trust ./.kjak.toml and ./.kjak.secrets.toml (asks on a terminal)
@@ -296,7 +297,11 @@ With `-o json`: `global`, `global_source`, `project`,
 `project_secrets`, `project_secrets_state`, `secrets_permissions_checked`,
 `secrets_permission_model`, `trust_store`.
 
-`config validate --strict` refuses literal secrets (exit 2). `config
+`config validate --strict` refuses literal secrets (exit 2). With `-o
+json`, `config validate` prints a document whether the files are valid
+(`"valid": true`, the files, the project's state and the literal secrets,
+exit 0) or not (the error document, exit 2): see
+[stability.md](stability.md#other-commands). `config
 migrate-secrets` moves the literal secrets of the global file (or, with
 `--scope project`, of `./.kjak.toml`) into a new secrets file created with
 mode 0600 (`--secrets-out`, default the scope's secrets file) and writes the

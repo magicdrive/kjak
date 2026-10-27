@@ -31,7 +31,9 @@ or freeze the output contract. Each is refused **before anything is sent**
 7. **Scripts:** a configuration file that is a FIFO or a device is refused
    ([details](#configuration-files-must-be-regular-files)). The JSON
    documents keep their keys
-   ([`config show -o json`](#config-show--o-json-keys)).
+   ([`config show -o json`](#config-show--o-json-keys));
+   `config validate -o json` prints JSON on success too
+   ([details](#config-validate--o-json-prints-json-on-success)).
 8. Check: `kjak send --to NAME --dry-run test`, then a real send.
 
 | change | affects | what you see | fix |
@@ -41,6 +43,7 @@ or freeze the output contract. Each is refused **before anything is sent**
 | project address policy | project slack, discord, email feathers | `blocked`, nothing sent | `allow_networks`, `allow_hosts` |
 | templates cannot loop | message templates | exit 2 at `template set`, render or send | write the text out |
 | regular files only | configuration, project file, trust store | exit 2, "not a regular file" | use a regular file |
+| `config validate -o json` on success | scripts | a JSON document (`"valid": true`) instead of the `PATH: OK` lines | read the document, or drop `-o json` for the text |
 
 Not changed: configurations without literals, the `env` and `keychain`
 references of the global configuration, groups, the JSON report of `send`
@@ -250,6 +253,18 @@ present, `""` when unset). v1.0.0 keeps them for the whole 1.x line
 ([stability](stability.md#json-output)), so a script written for
 v0.0.4 keeps working. `group show -o json` and `template show -o json` use
 lower-case names (`feathers`, `title`, ...) as before.
+
+## `config validate -o json` prints JSON on success
+
+v0.0.4 printed the JSON error document when a file was invalid (exit 2) but
+plain text (`PATH: OK`) when every file was valid, even with `-o json`.
+v1.0.0 prints a JSON document in both cases: on success
+`{"schema_version": 1, "valid": true, "global": ..., "global_exists": ...,
+"project": ..., "project_state": ..., "literal_secrets": [...]}`
+([stability](stability.md#other-commands)). The exit status is unchanged
+(0 valid, 2 invalid), and so is the output without `-o json`. A script that
+only checks the exit status needs nothing; one that read the `OK` lines
+with `-o json` should read `valid` instead, or drop `-o json`.
 
 ## Downgrading to v0.0.4
 

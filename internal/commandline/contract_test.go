@@ -202,3 +202,82 @@ func TestContractConfigShowKeys(t *testing.T) {
 		}
 	}
 }
+
+// config validate -o json prints a document on success too (v0.0.4 printed
+// the text lines there); a failure is the error document, exit 2.
+func TestContractConfigValidateJSON(t *testing.T) {
+	type doc struct {
+		SchemaVersion  int    `json:"schema_version"`
+		Valid          bool   `json:"valid"`
+		Global         string `json:"global"`
+		GlobalExists   bool   `json:"global_exists"`
+		Project        string `json:"project"`
+		ProjectState   string `json:"project_state"`
+		LiteralSecrets []struct {
+			Source, Key string
+		} `json:"literal_secrets"`
+		Outcome string `json:"outcome"`
+		Error   *struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decode := func(t *testing.T, stdout string) doc {
+		t.Helper()
+		var d doc
+		dec := json.NewDecoder(strings.NewReader(stdout))
+		if err := dec.Decode(&d); err != nil {
+			t.Fatalf("not a JSON document: %v\n%s", err, stdout)
+		}
+		if dec.More() {
+			t.Fatalf("more than one document:\n%s", stdout)
+		}
+		return d
+	}
+	e := newEnv(t)
+
+	// no global file: valid, and it says so
+	r := e.must("config", "validate", "-o", "json")
+	d := decode(t, r.stdout)
+	if d.SchemaVersion != 1 || !d.Valid || d.GlobalExists || d.Global == "" || d.ProjectState != "none" || d.LiteralSecrets == nil || len(d.LiteralSecrets) != 0 {
+		t.Fatalf("no file: %+v\n%s", d, r.stdout)
+	}
+	if !strings.Contains(r.stdout, `"literal_secrets": []`) {
+		t.Fatalf("literal_secrets is not an empty list:\n%s", r.stdout)
+	}
+
+	// a literal secret in each file: listed, never its value
+	e.writeGlobal("[feathers.a]\ntype = \"slack\"\nwebhook_url = { literal = \"https://hooks.slack.com/services/T/B/GLOBALSECRET\" }\n")
+	e.writeProject("[feathers.p]\ntype = \"discord\"\nwebhook_url = { literal = \"https://discord.com/api/webhooks/1/PROJECTSECRET\" }\n")
+	r = e.must("config", "validate", "-o", "json")
+	d = decode(t, r.stdout)
+	if !d.Valid || !d.GlobalExists || d.Project == "" || !strings.HasPrefix(d.ProjectState, "untrusted") || len(d.LiteralSecrets) != 2 ||
+		d.LiteralSecrets[0].Source != "global" || d.LiteralSecrets[0].Key != "feathers.a.webhook_url" ||
+		d.LiteralSecrets[1].Source != "project" || d.LiteralSecrets[1].Key != "feathers.p.webhook_url" {
+		t.Fatalf("literals: %+v\n%s", d, r.stdout)
+	}
+	if strings.Contains(r.stdout+r.stderr, "SECRET") {
+		t.Fatalf("a secret is printed:\n%s%s", r.stdout, r.stderr)
+	}
+	if !strings.Contains(r.stderr, "not trusted") {
+		t.Fatalf("no notice of the untrusted project on stderr: %q", r.stderr)
+	}
+
+	// --strict refuses the literals: the error document
+	r = e.run("config", "validate", "--strict", "-o", "json")
+	if d := decode(t, r.stdout); r.code != 2 || d.Valid || d.Outcome != "error" || d.Error == nil || d.Error.Code != "config" {
+		t.Fatalf("--strict: exit %d %+v\n%s", r.code, d, r.stdout)
+	}
+
+	// an invalid file: the error document, as in v0.0.4
+	e.writeGlobal("[feathers.a]\ntype = \"nope\"\n")
+	r = e.run("config", "validate", "-o", "json")
+	if d := decode(t, r.stdout); r.code != 2 || d.Valid || d.Outcome != "error" || d.Error == nil || d.Error.Code != "config" {
+		t.Fatalf("invalid: exit %d %+v\n%s", r.code, d, r.stdout)
+	}
+
+	// the text output is unchanged
+	e.writeGlobal("")
+	if r := e.must("config", "validate"); !strings.Contains(r.stdout, ": OK") {
+		t.Fatalf("text: %s", r.stdout)
+	}
+}
