@@ -51,7 +51,9 @@ import (
 //     allows it (#19): the trust of v0.0.4 does not;
 //   - a project's slack, discord and email feathers connect to public
 //     addresses only unless allow_networks / allow_hosts allow more (#24);
-//   - a message template may not use range, define, template or block (#25).
+//   - a message template may not use range, define, template or block (#25);
+//   - `config validate -o json` prints a JSON document on success too
+//     (v0.0.4: the text lines); failures print the same error document.
 
 func compatBinary() (string, bool) {
 	if b := os.Getenv("KJAK_COMPAT_BINARY"); b != "" {
@@ -99,8 +101,11 @@ type compatSMTP struct {
 	msgs []string
 }
 
-func newCompatSMTP(t *testing.T) *compatSMTP {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+func newCompatSMTP(t *testing.T) *compatSMTP { return newSMTPOn(t, "127.0.0.1:0") }
+
+// newSMTPOn is a compatSMTP listening on addr.
+func newSMTPOn(t *testing.T, addr string) *compatSMTP {
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,6 +291,26 @@ func TestCompatV004GlobalConfig(t *testing.T) {
 	}
 	if strings.Contains(r.stdout, "1 literal secret(s): deprecated") == e.v004 {
 		t.Errorf("config validate does not report the literal: %s", r.stdout)
+	}
+	// -o json on success: the text of v0.0.4, now a document; the exit
+	// status is the same
+	r = e.kjak("", "config", "validate", "-o", "json")
+	if r.code != 0 {
+		t.Fatalf("config validate -o json: exit %d\n%s%s", r.code, r.stdout, r.stderr)
+	}
+	var vdoc struct {
+		Valid          bool `json:"valid"`
+		LiteralSecrets []struct {
+			Source string `json:"source"`
+			Key    string `json:"key"`
+		} `json:"literal_secrets"`
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &vdoc); e.v004 {
+		if err == nil || !strings.Contains(r.stdout, ": OK") {
+			t.Errorf("v0.0.4: config validate -o json printed %s", r.stdout)
+		}
+	} else if err != nil || !vdoc.Valid || len(vdoc.LiteralSecrets) != 1 || vdoc.LiteralSecrets[0].Key != "feathers.dev_slack.webhook_url" || strings.Contains(r.stdout, "LITERALSECRET") {
+		t.Errorf("config validate -o json: %v %+v\n%s", err, vdoc, r.stdout)
 	}
 	// --strict is new: v0.0.4 does not know it; now it refuses the literal
 	if r := e.kjak("", "config", "validate", "--strict"); r.code != 2 {

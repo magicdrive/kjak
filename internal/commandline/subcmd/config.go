@@ -267,12 +267,50 @@ func configValidate(ctx context.Context, rt *Runtime, args []string) int {
 	for _, src := range []*configure.Source{global, project} {
 		if src != nil && src.File != nil {
 			if lits := configure.Literals(src.File); len(lits) > 0 {
-				literals = append(literals, fmt.Sprintf("%s: %s", src.Path, literalFields(lits)))
+				line := fmt.Sprintf("%s: %s", src.Path, literalFields(lits))
+				if why := configure.ExposedLiterals(src); why != "" {
+					line += " (and the file is not private: " + why + ")"
+				}
+				literals = append(literals, line)
 			}
 		}
 	}
 	if opt.Strict && len(literals) > 0 {
 		return rt.fail(ctx, withCode(output.CodeConfig, fmt.Errorf("%w: literal secrets are refused by --strict (move them to a secrets file: kjak config migrate-secrets):\n  %s", configure.ErrInvalidConfig, strings.Join(literals, "\n  "))))
+	}
+	for _, src := range []*configure.Source{global, project} {
+		if src != nil && src.Exists {
+			rt.warnExposed(src)
+		}
+	}
+	if opt.Format == "json" {
+		// the success document (docs/stability.md): a failure is the error
+		// document, printed by rt.fail above
+		type literal struct {
+			Source string `json:"source"`
+			Key    string `json:"key"`
+		}
+		lits := []literal{}
+		for _, src := range []struct {
+			name string
+			src  *configure.Source
+		}{{"global", global}, {"project", project}} {
+			if src.src != nil && src.src.File != nil {
+				for _, c := range configure.Literals(src.src.File) {
+					lits = append(lits, literal{src.name, "feathers." + c.Feather + "." + c.Field})
+				}
+			}
+		}
+		_ = writeJSON(rt.Stdout, map[string]any{
+			"schema_version": 1, "valid": true,
+			"global": global.Path, "global_exists": global.Exists,
+			"project": p.Project, "project_state": state,
+			"literal_secrets": lits,
+		})
+		if project != nil && project.Exists && state != "trusted" {
+			fmt.Fprintln(rt.Stderr, "kjak: the project configuration is not trusted: a run refuses it until `kjak config trust`")
+		}
+		return ExitOK
 	}
 	note := func(src *configure.Source) string {
 		if n := len(configure.Literals(src.File)); n > 0 {
