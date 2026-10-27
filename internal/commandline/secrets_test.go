@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -74,15 +75,21 @@ func TestSendWithSecretReferences(t *testing.T) {
 
 // A secrets file other users can read is refused: nothing is sent.
 func TestCritical_LooseSecretsFileRefused(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("mode bits: Windows has its own test (secrets_windows_test.go: an ACE for Everyone)")
-	}
 	p := newProvider(t, 200, "ok")
 	e := newEnv(t)
 	e.writeGlobal(secretFeather("a", "dev.hook"))
 	e.writeFile(e.userSecrets(), "[dev]\nhook = \""+p.URL+"\"\n", 0o644)
+	readable := "group or others"
+	if runtime.GOOS == "windows" {
+		// the mode bits mean nothing there: an ACE for Everyone does
+		// (more cases in configure/secrets_windows_test.go)
+		if out, err := exec.Command("icacls", e.userSecrets(), "/grant", "*S-1-1-0:(R)").CombinedOutput(); err != nil {
+			t.Fatalf("icacls: %v %s", err, out)
+		}
+		readable = "Everyone"
+	}
 	r := e.run("send", "--to", "a", "-o", "json", "hi")
-	if r.code != 2 || !strings.Contains(r.stderr, "group or others") || p.count() != 0 {
+	if r.code != 2 || !strings.Contains(r.stderr, readable) || p.count() != 0 {
 		t.Fatalf("a readable secrets file: %+v", r)
 	}
 	if !strings.Contains(r.stdout, `"code": "credential"`) {
@@ -184,13 +191,15 @@ func TestCritical_ProjectSecretsReplacementAndLinks(t *testing.T) {
 }
 
 func TestProjectSecretsLinkRefused(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("symbolic links need a privilege on Windows")
-	}
 	e := newEnv(t)
 	e.writeFile(e.userSecrets(), "[slack]\nbot_token = \"xoxb-1\"\n", 0o600)
 	e.writeProject(secretFeather("leak", "slack.bot_token"))
 	if err := os.Symlink(e.userSecrets(), e.projectSecrets()); err != nil {
+		if runtime.GOOS == "windows" {
+			// SeCreateSymbolicLinkPrivilege (or Developer Mode) is not
+			// held; CI's runners hold it, so the test runs there
+			t.Skip("symbolic links need SeCreateSymbolicLinkPrivilege or Developer Mode:", err)
+		}
 		t.Fatal(err)
 	}
 	r := e.run("config", "trust", "--yes", "--allow-user-secrets")

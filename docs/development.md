@@ -142,6 +142,29 @@ Tests are deterministic: no test waits for real time to pass.
 
 A flaky test is a bug: fix it, never skip it.
 
+### Tests skipped on a platform
+
+CI lists every skipped test with its reason (the job summary of each test
+job, and the artifact `test-report-<os>`). Linux and macOS skip none. On
+Windows:
+
+| test | why | needs | effect | checked instead by |
+|---|---|---|---|---|
+| `TestMakefile_Publish` | the Makefile targets macOS and Linux (`make`, `sh`) | — | the publish targets are not run on Windows, where nobody releases from | Linux and macOS CI |
+| `TestPathsAndErrorsArePrintedEscaped` | an NTFS file name cannot hold a control character, so the OS error it provokes cannot occur | — | none: the escaping is the same code on every platform | Linux and macOS CI; the `output` package's tests (every platform) |
+| `TestExecRunnerDoesNotWaitForOrphans` | `execRunner` runs the keychain tools of macOS and Linux only; Windows has no OS keychain support | a POSIX shell | none on Windows (the code is not used there) | Linux and macOS CI |
+
+Skipped only when a privilege is missing (CI's Windows runner holds both,
+so they run there; on a developer's machine they may skip):
+
+| test | needs | checked instead by |
+|---|---|---|
+| `TestProjectSecretsLinkRefused`, `TestCritical_WindowsProjectSecretsLinks` | `SeCreateSymbolicLinkPrivilege` (an administrator, or Developer Mode) to create a symbolic link | CI's Windows runner |
+| `TestCritical_WindowsOwner` | `SeRestorePrivilege` (an administrator) to give a file another owner | CI's Windows runner |
+
+A skip is never the way out of a failure: a skip that appears in CI's list
+without a reason in these tables is a bug.
+
 Tests of the rules that must never regress (worker pool limit, result order,
 retry limit, Retry-After, deadline, cancellation, ambiguous acceptance,
 concurrent config modification, aggregation, trust, secret redaction) are

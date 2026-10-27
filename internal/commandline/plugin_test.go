@@ -112,20 +112,22 @@ func TestExternalFeatherSend(t *testing.T) {
 // feather of type external that names a plugin runs it. A plugin named
 // like a built-in type is refused, and never replaces the built-in.
 func TestCritical_PluginDiscoveryIsNotAuthorization(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("a shell script spy")
-	}
 	p := newProvider(t, 200, "ok")
 	e := newEnv(t)
-	marker := filepath.Join(e.project, "ran")
-	spy := "#!/bin/sh\ntouch '" + marker + "'\n"
-	if err := os.MkdirAll(e.pluginDir(), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	// the spies are the test plugin, which logs every run of itself to
+	// runs (an executable of the platform: a shell script is not one on
+	// Windows)
 	for _, name := range []string{"spy", "slack"} {
-		if err := os.WriteFile(filepath.Join(e.pluginDir(), "kjak-feather-"+name), []byte(spy), 0o755); err != nil {
+		e.installPlugin(e.pluginDir(), name)
+	}
+	runs := filepath.Join(filepath.Dir(e.pluginDir()), "kjak-test-plugin-runs.log")
+	e.writeFile(runs, "", 0o600)
+	ran := func() string {
+		b, err := os.ReadFile(runs)
+		if err != nil {
 			t.Fatal(err)
 		}
+		return string(b)
 	}
 	e.vars["PATH"] = e.pluginDir() + string(os.PathListSeparator) + "relative/bin" + string(os.PathListSeparator)
 	e.writeGlobal(featherConfig("a", "slack", p.URL))
@@ -138,8 +140,8 @@ func TestCritical_PluginDiscoveryIsNotAuthorization(t *testing.T) {
 	}
 	e.must("feather", "plugins", "-o", "json")
 	e.must("send", "--to", "a", "hi")
-	if _, err := os.Stat(marker); err == nil {
-		t.Fatal("a discovered plugin ran")
+	if got := ran(); got != "" {
+		t.Fatalf("a discovered plugin ran: %s", got)
 	}
 	if p.count() != 1 {
 		t.Fatal("the built-in slack feather did not deliver")
@@ -148,8 +150,14 @@ func TestCritical_PluginDiscoveryIsNotAuthorization(t *testing.T) {
 	if r := e.run("send", "--to", "x", "hi"); r.code != 2 || !strings.Contains(r.stderr, "reserved") {
 		t.Fatalf("plugin slack: %+v", r)
 	}
-	if _, err := os.Stat(marker); err == nil {
-		t.Fatal("a reserved plugin ran")
+	if got := ran(); got != "" {
+		t.Fatalf("a reserved plugin ran: %s", got)
+	}
+	// the spy works: a feather that names it runs it
+	e.writeGlobal(externalFeather("s", "spy", ""))
+	e.must("send", "--to", "s", "hi")
+	if got := ran(); !strings.Contains(got, configure.PluginFile("spy", runtime.GOOS)) {
+		t.Fatalf("the spy did not log its run: %q", got)
 	}
 }
 

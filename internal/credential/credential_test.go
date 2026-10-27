@@ -185,7 +185,10 @@ func TestKeychainLookupCanceled(t *testing.T) {
 // started) does not hold kjak past the end of the lookup's context.
 func TestExecRunnerDoesNotWaitForOrphans(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("needs a POSIX shell")
+		// execRunner runs the keychain tools of macOS and Linux only
+		// (keychainFor: no OS keychain on Windows), and the orphan is a
+		// POSIX shell's background job
+		t.Skip("execRunner is not used on Windows (no OS keychain support); the test needs a POSIX shell")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
