@@ -5,9 +5,12 @@ package subcmd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -81,18 +84,67 @@ func highFDs(t *testing.T) {
 	}
 }
 
-// fdSet is the descriptors open in the process.
-func fdSet(t *testing.T) map[string]bool {
+// fdSet is the descriptors open in the process, each with what it is
+// (fdKind), for a failing count to name the descriptor (fdDiff). The
+// listing's own descriptors, closed once it is read, are not in it.
+func fdSet(t *testing.T) map[string]string {
 	t.Helper()
 	entries, err := os.ReadDir("/dev/fd")
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := map[string]bool{}
+	s := map[string]string{}
 	for _, e := range entries {
-		s[e.Name()] = true
+		if kind, open := fdKind(e.Name()); open {
+			s[e.Name()] = kind
+		}
 	}
 	return s
+}
+
+// fdKind describes descriptor fd: its type and inode (and, where /dev/fd
+// holds links, what it is open on); open is false for a descriptor closed
+// since it was listed.
+func fdKind(fd string) (kind string, open bool) {
+	n, err := strconv.Atoi(fd)
+	if err != nil {
+		return "", false
+	}
+	var st syscall.Stat_t
+	if err := syscall.Fstat(n, &st); err != nil {
+		return "", false
+	}
+	kind = map[uint32]string{
+		syscall.S_IFIFO: "fifo", syscall.S_IFCHR: "char device", syscall.S_IFDIR: "directory",
+		syscall.S_IFREG: "file", syscall.S_IFSOCK: "socket", syscall.S_IFLNK: "symlink",
+	}[uint32(st.Mode)&syscall.S_IFMT]
+	if kind == "" {
+		kind = fmt.Sprintf("mode %o", st.Mode)
+	}
+	kind = fmt.Sprintf("%s inode %d", kind, st.Ino)
+	if target, err := os.Readlink("/dev/fd/" + fd); err == nil {
+		kind += " " + target
+	}
+	return kind, true
+}
+
+// fdDiff names the descriptors opened since before and those closed since
+// before: a count that differs says which descriptor leaked, or which one
+// something else (a goroutine of an earlier test) closed meanwhile.
+func fdDiff(before, after map[string]string) string {
+	var diff []string
+	for fd, kind := range after {
+		if _, ok := before[fd]; !ok {
+			diff = append(diff, fmt.Sprintf("opened %s (%s)", fd, kind))
+		}
+	}
+	for fd, kind := range before {
+		if _, ok := after[fd]; !ok {
+			diff = append(diff, fmt.Sprintf("closed %s (was %s)", fd, kind))
+		}
+	}
+	sort.Strings(diff)
+	return strings.Join(diff, "; ")
 }
 
 // A read gives way to its context with the context's cause (not an end of
@@ -139,7 +191,7 @@ func testReadInputCanceled(t *testing.T, high bool) {
 						}
 					}
 					for fd := range fdSet(t) {
-						if high && !before[fd] && len(fd) < 4 {
+						if _, old := before[fd]; high && !old && len(fd) < 4 {
 							t.Fatalf("descriptor %s is below 1024", fd)
 						}
 					}
@@ -161,7 +213,7 @@ func testReadInputCanceled(t *testing.T, high bool) {
 				}
 			}
 			if after := fdSet(t); len(after) != len(before) {
-				t.Fatalf("%d descriptors open, %d before", len(after), len(before))
+				t.Fatalf("%d descriptors open, %d before: %s", len(after), len(before), fdDiff(before, after))
 			}
 		})
 	}

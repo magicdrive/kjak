@@ -15,7 +15,17 @@
   "prCreation": "immediate",
   "rebaseWhen": "behind-base-branch",
   "minimumReleaseAge": "3 days",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 10am on monday"]
+  },
   "packageRules": [
+    {
+      "description": "The Renovate of make renovate-check (.github/renovate-check): package.json, its lockfile and the Node.js its engines require move together",
+      "matchFileNames": [".github/renovate-check/**"],
+      "groupName": "Renovate validator",
+      "automerge": false
+    },
     {
       "description": "GitHub Actions stay pinned to commit SHAs (magicdrive/hephaestus included)",
       "matchManagers": ["github-actions"],
@@ -67,14 +77,6 @@
       "matchStrings": ["HEPHAESTUS_VERSION \\?= (?<currentValue>v[^\\s]+)"],
       "depNameTemplate": "github.com/magicdrive/hephaestus",
       "datasourceTemplate": "go"
-    },
-    {
-      "description": "Renovate used to validate this file (Makefile)",
-      "customType": "regex",
-      "managerFilePatterns": ["/^Makefile$/"],
-      "matchStrings": ["RENOVATE_VERSION := (?<currentValue>[0-9][^\\s]*)"],
-      "depNameTemplate": "renovate",
-      "datasourceTemplate": "npm"
     }
   ],
   "ignorePaths": ["**/testdata/**"],

@@ -76,7 +76,7 @@ func TestFIFOCancelIgnoresItsPath(t *testing.T) {
 				if high {
 					highFDs(t)
 				}
-				fds, goroutines := len(fdSet(t)), runtime.NumGoroutine()
+				fds, goroutines := fdSet(t), runtime.NumGoroutine()
 				cause := errors.New("interrupted")
 				ctx, cancel := context.WithCancelCause(context.Background())
 				done := make(chan error, 1)
@@ -130,8 +130,8 @@ func TestFIFOCancelIgnoresItsPath(t *testing.T) {
 						t.Fatalf("the file that replaced it holds %q", b)
 					}
 				}
-				if n := len(fdSet(t)); n != fds+boolInt(other != nil) {
-					t.Fatalf("%d descriptors open, %d before", n, fds)
+				if after := fdSet(t); len(after) != len(fds)+boolInt(other != nil) {
+					t.Fatalf("%d descriptors open, %d before: %s", len(after), len(fds), fdDiff(fds, after))
 				}
 			})
 		}
@@ -368,7 +368,7 @@ func TestFIFOCanceledBeforeTheRead(t *testing.T) {
 	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	fds, goroutines := len(fdSet(t)), runtime.NumGoroutine()
+	fds, goroutines := fdSet(t), runtime.NumGoroutine()
 	cause := errors.New("interrupted")
 	for range 20 {
 		ctx, cancel := context.WithCancelCause(context.Background())
@@ -378,7 +378,7 @@ func TestFIFOCanceledBeforeTheRead(t *testing.T) {
 		}
 	}
 	settled(t, goroutines)
-	if n := len(fdSet(t)); n != fds {
-		t.Fatalf("%d descriptors open, %d before", n, fds)
+	if after := fdSet(t); len(after) != len(fds) {
+		t.Fatalf("%d descriptors open, %d before: %s", len(after), len(fds), fdDiff(fds, after))
 	}
 }
