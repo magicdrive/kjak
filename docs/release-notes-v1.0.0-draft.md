@@ -76,6 +76,10 @@ the [migration guide](https://github.com/magicdrive/kjak/blob/v1.0.0/docs/migrat
 - **Configuration files must be regular files.** A configuration file, a
   project file or the trust store that is a FIFO, a device or a directory is
   refused (a symbolic link to a regular file still works).
+- **`config validate -o json` prints a JSON document on success**
+  (`"valid": true`, the files, the literal secrets); v0.0.4 printed the
+  `PATH: OK` text lines there. Failures print the same error document as
+  before, and the exit status is unchanged.
 - **Downgrade:** once a trust entry uses the new keys (a project secrets
   file, allowed names, plugins), v0.0.4 cannot read the trust store
   ("broken trust store"). Keep a copy of `trust.toml` if you may go back.

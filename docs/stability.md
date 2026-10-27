@@ -60,9 +60,6 @@ has such changes compared to v0.0.4: see [migration.md](migration.md).
   which follows the targets).
 - **Undocumented behavior**, and behavior that contradicts the
   documentation (a bug: it is fixed).
-- **`config validate -o json` on success.** A failure prints the JSON error
-  document; a success prints text today. A later minor release may print a
-  JSON document there instead.
 - **`config show -o json` beyond its top-level keys** (`schema_version`,
   `sources`, `defaults`, `feathers`, `groups`, `templates`): the entries
   of `feathers` follow the configuration and may gain keys. The keys of a
@@ -226,8 +223,16 @@ nothing on stdout, exit 2.
 ### Other commands
 
 The documents of `feather list|show|plugins`, `group list|show`,
-`template list|show|render` and `config path|show` carry `schema_version` 1
-and are additive in the same way. Their top-level keys:
+`template list|show|render` and `config path|show|validate` carry
+`schema_version` 1 and are additive in the same way. Their top-level keys:
+
+`config validate -o json` prints its document only when the files are valid
+(exit 0): `valid` is `true`, `global_exists` says whether the global file
+exists, `project` and `project_state` are those of `config path`, and
+`literal_secrets` lists every literal secret as `{"source": "global" |
+"project", "key": "feathers.<name>.<field>"}` (deprecated; empty when
+none). An invalid file, or a literal secret with `--strict`, is the
+[error document](#the-error-document) (exit 2), as before.
 
 In `config show -o json`, an entry of `groups` has the key `Feathers` and
 an entry of `templates` the keys `Title`, `Body`, `Level` and `URL` (each
@@ -246,6 +251,7 @@ lower-case name may only be added beside them, never replace them, in 1.x.
 | `kjak template list` | `schema_version`, `templates` |
 | `kjak config path` | `schema_version`, `global`, `global_source`, `project`, `project_state`, `secrets`, `secrets_source`, `secrets_state`, `project_secrets`, `project_secrets_state`, `secrets_permissions_checked`, `secrets_permission_model`, `trust_store` |
 | `kjak config show` | `schema_version`, `sources`, `defaults`, `feathers`, `groups`, `templates` |
+| `kjak config validate` | `schema_version`, `valid`, `global`, `global_exists`, `project`, `project_state`, `literal_secrets` |
 
 ### Enumerations
 
