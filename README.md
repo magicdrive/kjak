@@ -22,6 +22,7 @@ kjak send --to development --level error --title "nightly build" "tests failed o
 - A project configuration (`.kjak.toml`) is used only after you trust it, and
   reads your own secrets only by the names you allowed
 - Text or JSON output (`schema_version: 1`), and a stable exit code contract
+  ([what v1 guarantees](docs/stability.md))
 - One static Go binary (`CGO_ENABLED=0`) for macOS, Linux and Windows
 
 ## Install
@@ -35,7 +36,7 @@ Or download an archive from [GitHub Releases](https://github.com/magicdrive/kjak
 
 ```sh
 sha256sum -c kjak_checksums.txt --ignore-missing
-gh attestation verify kjak_0.0.2_linux_amd64.tar.gz --repo magicdrive/kjak
+gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak
 ```
 
 From source (Go 1.27): `go install github.com/magicdrive/kjak@latest`.
@@ -242,7 +243,8 @@ lists what `PATH` has without running anything. See the
   plugin, only by the names you allowed.
 - http feathers: https only, no redirects, no connection to loopback,
   private, link-local or cloud-metadata addresses unless allowed (checked
-  where the connection is made), no proxy.
+  where the connection is made), no proxy. A project's slack, discord and
+  email feathers get the same address policy.
 - Plugins run with your rights: kjak controls which executable runs (absolute
   `PATH` only, checked before every run) and what it gets (a minimal
   environment, only its own secrets), not what it does.
@@ -252,8 +254,8 @@ privately: [SECURITY.md](SECURITY.md).
 
 ## Known limitations
 
-- Feathers: Slack (incoming webhooks), Discord (webhooks), e-mail (SMTP) and
-  HTTP APIs (`http`).
+- Feathers: Slack (incoming webhooks), Discord (webhooks), e-mail (SMTP),
+  HTTP APIs (`http`) and plugins (`external`).
   **OS-native notifications are not supported** (a future feather); a feather
   of type `os` is a configuration error.
 - OS keychain: macOS (`security`) and Linux (`secret-tool`, libsecret) are
@@ -261,8 +263,9 @@ privately: [SECURITY.md](SECURITY.md).
 - Groups do not nest.
 - kjak rewrites its configuration files without their comments when a
   command (`feather add`, `group set`, ...) changes them.
-- Plugins are not sandboxed (they run with your rights); on Windows a
-  plugin's child processes are not killed at its timeout.
+- Plugins are not sandboxed (they run with your rights). kjak ends a plugin
+  and every process it started (its process group on Unix, its Job Object
+  on Windows) at its timeout, the deadline and Ctrl-C.
 
 More in [docs/troubleshooting.md](docs/troubleshooting.md).
 
@@ -271,11 +274,13 @@ More in [docs/troubleshooting.md](docs/troubleshooting.md).
 - [Getting started](docs/getting-started.md) ([日本語](docs/getting-started_ja.md)): install, Slack, Discord, e-mail, recipes
 - [Configuration reference](docs/configuration.md) ([日本語](docs/configuration_ja.md)): every key, CLI management, credentials, trust, delivery behavior
 - [CLI usage](docs/cli.md)
+- [Stability and compatibility (v1)](docs/stability.md): what scripts, configurations and plugins may rely on
 - [Credentials, trust and security](docs/security.md)
-- [Migrating literal secrets](docs/migration.md)
+- [Migrating to v1.0.0](docs/migration.md) (from v0.0.4: literal secrets, project trust)
 - [HTTP API / webhook feathers](docs/http.md)
 - [External feather plugins](docs/plugins.md) (users and plugin authors)
 - [Delivery, retry and acceptance semantics](docs/delivery.md)
+- [Discord end-to-end check](docs/discord-e2e.md) (manual, with a real webhook)
 - [Development guide](docs/development.md)
 - [Release runbook](docs/release.md)
 - [Troubleshooting](docs/troubleshooting.md)
