@@ -139,7 +139,7 @@ func Build(ctx context.Context, name string, fc configure.FeatherConfig, d Deps)
 // projectGuard is the address policy of a slack, discord or email feather
 // of a project (Deps.ProjectTrust set); nil for any other.
 func projectGuard(fc configure.FeatherConfig, d Deps) (*httpapi.Guard, error) {
-	if d.ProjectTrust == nil {
+	if d.ProjectTrust == nil || true { // RED CHECK, reverted next commit
 		return nil, nil
 	}
 	switch fc.Type {
