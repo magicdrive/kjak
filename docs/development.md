@@ -153,7 +153,8 @@ Windows:
 
 | test | why | needs | effect | checked instead by |
 |---|---|---|---|---|
-| `TestMakefile_Publish` | the Makefile targets macOS and Linux (`make`, `sh`) | — | the publish targets are not run on Windows, where nobody releases from | Linux and macOS CI |
+| `TestMakefile_Publish`, `TestMakefile_FmtCheckFailsWhenGofmtFails`, `TestMakefile_FuzzStopsWhenListingFails` | the Makefile targets macOS and Linux (`make`, `sh`) | — | the Makefile is not run on Windows, where nobody develops or releases from | Linux and macOS CI |
+| `TestMutationWorkflow_FailsWhenAMutantSurvives` | it runs a `bash` step of `mutation.yml`, which runs on ubuntu only | `bash` | none: the workflow never runs on Windows | Linux and macOS CI |
 | `TestPathsAndErrorsArePrintedEscaped` | an NTFS file name cannot hold a control character, so the OS error it provokes cannot occur | — | none: the escaping is the same code on every platform | Linux and macOS CI; the `output` package's tests (every platform) |
 | `TestExecRunnerDoesNotWaitForOrphans` | `execRunner` runs the keychain tools of macOS and Linux only; Windows has no OS keychain support | a POSIX shell | none on Windows (the code is not used there) | Linux and macOS CI |
 
