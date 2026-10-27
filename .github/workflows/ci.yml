@@ -37,7 +37,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 150  # TEMP (PR #35 verification); 30
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -60,32 +60,6 @@ jobs:
       # -count=1: no cached results.
       - name: Test
         run: go test -count=1 ./...
-
-      # TEMP (PR #35 verification): the plugin start/cancel race under CPU
-      # load. Removed before the PR leaves draft.
-      - name: TEMP Windows plugin stress under CPU load
-        if: always() && runner.os == 'Windows'
-        shell: bash
-        run: |
-          n=$(nproc); echo "cpus=$n"
-          pids=()
-          for _ in $(seq 1 $((n * 2))); do (while :; do :; done) & pids+=("$!"); done
-          rc=0
-          go test -v -run 'TestPlugin|TestWindowsPluginCanceledWhileStarting' -count=300 -timeout 110m ./internal/feather/external/ >stress.log 2>&1 || rc=$?
-          kill "${pids[@]}" 2>/dev/null || true
-          echo "exit=$rc"
-          echo "FAIL lines: $(grep -c -- '--- FAIL' stress.log || true)"
-          echo "CanceledWhileStarting FAIL: $(grep -c -- '--- FAIL: TestWindowsPluginCanceledWhileStarting' stress.log || true)"
-          echo "no-thread lines: $(grep -c 'no thread of the plugin' stress.log || true)"
-          echo "access-denied lines: $(grep -c 'Access is denied' stress.log || true)"
-          echo "could-not-be-started lines: $(grep -c 'could not be started' stress.log || true)"
-          grep -- '--- FAIL' stress.log | sort | uniq -c || true
-          grep -m 20 -B2 -A6 -- '--- FAIL' stress.log || true
-          grep -m 10 -A6 -- '--- FAIL: TestPlugin' stress.log || true
-          grep -m 5 -A3 'panic:' stress.log || true
-          echo "passes: $(grep -c -- '--- PASS: TestWindowsPluginCanceledWhileStarting' stress.log || true) CanceledWhileStarting, $(grep -c -- '--- PASS: TestPluginTimeoutAndCancellation' stress.log || true) TestPluginTimeoutAndCancellation"
-          tail -5 stress.log
-          exit $rc
 
       # the race detector needs cgo, which the Windows image lacks
       - name: Test (race)
