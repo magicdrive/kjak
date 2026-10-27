@@ -75,6 +75,17 @@ Literals keep working in all of v1 ([deprecation policy](stability.md#deprecatio
 file that holds one; `kjak config validate --strict` refuses them (use it in
 CI to keep new literals out).
 
+When the file is also readable by other users (for example mode 0644, or a
+project file in a repository), kjak warns that it "keeps literal secrets and
+is not private" ([security](security.md#credentials)). Treat those secrets
+as disclosed:
+
+1. `kjak config migrate-secrets` (the new secrets file is created private);
+2. make the configuration file private (`chmod 600 FILE`; on Windows remove
+   the entries for other users with `icacls`), or replace it with the
+   migrated one;
+3. rotate each secret at its provider (a new webhook URL, a new password).
+
 ### With `kjak config migrate-secrets`
 
 ```sh

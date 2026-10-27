@@ -19,6 +19,17 @@ not). `kjak send` warns about literals, `kjak config validate --strict`
 refuses them, and `kjak config migrate-secrets` moves them to a secrets file
 ([migration.md](migration.md)).
 
+A configuration file (global or project) that holds a literal **and** that
+other users can read gets a second warning, from `kjak send` and
+`kjak config validate`: "keeps literal secrets and is not private", with the
+reason (mode bits such as 0644, an ACL entry for someone else, another
+owner; on Windows the owner and the DACL, as for a secrets file). The
+secrets may already have been read: move them, make the file private and
+rotate them. It names the file and the reason, never a value. It is a
+warning, as the literal itself: nothing is refused and the trust of a
+project does not change; `kjak config validate --strict` refuses every
+literal and says when the file is not private.
+
 A credential that does not resolve is a preflight error (exit 2): nothing is
 sent to any target.
 

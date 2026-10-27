@@ -203,6 +203,17 @@ func (rt *Runtime) warnLiterals(src *configure.Source) {
 	}
 	fmt.Fprintf(rt.Stderr, "kjak: warning: %s keeps %d secret(s) in the file as literal (deprecated): %s\n  move them to a secrets file: kjak config migrate-secrets (see docs/migration.md)\n",
 		src.Path, len(lits), literalFields(lits))
+	rt.warnExposed(src)
+}
+
+// warnExposed reports a configuration file with literal secrets that other
+// users can read (configure.ExposedLiterals): the secrets may already have
+// been read, so they must be moved and rotated. Never a value.
+func (rt *Runtime) warnExposed(src *configure.Source) {
+	if why := configure.ExposedLiterals(src); why != "" {
+		fmt.Fprintf(rt.Stderr, "kjak: warning: %s keeps literal secrets and is not private: %s\n  other users may have read them: move them to a secrets file (kjak config migrate-secrets), make the file private, and rotate them\n",
+			output.Shown(src.Path), why)
+	}
 }
 
 func literalFields(lits []configure.CredentialField) string {
