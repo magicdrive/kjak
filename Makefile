@@ -92,9 +92,13 @@ smoke:
 fmt:
 	@gofmt -w $$(git ls-files '*.go')
 
+# (each command substitution is checked: a failing git or gofmt prints
+# nothing, which would read as "every file is formatted")
 .PHONY: fmt-check
 fmt-check:
-	@out=$$(gofmt -l $$(git ls-files '*.go')); \
+	@files=$$(git ls-files '*.go') || exit 1; \
+	[ -n "$$files" ] || { echo "fmt-check: no Go file found"; exit 1; }; \
+	out=$$(gofmt -l $$files) || { echo "fmt-check: gofmt failed"; exit 1; }; \
 	if [ -n "$$out" ]; then echo "not gofmt-ed:"; echo "$$out"; exit 1; fi
 
 # Run go vet (also for windows: its own files)
@@ -149,12 +153,16 @@ renovate-check-test:
 vulncheck:
 	@$(GO) run $(GOVULNCHECK) ./...
 
-# Run every fuzz target for FUZZTIME; a failing input lands in testdata/fuzz
+# Run every fuzz target for FUZZTIME; a failing input lands in testdata/fuzz.
+# A package list or a fuzz target list that cannot be read fails (not a
+# package silently fuzzed by nothing).
 FUZZTIME = 10s
 .PHONY: fuzz
 fuzz:
-	@n=0; for pkg in $$($(GO) list ./...); do \
-		for target in $$($(GO) test -list '^Fuzz' $$pkg | grep '^Fuzz'); do \
+	@pkgs=$$($(GO) list ./...) || exit 1; \
+	n=0; for pkg in $$pkgs; do \
+		list=$$($(GO) test -list '^Fuzz' $$pkg) || { echo "fuzz: cannot list the fuzz targets of $$pkg"; exit 1; }; \
+		for target in $$(printf '%s\n' "$$list" | grep '^Fuzz'); do \
 			echo "== $$pkg $$target"; \
 			$(GO) test -run '^$$' -fuzz "^$$target\$$" -fuzztime $(FUZZTIME) $$pkg || exit 1; \
 			n=$$((n + 1)); \
@@ -176,8 +184,7 @@ mutation-check:
 
 # Run the local quality gates (as CI)
 .PHONY: check
-check: vet staticcheck golangci-lint test race
-	@test -z "$$(gofmt -l .)" || { gofmt -l .; exit 1; }
+check: fmt-check vet staticcheck golangci-lint test race
 	@go mod tidy -diff
 	@echo "check: OK"
 

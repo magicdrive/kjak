@@ -40,6 +40,10 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Mutation testing
+        # shell: bash runs with -o pipefail: without it, the default
+        # `bash -e {0}` takes the status of tee, and a surviving mutant
+        # would not fail the run (exitcode_test.go).
+        shell: bash
         env:
           MUTANTS: ${{ inputs.mutants }}
         run: sh scripts/mutation.sh "$MUTANTS" | tee mutation.txt
