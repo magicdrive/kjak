@@ -20,7 +20,6 @@ ACTIONLINT := github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 #   read Go 1.27 export data (v2.5.0 fails so).
 GOLANGCI_LINT := github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 TOOLS_DIR = $(BUILD_DIR)/tools
-RENOVATE_VERSION := 44.164.1
 
 # Release tooling: Hephaestus builds, archives, checksums and publishes the
 # release (hephaestus.yaml). The version is kept in step with the commit SHA
@@ -93,9 +92,13 @@ smoke:
 fmt:
 	@gofmt -w $$(git ls-files '*.go')
 
+# (each command substitution is checked: a failing git or gofmt prints
+# nothing, which would read as "every file is formatted")
 .PHONY: fmt-check
 fmt-check:
-	@out=$$(gofmt -l $$(git ls-files '*.go')); \
+	@files=$$(git ls-files '*.go') || exit 1; \
+	[ -n "$$files" ] || { echo "fmt-check: no Go file found"; exit 1; }; \
+	out=$$(gofmt -l $$files) || { echo "fmt-check: gofmt failed"; exit 1; }; \
 	if [ -n "$$out" ]; then echo "not gofmt-ed:"; echo "$$out"; exit 1; fi
 
 # Run go vet (also for windows: its own files)
@@ -131,22 +134,35 @@ lint: staticcheck golangci-lint
 actionlint:
 	@$(GO) run $(ACTIONLINT)
 
-# Validate renovate.json with the pinned Renovate (needs Node.js / npx)
+# Validate renovate.json (needs Node.js, of .github/renovate-check/.node-version,
+# and npm). Renovate and its whole dependency tree are pinned by
+# .github/renovate-check/package-lock.json and installed with `npm ci`, which
+# Renovate updates (npm manager, lockFileMaintenance).
 .PHONY: renovate-check
 renovate-check:
-	@npx --yes --package renovate@$(RENOVATE_VERSION) -- renovate-config-validator --strict renovate.json
+	@$(CURDIR)/.github/renovate-check/run.sh
+
+# The failure-injection tests of renovate-check's install (a fake registry:
+# lockfile pinning, 404 and integrity failures)
+.PHONY: renovate-check-test
+renovate-check-test:
+	@python3 $(CURDIR)/.github/renovate-check/test_run.py
 
 # Run the pinned govulncheck (the standard library of the toolchain included)
 .PHONY: vulncheck
 vulncheck:
 	@$(GO) run $(GOVULNCHECK) ./...
 
-# Run every fuzz target for FUZZTIME; a failing input lands in testdata/fuzz
+# Run every fuzz target for FUZZTIME; a failing input lands in testdata/fuzz.
+# A package list or a fuzz target list that cannot be read fails (not a
+# package silently fuzzed by nothing).
 FUZZTIME = 10s
 .PHONY: fuzz
 fuzz:
-	@n=0; for pkg in $$($(GO) list ./...); do \
-		for target in $$($(GO) test -list '^Fuzz' $$pkg | grep '^Fuzz'); do \
+	@pkgs=$$($(GO) list ./...) || exit 1; \
+	n=0; for pkg in $$pkgs; do \
+		list=$$($(GO) test -list '^Fuzz' $$pkg) || { echo "fuzz: cannot list the fuzz targets of $$pkg"; exit 1; }; \
+		for target in $$(printf '%s\n' "$$list" | grep '^Fuzz'); do \
 			echo "== $$pkg $$target"; \
 			$(GO) test -run '^$$' -fuzz "^$$target\$$" -fuzztime $(FUZZTIME) $$pkg || exit 1; \
 			n=$$((n + 1)); \
@@ -168,8 +184,7 @@ mutation-check:
 
 # Run the local quality gates (as CI)
 .PHONY: check
-check: vet staticcheck golangci-lint test race
-	@test -z "$$(gofmt -l .)" || { gofmt -l .; exit 1; }
+check: fmt-check vet staticcheck golangci-lint test race
 	@go mod tidy -diff
 	@echo "check: OK"
 
@@ -326,6 +341,7 @@ help:
 	@echo "  make vulncheck         - Run the pinned govulncheck"
 	@echo "  make actionlint        - Lint the workflows with the pinned actionlint"
 	@echo "  make renovate-check    - Validate renovate.json with the pinned Renovate"
+	@echo "  make renovate-check-test - Test renovate-check's pinned install (fake registry)"
 	@echo "  make fuzz              - Run every fuzz target for FUZZTIME (10s)"
 	@echo "  make mutation          - Mutation testing of the security-critical paths (MUTANTS=regex)"
 	@echo "  make mutation-check    - Check that every mutant still applies (no test run)"
