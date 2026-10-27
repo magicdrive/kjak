@@ -61,19 +61,6 @@ jobs:
       - name: Test
         run: go test -count=1 ./...
 
-      # TEMPORARY (removed before merge): stress the Windows plugin start
-      - name: TEMP plugin start stress (windows)
-        if: ${{ !cancelled() && runner.os == 'Windows' }}
-        shell: bash
-        run: |
-          rc=0
-          go test -run 'TestPlugin|TestWindowsPluginCanceledWhileStarting' -count=1000 -timeout 50m ./internal/feather/external/ >stress.log 2>&1 || rc=$?
-          echo "exit=$rc"
-          echo "FAIL lines: $(grep -c -- '--- FAIL' stress.log || true)"
-          echo "no-thread lines: $(grep -c 'no thread of the plugin' stress.log || true)"
-          grep -E -- '--- FAIL|no thread|^(ok|FAIL)' stress.log | head -40 || true
-          exit "$rc"
-
       # the race detector needs cgo, which the Windows image lacks
       - name: Test (race)
         if: runner.os != 'Windows'
