@@ -71,6 +71,14 @@ func checkPlace(path, real string) error {
 // CreateProcess returned). If the assignment fails, the suspended process
 // is killed: a plugin never runs outside a job.
 //
+// The assignment and the resume hold mu, as kill does: a timeout or a
+// cancellation (exec.Cmd calls kill from its own goroutine as soon as
+// Start returned) either comes first, terminates the suspended plugin and
+// the start then neither assigns nor resumes it, or comes after and
+// terminates the whole job. Without this, a kill that landed in between
+// left a process without threads to resume, and the run was reported as a
+// failure to contain the plugin instead of its timeout or cancellation.
+//
 // Limits (docs/security.md): a process started on the plugin's behalf by
 // another process (a service, WMI, the task scheduler, a COM server) is
 // not in the job.
@@ -78,7 +86,14 @@ type containment struct {
 	cmd *exec.Cmd
 	mu  sync.Mutex
 	job windows.Handle // 0 once closed
+	// killed: kill ran (the run's context is done); the plugin is not
+	// put in the job nor resumed after that
+	killed bool
 }
+
+// testHookStarted, when set (tests only), runs right after the plugin was
+// created suspended, before it is put in its job and resumed.
+var testHookStarted func(pid int)
 
 // newContainment creates the job and prepares cmd to start suspended.
 func newContainment(cmd *exec.Cmd) (*containment, error) {
@@ -105,10 +120,23 @@ func (c *containment) start() error {
 		c.close()
 		return err
 	}
+	if testHookStarted != nil {
+		testHookStarted(c.cmd.Process.Pid)
+	}
 	pid := c.cmd.Process.Pid
 	err := errors.New("the plugin's pid is out of range")
-	if pid > 0 && pid <= math.MaxUint32 {
+	c.mu.Lock()
+	killed := c.killed
+	if !killed && pid > 0 && pid <= math.MaxUint32 {
 		err = c.assignAndResume(uint32(pid))
+	}
+	c.mu.Unlock()
+	if killed {
+		// the run was stopped before the plugin ran an instruction: kill
+		// terminated it (again here, for a kill that could not), and
+		// cmd.Wait reports the timeout or the cancellation
+		_ = c.cmd.Process.Kill()
+		return nil
 	}
 	if err != nil {
 		_ = c.cmd.Process.Kill()
@@ -119,6 +147,8 @@ func (c *containment) start() error {
 	return nil
 }
 
+// assignAndResume puts the suspended plugin in the job and resumes it;
+// c.mu is held.
 func (c *containment) assignAndResume(pid uint32) error {
 	// os.Process holds a handle to the process until Wait: the pid
 	// cannot be reused meanwhile
@@ -127,9 +157,7 @@ func (c *containment) assignAndResume(pid uint32) error {
 		return fmt.Errorf("OpenProcess: %w", err)
 	}
 	defer func() { _ = windows.CloseHandle(h) }()
-	c.mu.Lock()
 	job := c.job
-	c.mu.Unlock()
 	if job == 0 {
 		return errors.New("the job was closed")
 	}
@@ -138,6 +166,8 @@ func (c *containment) assignAndResume(pid uint32) error {
 	}
 	return resumeThreads(pid)
 }
+
+var procGetProcessIdOfThread = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetProcessIdOfThread")
 
 // resumeThreads resumes the threads of a process created suspended (its
 // main thread: it has no other yet).
@@ -153,9 +183,15 @@ func resumeThreads(pid uint32) error {
 		if te.OwnerProcessID != pid {
 			continue
 		}
-		th, err := windows.OpenThread(windows.THREAD_SUSPEND_RESUME, false, te.ThreadID)
+		th, err := windows.OpenThread(windows.THREAD_SUSPEND_RESUME|windows.THREAD_QUERY_LIMITED_INFORMATION, false, te.ThreadID)
 		if err != nil {
 			return fmt.Errorf("OpenThread: %w", err)
+		}
+		// the thread id is the one of the snapshot: check that the thread
+		// opened is still the plugin's, not one that reused the id
+		if owner, _, oerr := procGetProcessIdOfThread.Call(uintptr(th)); owner != uintptr(pid) {
+			_ = windows.CloseHandle(th)
+			return fmt.Errorf("thread %d is no longer the plugin's (GetProcessIdOfThread: %d, %v)", te.ThreadID, owner, oerr)
 		}
 		_, rerr := windows.ResumeThread(th)
 		_ = windows.CloseHandle(th)
@@ -178,6 +214,7 @@ func resumeThreads(pid uint32) error {
 func (c *containment) kill() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.killed = true
 	var err error
 	if c.job != 0 {
 		err = windows.TerminateJobObject(c.job, 1)
