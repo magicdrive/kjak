@@ -238,9 +238,48 @@ Trust this exact content? [y/N]
   refusal is never shown (a server may repeat the encoded password); at most
   1 MiB of replies is read per session.
 - HTTP feathers: see [HTTP feathers and SSRF](#http-feathers-and-ssrf).
+- Certificate authorities: see
+  [Certificate authorities](#certificate-authorities-ssl_cert_file-ssl_cert_dir).
 - Message content: Slack text is escaped and Discord mentions are disabled,
   so a message cannot ping `@channel`/`@everyone`; a title cannot contain a
   line break (it becomes an e-mail header).
+
+### Certificate authorities (SSL_CERT_FILE, SSL_CERT_DIR)
+
+kjak has no CA setting of its own and no option to skip verification: the
+webhook feathers (slack, discord), the http feathers and email
+(`starttls`, `tls`) verify certificates with the system's roots as Go 1.27
+(go.mod) loads them, and that is where `SSL_CERT_FILE` and `SSL_CERT_DIR`
+come in. Whoever sets them in kjak's environment decides which certificate
+authorities kjak trusts — for every feather of the send, global or project.
+A project configuration cannot set them.
+
+| | neither set | `SSL_CERT_FILE` set | `SSL_CERT_DIR` set |
+|---|---|---|---|
+| macOS, Windows | the platform verifier (Keychain, Windows certificate store, with their policies and the roots an administrator installed) | **only** the certificates of the file (and of `SSL_CERT_DIR` if set): the platform verifier is not used | **only** the certificates of the directories (and of `SSL_CERT_FILE` if set) |
+| Linux, BSD | the distribution's bundle file and directories (`/etc/ssl/certs`, …) | the file **instead of the bundle file**; the default directories are still read | the directories **instead of the default ones**; the default bundle file is still read |
+
+- On macOS and Windows this is new in Go 1.27 (kjak 1.x is built with it):
+  earlier builds ignored the variables there. A variable set for another
+  tool (curl, OpenSSL, Python) with a single corporate or test CA makes
+  kjak trust that CA **only**: public endpoints such as `hooks.slack.com`
+  then fail with `TLS certificate verification failed`. Point it at a full
+  bundle (the CA appended to one), or unset it for kjak.
+  `GODEBUG=x509sslcertoverrideplatform=0` restores the platform verifier.
+- A file that does not exist trusts nothing on macOS and Windows (every
+  TLS feather fails). A path that exists but cannot be read as a file (a
+  directory, no permission) is not an error: on macOS and Windows the
+  platform verifier is then used, as if the variable were unset.
+- On Linux, `SSL_CERT_FILE` alone adds trust rather than restricting it
+  (the default directories remain); restricting it takes both variables.
+- An external plugin does not get the variables: they are not in its
+  environment unless the feather lists them in `env`.
+
+Verified with the kjak binary (`TestBinarySSLCertFile`, on Linux, macOS and
+Windows in CI: a webhook, an http and an email feather to servers whose
+certificate a test CA issued — refused without the variables, delivered
+with either, refused with a missing file) and, for the platform verifier,
+with a handshake to a public host on macOS and Linux (Go 1.27.3).
 
 ## HTTP feathers and SSRF
 
