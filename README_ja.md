@@ -13,7 +13,7 @@ kjak send --to development --level error --title "nightly build" "tests failed o
 - 正直な結果報告：サービスが受け付けを確認したときだけ**配信済み（confirmed）**とする。届いたかもしれないが応答がなかったメッセージは**不明（unknown）**とし、重複を避けるため再試行しない
 - 秘密情報は環境変数、OS のキーチェーン、または非公開の secrets ファイルから読み、表示せず、設定ファイルに置かない
 - プロジェクト設定（`.kjak.toml`）は Trust した後にだけ使い、あなたの秘密情報は許可した名前のものしか読まない
-- テキストまたは JSON（`schema_version: 1`）で出力。終了コードの仕様は固定
+- テキストまたは JSON（`schema_version: 1`）で出力。終了コードの仕様は固定（[v1 で保証する内容](docs/stability.md)、英語）
 - macOS、Linux、Windows 向けの単一の静的 Go バイナリ（`CGO_ENABLED=0`）
 
 ## インストール
@@ -26,7 +26,7 @@ brew install magicdrive/tap/kjak
 
 ```sh
 sha256sum -c kjak_checksums.txt --ignore-missing
-gh attestation verify kjak_0.0.2_linux_amd64.tar.gz --repo magicdrive/kjak
+gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak
 ```
 
 ソースから（Go 1.27）：`go install github.com/magicdrive/kjak@latest`
@@ -151,18 +151,18 @@ secrets = { routing_key = { secret = "pagerduty.routing_key" } }
 
 - 秘密情報は参照（secrets ファイル、環境変数、キーチェーン）で、送信時に解決し、表示せず、すべてのエラーとレポートから取り除きます。
 - リポジトリの `.kjak.toml`（と `.kjak.secrets.toml`）は `kjak config trust` の後にだけ使い、変更されると Trust は取り消されます。あなたの秘密情報を読むこと、http feather やプラグインにあなたの環境変数を渡すことは、許可した名前に限ります。
-- http feather：https のみ、リダイレクトなし、ループバック・プライベート・リンクローカル・クラウドのメタデータのアドレスには許可がない限り接続しない（接続時に検査）、プロキシは使わない。
+- http feather：https のみ、リダイレクトなし、ループバック・プライベート・リンクローカル・クラウドのメタデータのアドレスには許可がない限り接続しない（接続時に検査）、プロキシは使わない。プロジェクトの slack、discord、email の feather にも同じアドレスの制限がかかります。
 - プラグインはあなたの権限で動きます。kjak はどの実行ファイルを動かすか（絶対パスの `PATH` のみ、実行のたびに検査）と何を渡すか（最小限の環境変数、自身の秘密情報のみ）を制御しますが、プラグインの動作そのものは制御しません。
 
 詳しくは [docs/security.md](docs/security.md)（英語）を参照してください。脆弱性は [SECURITY.md](SECURITY.md) の方法で非公開に報告してください。
 
 ## 既知の制限
 
-- feather：Slack（Incoming Webhook）、Discord（Webhook）、メール（SMTP）、HTTP API（`http`）。**OS ネイティブの通知には対応していません**。種類 `os` の feather は設定エラーになります。
+- feather：Slack（Incoming Webhook）、Discord（Webhook）、メール（SMTP）、HTTP API（`http`）、プラグイン（`external`）。**OS ネイティブの通知には対応していません**。種類 `os` の feather は設定エラーになります。
 - OS のキーチェーン：macOS（`security`）と Linux（`secret-tool`、libsecret）は読み取りのみ対応。**Windows はキーチェーンに対応していません**（`env` を使ってください）。
 - group は入れ子にできません。
 - 設定を変更するコマンド（`feather add`、`group set` など）は、設定ファイルをコメントなしで書き直します。
-- プラグインはサンドボックス化されません（あなたの権限で動きます）。Windows では、タイムアウト時にプラグインの子プロセスまでは終了させません。
+- プラグインはサンドボックス化されません（あなたの権限で動きます）。タイムアウト、送信の期限、Ctrl-C のときは、プラグインとそれが起動したすべてのプロセスを終了させます（Unix ではプロセスグループ、Windows では Job Object 単位）。
 
 詳しくは [docs/troubleshooting.md](docs/troubleshooting.md)（英語）を参照してください。
 
@@ -170,7 +170,7 @@ secrets = { routing_key = { secret = "pagerduty.routing_key" } }
 
 - [導入ガイド](docs/getting-started_ja.md)（[English](docs/getting-started.md)）：インストール、Slack、Discord、メール、利用例
 - [設定リファレンス](docs/configuration_ja.md)（[English](docs/configuration.md)）：設定キー、CLI による管理、認証情報、Trust、配信の動作
-- 以下は英語のみです：[CLI usage](docs/cli.md)、[Credentials, trust and security](docs/security.md)、[Migrating literal secrets](docs/migration.md)、[HTTP API / webhook feathers](docs/http.md)、[External feather plugins](docs/plugins.md)、[Delivery, retry and acceptance semantics](docs/delivery.md)、[Development guide](docs/development.md)、[Release runbook](docs/release.md)、[Troubleshooting](docs/troubleshooting.md)
+- 以下は英語のみです：[CLI usage](docs/cli.md)、[Stability and compatibility (v1)](docs/stability.md)、[Credentials, trust and security](docs/security.md)、[Migrating to v1.0.0](docs/migration.md)、[HTTP API / webhook feathers](docs/http.md)、[External feather plugins](docs/plugins.md)、[Delivery, retry and acceptance semantics](docs/delivery.md)、[Discord end-to-end check](docs/discord-e2e.md)、[Development guide](docs/development.md)、[Release runbook](docs/release.md)、[Troubleshooting](docs/troubleshooting.md)
 
 ## ライセンス
 

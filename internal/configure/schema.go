@@ -27,14 +27,14 @@ const (
 // future feather and are refused (UnsupportedFeatherTypes).
 var FeatherTypes = []string{TypeSlack, TypeDiscord, TypeEmail, TypeHTTP, TypeExternal}
 
-// UnsupportedFeatherTypes are known but not implemented in v0.1.0; a feather
+// UnsupportedFeatherTypes are known but not implemented; a feather
 // of one of them is a configuration error, never a silent no-op.
 var UnsupportedFeatherTypes = map[string]string{
-	"os":      "OS-native notifications are not supported in kjak v0.1.0",
-	"native":  "OS-native notifications are not supported in kjak v0.1.0",
-	"macos":   "OS-native notifications are not supported in kjak v0.1.0",
-	"linux":   "OS-native notifications are not supported in kjak v0.1.0",
-	"windows": "OS-native notifications are not supported in kjak v0.1.0",
+	"os":      "OS-native notifications are not supported",
+	"native":  "OS-native notifications are not supported",
+	"macos":   "OS-native notifications are not supported",
+	"linux":   "OS-native notifications are not supported",
+	"windows": "OS-native notifications are not supported",
 }
 
 // Defaults of the engine (spec: timeout 10s, 2 retries, 5 at a time).
@@ -186,7 +186,12 @@ type HTTPRetry struct {
 func (f FeatherConfig) IsEnabled() bool { return f.Enabled == nil || *f.Enabled }
 
 // GroupConfig is a named list of feathers (no groups: nesting is not
-// supported in v0.1.0).
+// supported).
+//
+// GroupConfig and TemplateConfig have no json tags on purpose: `config show
+// -o json` prints their Go field names ("Feathers"; "Title", "Body", "Level",
+// "URL"), as v0.0.4 did, and the v1 contract keeps them (docs/stability.md,
+// TestContractConfigShowKeys).
 type GroupConfig struct {
 	Feathers []string `toml:"feathers"`
 }

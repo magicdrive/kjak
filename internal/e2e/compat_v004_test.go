@@ -370,6 +370,13 @@ func TestCompatV004GlobalConfig(t *testing.T) {
 	if r.code != 0 || strings.Contains(r.stdout, "LITERALSECRET") {
 		t.Fatalf("config show: exit %d %s", r.code, r.stderr)
 	}
+	// the keys of config show -o json, the Go field names of a group and a
+	// template ("Feathers", "Title", ...) included, are v0.0.4's
+	r = e.kjak("", "config", "show", "-o", "json")
+	if r.code != 0 || strings.Contains(r.stdout, "LITERALSECRET") {
+		t.Fatalf("config show -o json: exit %d %s", r.code, r.stderr)
+	}
+	e.golden("config_show_keys.txt", jsonKeyPaths(t, r.stdout))
 
 	// routing and preflight errors keep their exit status
 	before := len(e.slack.all()) + len(e.discord.all()) + len(e.smtp.all())

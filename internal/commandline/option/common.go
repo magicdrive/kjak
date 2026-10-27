@@ -55,10 +55,15 @@ func (r *repeat) Set(v string) error {
 	return nil
 }
 
+// flagSetCreated sees every flag set before its arguments are parsed (the
+// contract test lists the flags of each command with it).
+var flagSetCreated = func(*flag.FlagSet) {}
+
 func newFlagSet(command string) *flag.FlagSet {
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.Usage = func() {}
+	flagSetCreated(fs)
 	return fs
 }
 

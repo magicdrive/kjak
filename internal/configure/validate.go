@@ -111,7 +111,7 @@ func ValidateReferences(f *File) error {
 				continue
 			}
 			if _, ok := f.Groups[m]; ok {
-				add("groups.%s: %q is a group; nested groups are not supported in v0.1.0", name, m)
+				add("groups.%s: %q is a group; nested groups are not supported", name, m)
 				continue
 			}
 			add("groups.%s: no feather named %q", name, m)
