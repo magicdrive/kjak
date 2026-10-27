@@ -65,11 +65,11 @@ and windows/amd64 (`.zip`). Each holds `kjak` (`kjak.exe`), `LICENSE` and
 `README.md`.
 
 ```sh
-# example: v0.0.2 on Linux x86-64
-curl -LO https://github.com/magicdrive/kjak/releases/download/v0.0.2/kjak_0.0.2_linux_amd64.tar.gz
-curl -LO https://github.com/magicdrive/kjak/releases/download/v0.0.2/kjak_checksums.txt
+# example: v1.0.0 on Linux x86-64
+curl -LO https://github.com/magicdrive/kjak/releases/download/v1.0.0/kjak_1.0.0_linux_amd64.tar.gz
+curl -LO https://github.com/magicdrive/kjak/releases/download/v1.0.0/kjak_checksums.txt
 sha256sum -c kjak_checksums.txt --ignore-missing     # macOS: shasum -a 256 -c kjak_checksums.txt --ignore-missing
-tar -xzf kjak_0.0.2_linux_amd64.tar.gz kjak
+tar -xzf kjak_1.0.0_linux_amd64.tar.gz kjak
 sudo install -m 0755 kjak /usr/local/bin/kjak       # or any directory in your PATH
 ```
 
@@ -77,7 +77,7 @@ Optionally, check that the archive was built by kjak's release workflow
 (needs the [GitHub CLI](https://cli.github.com/)):
 
 ```sh
-gh attestation verify kjak_0.0.2_linux_amd64.tar.gz --repo magicdrive/kjak
+gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak
 ```
 
 On Windows, extract `kjak.exe` from the `.zip` into a directory of your
@@ -86,7 +86,7 @@ On Windows, extract `kjak.exe` from the `.zip` into a directory of your
 ### Check the installation
 
 ```sh
-kjak version        # kjak version v0.0.2
+kjak version        # kjak version v1.0.0
 command -v kjak     # where the shell finds it (PowerShell: Get-Command kjak)
 ```
 

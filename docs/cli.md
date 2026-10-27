@@ -248,7 +248,7 @@ kjak group remove NAME [--scope global|project]
 ```
 
 `set` creates or replaces the whole group. Members are feathers; a group
-naming a group is an error (no nesting in v0.1.0).
+naming a group is an error (groups do not nest).
 
 ## kjak template
 

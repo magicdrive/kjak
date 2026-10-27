@@ -18,7 +18,7 @@ Options:
 Run 'kjak <command> --help' for the options of a command.
 
 Feather types: slack, discord, email, http, external (a plugin)
-(OS-native notifications are not supported in v0.1.0.)
+(OS-native notifications are not supported yet.)
 
 Configuration:
   global   $XDG_CONFIG_HOME/kjak/config.toml (default ~/.config/kjak/config.toml)

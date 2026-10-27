@@ -5,7 +5,7 @@ Usage:
   kjak group remove NAME [--scope global|project]
 
 A group is a named list of feathers. Its members are feathers only: groups do
-not nest in v0.1.0. `set` creates or replaces the group whole.
+not nest. `set` creates or replaces the group whole.
 
 A member that is disabled, or does not accept the level of a message, is
 skipped (and reported as skipped) when the group is sent to.

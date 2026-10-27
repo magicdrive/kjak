@@ -53,18 +53,18 @@ go install github.com/magicdrive/kjak@latest
 [GitHub Releases](https://github.com/magicdrive/kjak/releases) には、プラットフォームごとのアーカイブがあります。darwin/arm64、darwin/amd64、linux/arm64、linux/amd64 は `.tar.gz`、windows/amd64 は `.zip` です。中身は `kjak`（`kjak.exe`）、`LICENSE`、`README.md` です。
 
 ```sh
-# 例：Linux x86-64 用の v0.0.2
-curl -LO https://github.com/magicdrive/kjak/releases/download/v0.0.2/kjak_0.0.2_linux_amd64.tar.gz
-curl -LO https://github.com/magicdrive/kjak/releases/download/v0.0.2/kjak_checksums.txt
+# 例：Linux x86-64 用の v1.0.0
+curl -LO https://github.com/magicdrive/kjak/releases/download/v1.0.0/kjak_1.0.0_linux_amd64.tar.gz
+curl -LO https://github.com/magicdrive/kjak/releases/download/v1.0.0/kjak_checksums.txt
 sha256sum -c kjak_checksums.txt --ignore-missing     # macOS: shasum -a 256 -c kjak_checksums.txt --ignore-missing
-tar -xzf kjak_0.0.2_linux_amd64.tar.gz kjak
+tar -xzf kjak_1.0.0_linux_amd64.tar.gz kjak
 sudo install -m 0755 kjak /usr/local/bin/kjak       # PATH の通った任意のディレクトリで構いません
 ```
 
 必要であれば、アーカイブが kjak のリリースワークフローでビルドされたものか確認できます（[GitHub CLI](https://cli.github.com/) が必要です）。
 
 ```sh
-gh attestation verify kjak_0.0.2_linux_amd64.tar.gz --repo magicdrive/kjak
+gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak
 ```
 
 Windows では、`.zip` から `kjak.exe` を取り出し、`PATH` の通ったディレクトリに置いてください。
@@ -72,7 +72,7 @@ Windows では、`.zip` から `kjak.exe` を取り出し、`PATH` の通った�
 ### インストールの確認
 
 ```sh
-kjak version        # kjak version v0.0.2
+kjak version        # kjak version v1.0.0
 command -v kjak     # シェルが見つけた場所（PowerShell では Get-Command kjak）
 ```
 

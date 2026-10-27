@@ -38,8 +38,8 @@ when one is not met.
 
 ```sh
 git switch main && git pull --ff-only
-make publish-check v0.1.0    # the preflight only (read-only, plus a fetch of origin/main)
-make publish v0.1.0          # preflight, confirm, push the tag, follow the run, verify
+make publish-check v1.0.0    # the preflight only (read-only, plus a fetch of origin/main)
+make publish v1.0.0          # preflight, confirm, push the tag, follow the run, verify
 ```
 
 `make publish vX.Y.Z` (also `VERSION=vX.Y.Z`, or `tag=vX.Y.Z` as before) runs
@@ -107,10 +107,10 @@ verifies them; nothing is published.
 ## Verifying a release
 
 ```sh
-gh release download v0.1.0 --repo magicdrive/kjak
+gh release download v1.0.0 --repo magicdrive/kjak
 sha256sum -c kjak_checksums.txt
-gh release verify v0.1.0 --repo magicdrive/kjak
-gh attestation verify kjak_0.1.0_linux_amd64.tar.gz --repo magicdrive/kjak
+gh release verify v1.0.0 --repo magicdrive/kjak
+gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak
 ```
 
 ## When a release fails
