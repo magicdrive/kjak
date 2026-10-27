@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -45,6 +46,16 @@ func main() {
 		_ = os.Rename(pidfile+".tmp", pidfile)
 		time.Sleep(time.Hour)
 		return
+	}
+	// the spy of the tests: when kjak-test-plugin-runs.log exists in the
+	// parent of the executable's directory, every run appends the
+	// executable's path to it (TestCritical_PluginDiscoveryIsNotAuthorization)
+	if self, err := os.Executable(); err == nil {
+		runs := filepath.Join(filepath.Dir(filepath.Dir(self)), "kjak-test-plugin-runs.log")
+		if f, err := os.OpenFile(runs, os.O_APPEND|os.O_WRONLY, 0); err == nil {
+			fmt.Fprintln(f, self)
+			_ = f.Close()
+		}
 	}
 	in, err := io.ReadAll(os.Stdin)
 	if err != nil {

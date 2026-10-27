@@ -145,6 +145,30 @@ Tests are deterministic: no test waits for real time to pass.
 
 A flaky test is a bug: fix it, never skip it.
 
+### Tests skipped on a platform
+
+CI lists every skipped test with its reason (the job summary of each test
+job, and the artifact `test-report-<os>`). Linux and macOS skip none. On
+Windows:
+
+| test | why | needs | effect | checked instead by |
+|---|---|---|---|---|
+| `TestMakefile_Publish`, `TestMakefile_FmtCheckFailsWhenGofmtFails`, `TestMakefile_FuzzStopsWhenListingFails` | the Makefile targets macOS and Linux (`make`, `sh`) | — | the Makefile is not run on Windows, where nobody develops or releases from | Linux and macOS CI |
+| `TestMutationWorkflow_FailsWhenAMutantSurvives` | it runs a `bash` step of `mutation.yml`, which runs on ubuntu only | `bash` | none: the workflow never runs on Windows | Linux and macOS CI |
+| `TestPathsAndErrorsArePrintedEscaped` | an NTFS file name cannot hold a control character, so the OS error it provokes cannot occur | — | none: the escaping is the same code on every platform | Linux and macOS CI; the `output` package's tests (every platform) |
+| `TestExecRunnerDoesNotWaitForOrphans` | `execRunner` runs the keychain tools of macOS and Linux only; Windows has no OS keychain support | a POSIX shell | none on Windows (the code is not used there) | Linux and macOS CI |
+
+Skipped only when a privilege is missing (CI's Windows runner holds both,
+so they run there; on a developer's machine they may skip):
+
+| test | needs | checked instead by |
+|---|---|---|
+| `TestProjectSecretsLinkRefused`, `TestCritical_WindowsProjectSecretsLinks` | `SeCreateSymbolicLinkPrivilege` (an administrator, or Developer Mode) to create a symbolic link | CI's Windows runner |
+| `TestCritical_WindowsOwner` | `SeRestorePrivilege` (an administrator) to give a file another owner | CI's Windows runner |
+
+A skip is never the way out of a failure: a skip that appears in CI's list
+without a reason in these tables is a bug.
+
 Tests of the rules that must never regress (worker pool limit, result order,
 retry limit, Retry-After, deadline, cancellation, ambiguous acceptance,
 concurrent config modification, aggregation, trust, secret redaction) are
@@ -204,7 +228,7 @@ to main and every pull request:
 
 | job | runs |
 |---|---|
-| test (ubuntu x64/arm64, macos arm64/intel, windows) | gofmt (Linux), `go vet`, `go test -count=1 ./...`, `-race` (not Windows: no cgo there), CLI smoke test of a release-built binary (`scripts/smoke.sh`) |
+| test (ubuntu x64/arm64, macos arm64/intel, windows) | gofmt (Linux), `go vet`, `go test -count=1 -json ./...` (the log shows the failed tests and every skipped test with its reason, `scripts/test-report.sh`, also in the job summary; the JSON is kept as the artifact `test-report-<os>`), `-race` (not Windows: no cgo there), CLI smoke test of a release-built binary (`scripts/smoke.sh`) |
 | lint | `go mod verify`, `go mod tidy -diff`, `make staticcheck`, `make golangci-lint`, `GOOS=windows go vet`, windows/arm64 cross-compile, shellcheck, `make actionlint`, `make mutation-check` |
 | renovate | `make renovate-check-test` (the pinned install against a fake registry), `make renovate-check` (`renovate-config-validator --strict`) |
 | fuzz | `make fuzz` |
