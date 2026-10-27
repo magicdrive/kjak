@@ -77,7 +77,17 @@
 - **`the server does not offer STARTTLS`** — use `security = "tls"` (port 465)
   if the server speaks implicit TLS.
 - **`TLS certificate verification failed`** — the server's certificate is not
-  trusted by the system; kjak has no option to skip verification.
+  trusted by the system; kjak has no option to skip verification. Check
+  `SSL_CERT_FILE` and `SSL_CERT_DIR` in kjak's environment
+  (`env | grep SSL_CERT`): on macOS and Windows either one replaces the
+  Keychain / Windows certificate store, so a file with only a corporate or
+  test CA makes every public endpoint fail, and a file that does not exist
+  makes every TLS feather fail. Use a full bundle with your CA appended, or
+  unset them for kjak (`env -u SSL_CERT_FILE -u SSL_CERT_DIR kjak send …`);
+  `GODEBUG=x509sslcertoverrideplatform=0` makes kjak use the platform
+  verifier again. To trust a private CA (a TLS-inspecting proxy, an
+  internal API), set `SSL_CERT_FILE` to a bundle that holds it. See
+  [security.md](security.md#certificate-authorities-ssl_cert_file-ssl_cert_dir).
 
 ## Diagnose
 
