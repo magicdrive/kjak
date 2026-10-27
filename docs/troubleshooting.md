@@ -5,13 +5,13 @@
 | `the project configuration is not trusted: ./.kjak.toml` | a `.kjak.toml` in the current directory that you have not trusted, or that changed since | review it, `kjak config trust`; or `--no-project` |
 | `config trust: not a terminal; review the file, then pass --yes` | a non-interactive trust | `kjak config trust --yes` after reviewing the file |
 | `environment variable X is not set` | an `env` credential | export it in the environment of kjak |
-| `the OS keychain is not supported on windows in kjak v0.1.0` | a `keychain` credential on Windows | use `env` |
+| `the OS keychain is not supported on windows` | a `keychain` credential on Windows | use `env` |
 | `secret-tool (libsecret-tools) is not installed` | Linux keychain | install `libsecret-tools`, or use `env` |
 | `no such keychain entry` | the service/account does not exist (or, on Linux, no Secret Service runs) | create it ([security.md](security.md)); check `--secret-keychain SERVICE/ACCOUNT` |
 | `feather "x" is disabled` / `does not accept level info` | a feather named directly with `--to` | `kjak feather enable x`, a fitting `--level`, or send to a group (members are then skipped) |
 | `... exclude each other: give only one message input` | two inputs (a body and `--stdin`, ...) | give one |
 | `--title, --level and --url cannot be combined with --json-input` | | put them in the JSON |
-| `nested groups are not supported in v0.1.0` | a group names a group | list the feathers |
+| `nested groups are not supported` | a group names a group | list the feathers |
 | `the configuration is being changed by another kjak process (lock file ...lock)` | another kjak is changing the file right now (the lock is an OS lock: it ends with its process, a crashed kjak does not hold it) | retry; the `.lock` file itself stays and is harmless |
 | `the configuration file was modified concurrently` | the file changed while kjak wrote it | check the file, run the command again |
 | `unknown key(s): feathers.x.webhok (line 3)` | a typo | fix the key ([configuration.md](configuration.md)) |
@@ -26,8 +26,12 @@
 | `config trust: the project reads N secret(s) from your secrets file ...` | `--yes` without `--allow-user-secrets` | review the names, then add `--allow-user-secrets` |
 | `kjak: warning: ... keeps N secret(s) in the file as literal (deprecated)` | `{ literal = "..." }` in a configuration | `kjak config migrate-secrets` ([migration.md](migration.md)) |
 | `... exists: kjak does not overwrite it` (migrate-secrets) | the secrets file or `<file>.migrated` exists already | `--secrets-out NEW_FILE` / `--config-out NEW_FILE`, or move the secrets by hand |
-| `type "os": OS-native notifications are not supported in kjak v0.1.0` | | not available yet |
+| `type "os": OS-native notifications are not supported` | | not available yet |
 | `the request was not sent: address 10.0.0.5 is private: allow it with allow_networks or allow_hosts` (`error.code: blocked`) | an http feather's host resolves to a private, loopback or link-local address | if it is meant, add the network (`allow_networks`) or the host (`allow_hosts`) ([http.md](http.md#the-address-policy-ssrf)) |
+| `the request was not sent: address 127.0.0.1 is loopback: allow it with allow_networks` (a slack, discord or email feather of `.kjak.toml`) | since v1.0.0 a project's webhook and SMTP feathers reach public addresses only | review the destination, add `allow_networks` / `allow_hosts` to the feather, `kjak config trust` ([migration.md](migration.md#a-projects-slack-discord-and-email-feathers-reach-public-addresses-only)) |
+| `the trust of the project does not allow its slack feather "x" to send env:VAR` | a project trusted before v1.0.0, or a new reference | review the project, then `kjak config trust` (`--yes --allow-user-secrets` in CI) ([migration.md](migration.md#project-env-and-keychain-references-need-a-grant)) |
+| `template error: x.body: range is not available in a message template` | `range`, `define`, `template` or `block` in a message template | write the text out ([migration.md](migration.md#message-templates-cannot-loop)) |
+| `...: it is not a regular file (a FIFO)` | a configuration file, `.kjak.toml` or the trust store is a FIFO, a device or a directory | use a regular file (a symbolic link to one is fine) |
 | `... is cloud metadata: never allowed` | an http feather (or a redirect) points at an instance metadata endpoint | not possible on purpose |
 | `url: must be https (http needs allow_http = true)` | an `http://` URL | use https, or `allow_http = true` for a local relay |
 | `HTTP 302: a redirect that is not followed (max_redirects)` | the API redirects | use the final URL, or `max_redirects = N` |
