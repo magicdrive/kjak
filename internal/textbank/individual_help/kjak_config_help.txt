@@ -1,7 +1,7 @@
 Usage:
   kjak config path [-o text|json]
   kjak config show [-o text|json]
-  kjak config validate [--strict]
+  kjak config validate [--strict] [-o text|json]
   kjak config init [--force]
   kjak config trust [--yes [--allow-user-secrets]]
   kjak config untrust
