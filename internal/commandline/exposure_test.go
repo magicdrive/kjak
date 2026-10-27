@@ -62,7 +62,9 @@ func TestCritical_LiteralSecretInReadableFileWarns(t *testing.T) {
 	}
 	noSecret("validate", r)
 	r = e.run("config", "validate", "--strict")
-	if r.code != 2 || !strings.Contains(r.stderr, "the file is not private: "+why) {
+	// Windows words the reason "the access control list grants access to
+	// others: Everyone (S-1-1-0) ...": the reason, not its first word
+	if r.code != 2 || !strings.Contains(r.stderr, "(and the file is not private: ") || !strings.Contains(r.stderr, why) {
 		t.Fatalf("validate --strict: exit %d %s", r.code, r.stderr)
 	}
 	noSecret("validate --strict", r)
