@@ -101,8 +101,11 @@ type compatSMTP struct {
 	msgs []string
 }
 
-func newCompatSMTP(t *testing.T) *compatSMTP {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+func newCompatSMTP(t *testing.T) *compatSMTP { return newSMTPOn(t, "127.0.0.1:0") }
+
+// newSMTPOn is a compatSMTP listening on addr.
+func newSMTPOn(t *testing.T, addr string) *compatSMTP {
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		t.Fatal(err)
 	}
