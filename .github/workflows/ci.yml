@@ -67,7 +67,7 @@ jobs:
         shell: bash
         run: |
           rc=0
-          go test -run 'TestPlugin' -count=200 ./internal/feather/external/ >stress.log 2>&1 || rc=$?
+          go test -run 'TestPlugin|TestWindowsPluginCanceledWhileStarting' -count=1000 -timeout 50m ./internal/feather/external/ >stress.log 2>&1 || rc=$?
           echo "exit=$rc"
           echo "FAIL lines: $(grep -c -- '--- FAIL' stress.log || true)"
           echo "no-thread lines: $(grep -c 'no thread of the plugin' stress.log || true)"
