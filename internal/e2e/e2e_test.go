@@ -48,6 +48,12 @@ func TestMain(m *testing.M) {
 			panic(err)
 		}
 	}
+	// the first run of a new executable waits for the system's scan of it
+	// (settlePlugin): kjak's is done here, not inside a test's timeout
+	if out, err := exec.Command(binary, "version").CombinedOutput(); err != nil {
+		_, _ = os.Stderr.Write(out)
+		panic(err)
+	}
 	code := m.Run()
 	_ = os.RemoveAll(dir)
 	os.Exit(code)
