@@ -83,6 +83,11 @@ func ParseSend(args []string) (*SendOption, error) {
 		return nil, err
 	}
 	given := set(fs)
+	// --to that names nothing (an empty or unset variable in a script) is an
+	// error, never the default targets
+	if (given["to"] || given["t"]) && len(targets) == 0 {
+		return opt, usageErr(cmd, "--to names no feather or group")
+	}
 	opt.Targets = targets
 	opt.Vars = vars
 	opt.HasTitle = given["title"] || given["T"]

@@ -161,9 +161,21 @@ func New(name string, fc configure.FeatherConfig, exe *Executable, secrets map[s
 			continue
 		}
 		seen[n] = true
-		if v, ok := opt.LookupEnv(n); ok {
-			f.Env = append(f.Env, n+"="+v)
+		v, ok := opt.LookupEnv(n)
+		if !ok {
+			continue
 		}
+		// Windows names variables without case: Path is PATH there
+		if strings.EqualFold(n, "PATH") {
+			// the plugin's commands are found as the plugin is: in absolute
+			// directories only, never in its working directory
+			dirs, _ := searchDirs(v)
+			if len(dirs) == 0 {
+				continue
+			}
+			v = strings.Join(dirs, string(os.PathListSeparator))
+		}
+		f.Env = append(f.Env, n+"="+v)
 	}
 	f.Env = append(f.Env, "KJAK_PLUGIN_PROTOCOL=1")
 	var b [16]byte
@@ -255,7 +267,15 @@ func (f *Feather) run(ctx context.Context, msg core.Message, attempt int) feathe
 	cmd := exec.CommandContext(actx, f.Exe.Real)
 	cmd.Args = []string{f.Exe.Real}
 	cmd.Env = f.Env
-	cmd.Dir = os.TempDir()
+	// a new private directory, removed afterwards: not a directory others can
+	// write to (os.TempDir may be /tmp), where a relative path of the plugin
+	// could find their files
+	dir, err := os.MkdirTemp("", "kjak-plugin-")
+	if err != nil {
+		return feather.Rejected(core.ErrCodeInternal, 0, false, fmt.Errorf("the plugin was not run: %v", err))
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	cmd.Dir = dir
 	cmd.Stdin = bytes.NewReader(in)
 	stdout := &cappedBuffer{max: MaxStdout, fail: true}
 	stderr := &cappedBuffer{max: MaxStderr}
@@ -354,7 +374,8 @@ func parseResponse(rd *credential.Redactor, out []byte, now time.Time) (feather.
 		case string(core.AcceptanceRejected):
 			o := feather.Rejected(rejectedCode(code), r.StatusCode, r.Retryable, failure("refused"))
 			if r.RetryAfterMS > 0 {
-				o.RetryAfter = min(time.Duration(r.RetryAfterMS)*time.Millisecond, webhook.MaxRetryAfter)
+				// capped before the conversion: a huge value must not overflow
+				o.RetryAfter = time.Duration(min(r.RetryAfterMS, webhook.MaxRetryAfter.Milliseconds())) * time.Millisecond
 			}
 			return o, nil
 		case "", string(core.AcceptanceUnknown):

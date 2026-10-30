@@ -133,9 +133,10 @@ func Run(ctx context.Context, msg core.Message, targets []Target, opt Options) c
 	return core.Aggregate(results, ctx.Err() != nil, c.Now().Sub(start))
 }
 
-// deliver makes the attempts of one target.
-func deliver(ctx context.Context, msg core.Message, t Target, opt Options, c clock.Clock, deadline time.Time) core.Result {
-	res := core.Result{Feather: t.Name, Type: t.Type, Groups: t.Groups, History: []core.Attempt{}}
+// deliver makes the attempts of one target. res is a named result so that
+// the deferred function sets the Duration of the result returned.
+func deliver(ctx context.Context, msg core.Message, t Target, opt Options, c clock.Clock, deadline time.Time) (res core.Result) {
+	res = core.Result{Feather: t.Name, Type: t.Type, Groups: t.Groups, History: []core.Attempt{}}
 	start := c.Now()
 	defer func() { res.Duration = c.Now().Sub(start) }()
 

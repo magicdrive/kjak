@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"strings"
 	"testing"
@@ -41,6 +42,11 @@ func TestBuildEachType(t *testing.T) {
 	}
 	// every resolved secret is known to the redactor
 	if got := d.Redactor.Redact("x https://hooks.example/abc/def pw-secret"); strings.Contains(got, "abc/def") || strings.Contains(got, "pw-secret") {
+		t.Fatalf("redacted = %q", got)
+	}
+	// and so are the forms AUTH sends, which a server may echo after AUTH
+	plain, login := email.PlainToken("u", "pw-secret"), base64.StdEncoding.EncodeToString([]byte("pw-secret"))
+	if got := d.Redactor.Redact("550 you sent " + plain + " and " + login); strings.Contains(got, plain) || strings.Contains(got, login) {
 		t.Fatalf("redacted = %q", got)
 	}
 }

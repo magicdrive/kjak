@@ -21,7 +21,7 @@ import (
 // delivery: kjak stops, reports and exits 130. (Windows has no signal to
 // send to another process; os.Interrupt is not deliverable there.)
 func TestBinarySIGINTExits130(t *testing.T) {
-	for _, sig := range []os.Signal{os.Interrupt, syscall.SIGTERM} {
+	for _, sig := range []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGHUP} {
 		t.Run(sig.String(), func(t *testing.T) { testSignalExits130(t, sig) })
 	}
 }
@@ -61,6 +61,53 @@ func testSignalExits130(t *testing.T, sig os.Signal) {
 	}
 	// the request had been sent: its acceptance is unknown, and reported
 	if !strings.Contains(out.String(), `"canceled": true`) || !strings.Contains(out.String(), `"acceptance": "unknown"`) {
+		t.Fatalf("report = %s", out.String())
+	}
+}
+
+// Started with SIGHUP ignored (nohup), kjak keeps it ignored: a SIGHUP does
+// not cancel the send, which completes.
+func TestBinaryIgnoredSIGHUPStaysIgnored(t *testing.T) {
+	received, release := make(chan struct{}, 1), make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		received <- struct{}{}
+		<-release
+	}))
+	defer srv.Close()
+	defer close(release)
+	s := newSandbox(t)
+	s.env = append(s.env, "HOOK="+srv.URL)
+	s.must("feather", "add", "f", "--type", "slack", "--secret-env", "HOOK")
+
+	cmd := exec.Command("/bin/sh", "-c", `trap "" HUP; exec "$0" send --to f --timeout 60s -o json x`, binary)
+	cmd.Dir, cmd.Env = s.dir, s.env
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case <-received:
+	case <-time.After(30 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatal("the request never arrived")
+	}
+	if err := cmd.Process.Signal(syscall.SIGHUP); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("kjak ended on an ignored SIGHUP: %v\n%s", err, out.String())
+	case <-time.After(500 * time.Millisecond):
+	}
+	release <- struct{}{}
+	if err := <-done; err != nil {
+		t.Fatalf("exit = %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), `"outcome": "success"`) {
 		t.Fatalf("report = %s", out.String())
 	}
 }

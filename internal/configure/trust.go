@@ -123,6 +123,16 @@ func parseTrustStore(path string, content []byte, exists bool) (*TrustStore, err
 	if err := dec.Decode(ts); err != nil {
 		return nil, fmt.Errorf("%s: broken trust store: %w", path, describeTOMLError(err))
 	}
+	// kjak writes UTC; a time without an offset (edited by hand) is read in
+	// the local zone, whose offset may have seconds a TOML offset cannot keep
+	// (LMT): in UTC an entry is written back as it was read
+	for i := range ts.Projects {
+		at := ts.Projects[i].TrustedAt.UTC()
+		if y := at.Year(); y < 1 || y > 9999 {
+			return nil, fmt.Errorf("%s: broken trust store: trusted_at of entry %d is out of range", path, i+1)
+		}
+		ts.Projects[i].TrustedAt = at
+	}
 	return ts, nil
 }
 

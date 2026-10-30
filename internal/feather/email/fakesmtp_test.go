@@ -44,7 +44,9 @@ type fakeSMTP struct {
 	closeAfterData bool
 	// stallAfterData waits for release after the data, without a reply.
 	stallAfterData chan struct{}
-	dataReceived   chan struct{}
+	// stallOnQuit waits for release after QUIT, without a reply.
+	stallOnQuit  chan struct{}
+	dataReceived chan struct{}
 
 	mu       sync.Mutex
 	messages []string
@@ -204,6 +206,10 @@ func (s *fakeSMTP) handle(c net.Conn) {
 			}
 			s.reply(tp, "END", "250 2.0.0 queued")
 		case "QUIT":
+			if s.stallOnQuit != nil {
+				<-s.stallOnQuit
+				return
+			}
 			_ = tp.PrintfLine("221 bye")
 			return
 		default:

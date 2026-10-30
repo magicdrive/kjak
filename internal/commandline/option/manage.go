@@ -93,6 +93,17 @@ func registerScope(fs interface {
 	fs.StringVar(scope, "s", "", "")
 }
 
+// SplitKeychain splits SERVICE/ACCOUNT at its last "/": a service may hold
+// "/" (kjak/prod), an account cannot (keychain:SERVICE/ACCOUNT must name one
+// entry).
+func SplitKeychain(s string) (service, account string, ok bool) {
+	i := strings.LastIndex(s, "/")
+	if i <= 0 || i == len(s)-1 {
+		return "", "", false
+	}
+	return s[:i], s[i+1:], true
+}
+
 func checkScope(command, scope string) error {
 	if scope != "" && scope != "global" && scope != "project" {
 		return usageErr(command, "unknown --scope %q (use global or project)", scope)
@@ -196,8 +207,7 @@ func ParseFeatherAdd(args []string) (*FeatherAddOption, error) {
 		return nil, usageErr(cmd, "--secret-env, --secret-keychain, --secret-ref and --secret-stdin exclude each other")
 	}
 	if opt.Secret.Keychain != "" {
-		svc, acct, ok := strings.Cut(opt.Secret.Keychain, "/")
-		if !ok || svc == "" || acct == "" {
+		if _, _, ok := SplitKeychain(opt.Secret.Keychain); !ok {
 			return nil, usageErr(cmd, "--secret-keychain takes SERVICE/ACCOUNT")
 		}
 	}

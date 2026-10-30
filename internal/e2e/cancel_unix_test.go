@@ -20,8 +20,15 @@ import (
 // child of its own) has not answered: kjak exits 130 with the report of
 // what happened — the http member delivered, the plugin's delivery
 // canceled — prints no secret, and leaves no process of the plugin behind
-// (its process group is killed).
+// (its process group is killed). SIGHUP (a closed terminal) does the same:
+// the plugin, in a process group of its own, does not get it.
 func TestBinarySIGINTCancelsPluginGroup(t *testing.T) {
+	for _, sig := range []os.Signal{os.Interrupt, syscall.SIGHUP} {
+		t.Run(sig.String(), func(t *testing.T) { testSignalCancelsPluginGroup(t, sig) })
+	}
+}
+
+func testSignalCancelsPluginGroup(t *testing.T, sig os.Signal) {
 	ok := newE2EAPI(t, false, 200)
 	s := newSandbox(t)
 	s.installPlugin("pager")
@@ -55,7 +62,7 @@ feathers = ["api_ok", "pager_fork"]
 			t.Fatal("the plugin never started its child")
 		}
 	}
-	if err := cmd.Process.Signal(os.Interrupt); err != nil {
+	if err := cmd.Process.Signal(sig); err != nil {
 		t.Fatal(err)
 	}
 	err := cmd.Wait()

@@ -60,6 +60,27 @@ func TestDeliverSTARTTLSWithAuth(t *testing.T) {
 	}
 }
 
+// A server that accepted the message but does not answer QUIT does not hold
+// the delivery until the deadline: the message is confirmed after a short wait.
+func TestCritical_SMTPQuitWithoutReply(t *testing.T) {
+	srvTLS, roots := testCert(t)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	s := newFakeSMTP(t, func(s *fakeSMTP) { s.tls = srvTLS; withAuth(s); s.stallOnQuit = release })
+	start := time.Now()
+	// a deadline far beyond the wait for QUIT, so that waiting for the reply
+	// fails the test instead of hanging it
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	o := newFeather(s, roots, email.SecuritySTARTTLS).Deliver(ctx, msg)
+	if o.Acceptance != core.AcceptanceConfirmed || o.StatusCode != 250 {
+		t.Fatalf("outcome = %+v (%v)", o, o.Err)
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("the delivery took %s: it waited for the reply to QUIT", d)
+	}
+}
+
 func TestDeliverImplicitTLS(t *testing.T) {
 	srvTLS, roots := testCert(t)
 	s := newFakeSMTP(t, func(s *fakeSMTP) { s.tls, s.implicit = srvTLS, true; withAuth(s) })

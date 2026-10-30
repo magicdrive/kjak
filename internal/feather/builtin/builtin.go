@@ -4,6 +4,7 @@ package builtin
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -126,6 +127,12 @@ func Build(ctx context.Context, name string, fc configure.FeatherConfig, d Deps)
 				return nil, err
 			}
 			f.Password = p
+			if d.Redactor != nil {
+				// a server may echo what AUTH sent: the PLAIN token and the
+				// LOGIN password are base64 forms of the password
+				d.Redactor.Add(credential.NewSecret(email.PlainToken(f.User, p.Reveal())))
+				d.Redactor.Add(credential.NewSecret(base64.StdEncoding.EncodeToString([]byte(p.Reveal()))))
+			}
 		}
 		return f, nil
 	case configure.TypeHTTP:

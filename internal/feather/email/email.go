@@ -325,8 +325,7 @@ func (s *session) auth() (feather.Outcome, bool) {
 	}
 	switch {
 	case has("PLAIN"):
-		token := base64.StdEncoding.EncodeToString([]byte("\x00" + f.User + "\x00" + f.Password.Reveal()))
-		if err := s.cmd(235, "AUTH PLAIN %s", token); err != nil {
+		if err := s.cmd(235, "AUTH PLAIN %s", PlainToken(f.User, f.Password.Reveal())); err != nil {
 			return s.authFail(err), false
 		}
 	case has("LOGIN"):
@@ -343,6 +342,11 @@ func (s *session) auth() (feather.Outcome, bool) {
 		return feather.Rejected(core.ErrCodeProtocol, 0, false, errors.New("AUTH: the server offers neither PLAIN nor LOGIN")), false
 	}
 	return feather.Outcome{}, true
+}
+
+// PlainToken is the argument of AUTH PLAIN for user and password (RFC 4616).
+func PlainToken(user, password string) string {
+	return base64.StdEncoding.EncodeToString([]byte("\x00" + user + "\x00" + password))
 }
 
 // authFail: a refused login is permanent (retrying a wrong password locks
@@ -408,6 +412,10 @@ func (s *session) transaction(content []byte) feather.Outcome {
 	}
 	switch {
 	case code >= 200 && code < 300:
+		// The message is accepted: QUIT is a courtesy. A server that does not
+		// answer it must not hold the delivery (and the other targets) until
+		// the deadline.
+		_ = s.conn.SetDeadline(time.Now().Add(quitWait))
 		_ = s.cmd(221, "QUIT")
 		return feather.Confirmed(code)
 	case code >= 400 && code < 600:
@@ -529,6 +537,9 @@ func firstLine(s string) string {
 // maxSessionRead bounds what kjak reads from an SMTP server in a session
 // (replies are short; RFC 5321 limits a reply line to 512 octets).
 const maxSessionRead = 1 << 20
+
+// quitWait bounds the wait for the reply to QUIT, after the message was accepted.
+const quitWait = 2 * time.Second
 
 var errTooMuchData = errors.New("the server sent more than 1 MiB of replies")
 

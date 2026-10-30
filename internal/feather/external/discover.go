@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -83,6 +84,12 @@ func Resolve(name, pinned, pathList, goos string) (*Executable, error) {
 		if !filepath.IsAbs(pinned) {
 			return nil, fmt.Errorf("%w: path %s is not absolute", ErrPlugin, pinned)
 		}
+		// a missing file is reported by check, as "does not exist"
+		if _, err := os.Lstat(pinned); err == nil {
+			if err := exactEntry(filepath.Dir(pinned), filepath.Base(pinned)); err != nil {
+				return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, pinned, err)
+			}
+		}
 		return check(name, pinned)
 	}
 	dirs, _ := searchDirs(pathList)
@@ -91,6 +98,15 @@ func Resolve(name, pinned, pathList, goos string) (*Executable, error) {
 	for _, d := range dirs {
 		p := filepath.Join(d, file)
 		if _, err := os.Lstat(p); err != nil {
+			continue
+		}
+		// on a file system that ignores case (macOS, Windows) Lstat also
+		// finds kjak-feather-Name, a name that is refused: only the exact
+		// name is a candidate
+		if err := exactEntry(d, file); err != nil {
+			if firstErr == nil && !errors.Is(err, errOtherCase) {
+				firstErr = fmt.Errorf("%w: %s: %v", ErrPlugin, p, err)
+			}
 			continue
 		}
 		exe, err := check(name, p)
@@ -125,6 +141,27 @@ func Resolve(name, pinned, pathList, goos string) (*Executable, error) {
 		return nil, firstErr
 	}
 	return nil, fmt.Errorf("%w: %s is not on PATH (absolute directories only)", ErrPlugin, file)
+}
+
+// errOtherCase: the file system found the name, the directory spells it
+// otherwise.
+var errOtherCase = errors.New("no file of this exact name (the file system ignores case)")
+
+// exactEntry checks that directory dir has an entry spelled exactly name.
+func exactEntry(dir, name string) error {
+	f, err := os.Open(dir)
+	if err != nil {
+		return fmt.Errorf("cannot list its directory to check the exact name: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+	names, err := f.Readdirnames(-1)
+	if err != nil {
+		return fmt.Errorf("cannot list its directory to check the exact name: %v", err)
+	}
+	if !slices.Contains(names, name) {
+		return errOtherCase
+	}
+	return nil
 }
 
 // check checks one candidate and records its identity and digest.
