@@ -34,7 +34,7 @@ resolved (the preflight). Any failure there sends nothing.
 - **Outside the deadline**: reading the command line and the configuration
   files (local, at most 1 MiB each), reading the message (standard input or
   a `--json-input` FIFO is paced by its writer, `make test | kjak send
-  --stdin`; SIGINT or SIGTERM ends that wait) and writing the report.
+  --stdin`; SIGINT, SIGTERM or SIGHUP ends that wait) and writing the report.
 - **Deterministic order**: results follow the order of the targets, whatever
   the order in which deliveries finish.
 
@@ -153,10 +153,11 @@ One refused recipient (RCPT) refuses the whole message: no DATA is sent.
   acceptance, retryability, status or SMTP code, `retry_after_ms` and the
   `wait_ms` that followed.
 
-## Cancellation (SIGINT, SIGTERM)
+## Cancellation (SIGINT, SIGTERM, SIGHUP)
 
-Ctrl-C (SIGINT) or SIGTERM (a CI job canceled, a service or container
-stopped) cancels the send: attempts in progress end as soon as possible (with
+Ctrl-C (SIGINT), SIGTERM (a CI job canceled, a service or container
+stopped) or SIGHUP (the terminal closed, an SSH session lost; not when it was
+ignored as kjak started, as with `nohup`) cancels the send: attempts in progress end as soon as possible (with
 the acceptance their stage gives: an HTTP request already written is
 `unknown`), queued feathers are not attempted, the report is printed with
 `outcome: canceled`, and kjak exits 130. Ctrl-C during the preflight (a
@@ -171,7 +172,7 @@ ended interrupts nothing: the exit status is the deliveries'.
 | `success` | no failed target (skipped targets allowed; a send whose targets are all skipped succeeds) | 0 |
 | `partial` | some delivered, some failed | 1 |
 | `failure` | none delivered, at least one failed | 1 |
-| `canceled` | SIGINT or SIGTERM | 130 |
+| `canceled` | SIGINT, SIGTERM or SIGHUP | 130 |
 
 ## Testing these rules
 

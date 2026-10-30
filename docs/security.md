@@ -14,8 +14,9 @@ credential), an SMTP password — is a reference resolved when a send runs:
 
 Exactly one source per credential; two are an error. Prefer `env`,
 `keychain` or `secret`: a `literal` puts the secret in the configuration
-file (kjak writes its files with mode 0600, but backups and repositories may
-not). `kjak send` warns about literals, `kjak config validate --strict`
+file (kjak creates its files with mode 0600, but keeps the mode of an
+existing file, and backups and repositories may copy it; `kjak send` and
+`config validate` warn when a file with literals is readable by others). `kjak send` warns about literals, `kjak config validate --strict`
 refuses them, and `kjak config migrate-secrets` moves them to a secrets file
 ([migration.md](migration.md)).
 
@@ -40,9 +41,11 @@ sent to any target.
   `literal:[REDACTED]`), never the value.
 - Errors and reports: transport errors are described without the URL (Go's
   `*url.Error` quotes the URL, which is the webhook's secret), and every
-  resolved secret — and its URL path and query — is removed from every error
-  and result message before it is printed, including text a provider echoes
-  back. Text kjak shortens or makes single-line (a response body, an SMTP
+  resolved secret — and its URL path and query, and the base64 forms sent
+  for HTTP basic authentication and SMTP `AUTH` — is removed from every
+  error and result message before it is printed, including text a provider
+  echoes back verbatim (a changed case or another encoding of a secret is
+  not recognized). Text kjak shortens or makes single-line (a response body, an SMTP
   reply, a plugin's message or stderr) is redacted **before** it is changed;
   the single-line form of a secret (a PEM key's line breaks as spaces) and
   its JSON-escaped forms are redacted too, and so is the part of a secret a
@@ -186,6 +189,21 @@ either cgo or a syscall binding kjak does not ship yet.) On Linux,
 `secret-tool` must be installed (`libsecret-tools`) and a Secret Service must
 run (a desktop session); headless servers should use `env`. On macOS the
 first read may show a dialog asking to allow `security` access.
+
+The `account` of a keychain reference cannot contain `/`, so that
+`keychain:SERVICE/ACCOUNT` (what kjak shows, and what a project's trust
+allows) names exactly one entry. kjak's tests run these tools as test
+doubles; a real keychain is not used in CI. On macOS `security
+find-generic-password -w` may print a value that is not plain text (a
+non-ASCII or control character) as hexadecimal, which kjak would take as
+the secret (not verified with a real keychain): keep keychain secrets to
+printable ASCII (webhook URLs and tokens are), or use a secrets file.
+
+The environment of kjak is trusted like your configuration: `KJAK_CONFIG`,
+`KJAK_SECRETS`, `SSL_CERT_FILE`, the proxy variables and `PATH` (which finds
+plugins and `secret-tool`) choose what kjak reads and runs. A tool that sets
+variables from a repository when you enter it (direnv, mise, ...) hands that
+choice to the repository.
 
 ## Project configuration trust
 
@@ -393,9 +411,11 @@ controls which executable runs and what it is given ([plugins.md](plugins.md)):
 - **What kjak takes back.** At most 1 MiB of stdout (more: protocol error)
   and 64 KiB of stderr; the text that reaches a report is cleaned of control
   characters, shortened, and redacted of every secret kjak resolved.
-- **Lifetime.** A timeout (default 10s), the send's deadline and SIGINT kill
-  the plugin — on Unix its whole process group (`Setpgid`), also after it
-  exits; on Windows its whole Job Object (see below).
+- **Lifetime.** A timeout (default 10s), the send's deadline and SIGINT,
+  SIGTERM or SIGHUP kill the plugin — on Unix its whole process group
+  (`Setpgid`), also after it exits; on Windows its whole Job Object (see
+  below). The plugin runs in a new private directory made for the attempt,
+  with only the absolute directories of `PATH`.
 - **Acceptance.** A plugin that ran and then failed, crashed, timed out or
   answered wrong has acceptance `unknown` and is never retried; plugins are
   run once per send unless `retry.policy = "plugin"`.
@@ -408,9 +428,11 @@ controls which executable runs and what it is given ([plugins.md](plugins.md)):
 | macOS | as Linux | owner root or you; mode bits; ACL (no allow entry that grants a write, delete or ACL right, whoever it names) | CI (macos-latest) and locally, as Linux, ACLs set with `chmod +a` |
 | Windows | a Job Object per run with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` and no breakaway right. `os/exec` cannot create a process in a job (`SysProcAttr` has no `PROC_THREAD_ATTRIBUTE_JOB_LIST`), so the plugin is created **suspended** (`CREATE_SUSPENDED`), assigned to the job, then resumed: it runs no instruction outside the job; if the assignment fails it is killed, never run. The job is terminated at a timeout, the deadline, Ctrl+C and once the plugin exited, and its handle closed (a crash of kjak closes it too, which kills the tree) | owner you, SYSTEM, Administrators or TrustedInstaller; DACL of the file and its directories (no change by anyone else), of every directory above (no delete-child, delete, DACL or owner change) | CI (windows-latest): child and grandchild killed in every case above, `CREATE_BREAKAWAY_FROM_JOB` refused, no handle leak over 20 runs; ACLs changed with `icacls` |
 
-Not covered: on Unix, a descendant that leaves the group (`setsid`,
-`setpgid`) or a process started for the plugin by another service
-(`launchd`, `systemd --user`, `at`) survives; after the plugin was reaped,
+Not covered: on Unix, if kjak itself is killed with SIGKILL (or crashes),
+the plugin's group is not killed: it runs until it ends by itself (on
+Windows the Job Object ends it when kjak's handle closes). A descendant that
+leaves the group (`setsid`, `setpgid`) or a process started for the plugin
+by another service (`launchd`, `systemd --user`, `at`) survives; after the plugin was reaped,
 the final kill of an empty group could in principle reach a new group that
 reused the id (pids are allocated in sequence; not seen in practice). On
 Windows, a process started on the plugin's behalf by a service (the task

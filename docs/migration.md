@@ -34,7 +34,14 @@ or freeze the output contract. Each is refused **before anything is sent**
    ([`config show -o json`](#config-show--o-json-keys));
    `config validate -o json` prints JSON on success too
    ([details](#config-validate--o-json-prints-json-on-success)).
-8. Check: `kjak send --to NAME --dry-run test`, then a real send.
+   In CI, `kjak config trust --yes` needs `--allow-user-secrets` for a
+   project that reads your secrets
+   ([details](#project-env-and-keychain-references-need-a-grant)), and
+   `--to` that names nothing is an error
+   ([details](#--to-must-name-something)).
+8. Check: `kjak send --to NAME --dry-run test`, then a real send. A dry run
+   does not resolve addresses: the address policy of step 5 shows only in a
+   real send (`blocked`, exit 1).
 
 | change | affects | what you see | fix |
 |---|---|---|---|
@@ -44,6 +51,12 @@ or freeze the output contract. Each is refused **before anything is sent**
 | templates cannot loop | message templates | exit 2 at `template set`, render or send | write the text out |
 | regular files only | configuration, project file, trust store | exit 2, "not a regular file" | use a regular file |
 | `config validate -o json` on success | scripts | a JSON document (`"valid": true`) instead of the `PATH: OK` lines | read the document, or drop `-o json` for the text |
+| `config trust --yes` in CI | projects whose feathers read your secrets | exit 2: "pass --allow-user-secrets with --yes" | review, then `kjak config trust --yes --allow-user-secrets` |
+| control characters in text fields | `username`, `host`, `user`, `from`, `subject_prefix`, `plugin`, `path`, ... and keychain `service`/`account` | exit 2: "contains a control character" ("must not contain a control character" for keychain; the whole file is invalid) | remove them (a tab in `subject_prefix`, ...) |
+| template `printf` limits | message templates | exit 2: "a width or precision of 1000 or more, '*' or an argument index is not allowed" | write the text out |
+| `--to` naming nothing | scripts (`--to "$TARGET"` with an empty variable) | exit 2 (usage), nothing sent; v0.0.4 sent to `defaults.targets` | set the variable, or leave out `--to` for the defaults |
+| `/` in a keychain `account` | keychain references | exit 2: "keychain account must not contain \"/\"" | rename the keychain entry (a `/` in `service` is fine) |
+| arguments to `kjak version`, `kjak feather types` | scripts | exit 2: "unexpected argument" (only `--help` is taken) | drop them |
 
 Not changed: configurations without literals, the `env` and `keychain`
 references of the global configuration, groups, the JSON report of `send`
@@ -173,6 +186,33 @@ over numbers (`{{range 1000000000}}`), which could keep kjak busy without
 end. A template that uses one is refused by `kjak template set` and by its
 render; write the text out instead.
 
+## Text fields cannot hold control characters
+
+Since v1.0.0 the free-text fields of a feather (`username`, `host`, `user`,
+`from`, `subject_prefix`, `plugin`, `path`, ...) and the `service` and
+`account` of a keychain reference refuse control characters (a tab, a
+newline, an escape sequence): they are printed, and some go into e-mail
+headers. v0.0.4 accepted `subject_prefix = "[CI]\t"`; v1.0.0 refuses the
+whole file (exit 2, "contains a control character"). Remove the character.
+
+The `account` of a keychain reference also refuses `/`: a reference is
+shown and allowed by name as `keychain:SERVICE/ACCOUNT`, which must name one
+entry. A `/` in the `service` is fine.
+
+## Template printf limits
+
+Since v1.0.0 `printf` in a message template refuses a width or precision of
+1000 or more, `*` and argument indexes (`%[1]s`), which could make a short
+template render a very long text. Write the text out instead.
+
+## --to must name something
+
+Since v1.0.0 a `--to` (or `-t`) whose value names no feather or group — an
+empty string, `,`, or an unset variable in `--to "$TARGET"` — is a usage
+error (exit 2, nothing sent). v0.0.4 sent to `defaults.targets` instead,
+which in CI could reach a destination the job did not mean. Leave out
+`--to` to send to the defaults.
+
 ## Configuration files must be regular files
 
 Since v1.0.0 a configuration file, a `.kjak.toml` or the trust store that is
@@ -215,6 +255,10 @@ references it reads — then trust it again:
 kjak config trust                               # interactive: answer the second question
 kjak config trust --yes --allow-user-secrets    # CI, after the review
 ```
+
+In CI, `kjak config trust --yes` alone (as with v0.0.4, which had no
+`--allow-user-secrets`) now fails for such a project (exit 2, "pass
+--allow-user-secrets with --yes"): change the script after the review.
 
 Your global configuration is not affected: its feathers are yours.
 

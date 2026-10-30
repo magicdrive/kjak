@@ -589,7 +589,7 @@ send with exit 2 (`error.code: deadline`), nothing sent; raise `--timeout`
 if a keychain dialog needs longer. A feather still waiting for a free slot
 when it passes fails without an attempt. Reading the message (standard
 input, a FIFO) is not under the deadline: it waits for its writer, and
-SIGINT or SIGTERM ends that wait.
+SIGINT, SIGTERM or SIGHUP ends that wait.
 
 ### Retries
 
@@ -628,7 +628,7 @@ outcome `canceled`, and kjak exits 130. A second signal ends kjak at once.
 | `success` | nothing failed (skipped targets allowed) | 0 |
 | `partial` | some delivered, some failed | 1 |
 | `failure` | none delivered, at least one failed | 1 |
-| `canceled` | SIGINT or SIGTERM | 130 |
+| `canceled` | SIGINT, SIGTERM or SIGHUP | 130 |
 | (error) | input, configuration, trust, routing or credential error before sending, or the deadline passing while the credentials were resolved: nothing was sent | 2 |
 
 The deliveries and the report are two facts. When the report of `kjak send`

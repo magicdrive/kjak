@@ -41,6 +41,7 @@ has such changes compared to v0.0.4: see [migration.md](migration.md).
 | Plugin protocol | protocol version 1: the request, the response, the process environment, the exit status rules | [plugins.md](plugins.md#protocol-v1) |
 | Delivery semantics | acceptance (`confirmed`, `rejected`, `unknown`), "unknown is never retried", the retry bounds, the deadline | [delivery.md](delivery.md) |
 | Environment | `KJAK_CONFIG`, `KJAK_SECRETS`, `XDG_CONFIG_HOME`; for plugins `KJAK_PLUGIN_PROTOCOL` | [cli.md](cli.md#environment) |
+| Version line | the first line of `kjak --version` (and `kjak version`) is `kjak version vX.Y.Z` (installers and the Homebrew formula read it) | [cli.md](cli.md) |
 
 ## What is not guaranteed
 
@@ -50,7 +51,20 @@ has such changes compared to v0.0.4: see [migration.md](migration.md).
   in any release. Scripts use `-o json` and the exit status.
 - **Error messages.** `error.message` (in the JSON report and the error
   document) is text for people; scripts use `error.code`. Messages never
-  contain a secret.
+  contain a secret in the forms kjak knows: the value, its URL encodings,
+  the path and query of a secret URL, and the base64 forms it sends (HTTP
+  basic authentication, SMTP `AUTH`). A provider that echoes another
+  transformation of a secret (changed case, a fragment) is not covered.
+- **Values for people inside JSON documents.** `project_state`,
+  `project_secrets_state`, `secrets_state` and `secrets_permission_model`
+  of `config path` and `config validate`, and `auth` and `policy` of
+  `feather show`, are descriptions: compare them by prefix (`trusted`,
+  `untrusted`, `invalid`, `none`) at most. The keys of the entries of
+  `feather plugins` (`plugins[]`) may grow.
+- **What a dry run checks.** `send --dry-run` resolves the routing, the
+  credentials and the trust, and builds every feather; it does not resolve
+  names or check the address policy (a refused address shows as `blocked`,
+  exit 1, in a real send).
 - **Provider payloads.** The JSON sent to Slack and Discord and the e-mail
   headers kjak writes may change to follow the providers (the message's
   title, body, level and URL are always in it). An `http` feather's body is
@@ -138,7 +152,7 @@ error (exit 2).
 | `0` | success: every attempted target was delivered (skipped targets do not count) |
 | `1` | at least one delivery failed, including one whose acceptance is unknown |
 | `2` | input, usage, configuration or preflight error: nothing was sent |
-| `130` | interrupted by SIGINT or SIGTERM (the report of what happened is still printed) |
+| `130` | interrupted by SIGINT, SIGTERM or SIGHUP (the report of what happened is still printed) |
 
 A command other than `send` whose output cannot be written fails with 2; a
 `send` keeps the status of its deliveries ([cli.md](cli.md#exit-status)).
@@ -191,8 +205,8 @@ Key paths (`[]`: each element of an array):
 | `results[].history[].acceptance` | string: an acceptance |
 | `results[].history[].retryable` | boolean |
 | `results[].history[].status_code` | number: the HTTP status or SMTP reply code (absent without one) |
-| `results[].history[].retry_after_ms` | number |
-| `results[].history[].wait_ms` | number |
+| `results[].history[].retry_after_ms` | number (absent when the provider asked for no wait) |
+| `results[].history[].wait_ms` | number (absent when no wait followed the attempt) |
 | `results[].history[].error` | object (absent without an error) |
 | `results[].history[].error.code` | string: a delivery error code |
 | `results[].history[].error.message` | string |
@@ -284,7 +298,7 @@ when the template sets none (`TestContractCommandDocuments`,
 | `success` | no failed target (skipped targets allowed) |
 | `partial` | some delivered, some failed |
 | `failure` | none delivered, at least one failed |
-| `canceled` | interrupted (SIGINT, SIGTERM) |
+| `canceled` | interrupted (SIGINT, SIGTERM, SIGHUP) |
 | `error` | the command failed before delivering anything (the error document) |
 
 <!-- contract: statuses -->
@@ -334,10 +348,17 @@ or a delivery failed.
 | `network` | the request did not fully reach the provider |
 | `ambiguous` | the request reached the provider, its answer was lost |
 | `deadline` | the deadline of the send passed |
-| `canceled` | interrupted (SIGINT, SIGTERM) |
+| `canceled` | interrupted (SIGINT, SIGTERM, SIGHUP; a SIGHUP ignored when kjak started, as with `nohup`, stays ignored) |
 | `protocol` | an unexpected answer (a redirect, a malformed reply, a plugin's broken response) |
 | `blocked` | kjak's own address policy refused the connection or a redirect: nothing was sent |
 | `internal` | a failure inside kjak (a bug) |
+
+An attempt interrupted or ended by the deadline **after its request was
+sent** has acceptance `unknown`: its code is `ambiguous` for slack, discord,
+email and http feathers, `canceled` or `deadline` for an external feather.
+Before its request was sent (or for a delivery that never started) the code
+is `canceled` or `deadline`. A script tells an interrupted send by the
+report's `canceled`, not by these codes.
 
 ### Command error codes
 
@@ -584,6 +605,13 @@ environment (those that are set), besides the names of the feather's `env`:
 | `SYSTEMROOT` |
 | `USERPROFILE` |
 
+The plugin runs with no argument, in a new empty directory that only you
+can write to, made for the attempt and removed after it. The `PATH` it gets
+has only the absolute directories of kjak's `PATH` (as for finding the
+plugin: an empty or relative element is left out). The response's keys are
+the lower-case names of the table above; other spellings are not part of
+the protocol.
+
 Exit status 0: the response decides. Any other exit status, a crash, a kill
 or a broken response is a failure with acceptance `unknown` (the plugin ran:
 it may have delivered); a plugin that cannot be started is `rejected`.
@@ -629,4 +657,7 @@ Stable in 1.x ([delivery.md](delivery.md)):
 | Windows | amd64 | `zip` | no keychain (use `env` or a secrets file); secrets files: owner and DACL; plugins in a Job Object |
 
 The tests run natively on each of them in CI (windows/arm64 is
-cross-compiled only and not released).
+cross-compiled only and not released; the race detector runs on Linux and
+macOS). The keychain support is tested with the commands kjak runs
+(`security`, `secret-tool`) replaced by test doubles, not against a real
+keychain; the Homebrew formula installs on macOS and Linux.

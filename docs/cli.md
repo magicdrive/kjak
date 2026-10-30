@@ -41,7 +41,7 @@ Exactly one input gives the message; two of them are a usage error (exit 2).
 |---|---|
 | `BODY...` | the arguments joined by spaces |
 | `--stdin` | standard input (trailing newlines removed), at most 1 MiB |
-| `--json-input FILE` | one JSON object `{"title", "body", "level", "url"}` (unknown keys, a key given twice, or anything after the object are errors); `-` reads standard input, at most 1 MiB. FILE may be a FIFO (Unix): kjak waits for its writer to close it, and SIGINT or SIGTERM ends the wait. It is read through the descriptor kjak opened, so removing or replacing the path meanwhile changes nothing. A writer that closes it without writing ends it too: an empty input (exit 2). On macOS, when kjak's descriptors are 1024 or more, kjak sees a writer's close within 0.1s, and a writer that opens and closes the FIFO without writing within that time is not seen: kjak keeps waiting for one that writes |
+| `--json-input FILE` | one JSON object `{"title", "body", "level", "url"}` (unknown keys, a key given twice, or anything after the object are errors); `-` reads standard input, at most 1 MiB. FILE may be a FIFO (Unix): kjak waits for its writer to close it, and SIGINT, SIGTERM or SIGHUP ends the wait. It is read through the descriptor kjak opened, so removing or replacing the path meanwhile changes nothing. A writer that closes it without writing ends it too: an empty input (exit 2). On macOS, when kjak's descriptors are 1024 or more, kjak sees a writer's close within 0.1s, and a writer that opens and closes the FIFO without writing within that time is not seen: kjak keeps waiting for one that writes |
 | `--template NAME` | a template of the configuration, rendered with `--var` |
 | `--template-file FILE` | a TOML file with the keys of a template (`title`, `body`, `level`, `url`) |
 
@@ -165,7 +165,7 @@ on **stderr**:
 | `input` | the message or its input (empty body, invalid level, JSON input, template) |
 | `not_found` | a named feather, group or template |
 | `deadline` | the deadline of the send (`--timeout`) passed before anything was sent, while the credentials were resolved |
-| `interrupted` | SIGINT or SIGTERM before any delivery (exit 130) |
+| `interrupted` | SIGINT, SIGTERM or SIGHUP before any delivery (exit 130) |
 | `error` | anything else |
 
 Messages never contain a secret (they are redacted like a report's).

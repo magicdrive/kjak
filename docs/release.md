@@ -36,6 +36,11 @@ when one is not met.
 
 ## Releasing
 
+Each release has its notes in `docs/release-notes/vX.Y.Z.md`, the file that
+`release.github.notes_file` of `hephaestus.yaml` names: write it and point
+`notes_file` to it in the pull request that prepares the release (the
+preflight refuses a notes file that does not name the tag).
+
 ```sh
 git switch main && git pull --ff-only
 make publish-check v1.0.0    # the preflight only (read-only, plus a fetch of origin/main)
@@ -75,6 +80,9 @@ the release to the end.
 
 `release.yml`:
 
+0. **provenance** — the tag must name a commit in the history of `main`
+   (`.github/release/verify-tag-provenance.sh`); a `v*` tag pushed on any
+   other commit builds and publishes nothing.
 1. **ci** — the whole `ci.yml` on the tagged commit.
 2. **build** — read-only token, no secrets, no cache: Hephaestus builds,
    archives and checksums the five targets, `scripts/verify-dist.sh` checks
@@ -110,7 +118,8 @@ verifies them; nothing is published.
 gh release download v1.0.0 --repo magicdrive/kjak
 sha256sum -c kjak_checksums.txt
 gh release verify v1.0.0 --repo magicdrive/kjak
-gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak
+gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak \
+  --signer-workflow magicdrive/kjak/.github/workflows/release.yml --source-ref refs/tags/v1.0.0
 ```
 
 ## When a release fails
@@ -125,11 +134,15 @@ go run github.com/magicdrive/hephaestus@v1.3.0 status --tag vX.Y.Z
 
 Then:
 
-- **ci or build failed**: nothing was published. Fix the cause on main and
-  release the next patch version (the tag is never moved).
+- **provenance, ci or build failed**: nothing was published. Fix the cause
+  on main and release the next patch version (the tag is never moved). A
+  transient failure (a runner, the network) can be re-run instead.
 - **release failed before "Publish the GitHub release"** (the tap token,
   the rehearsal, the attestation): nothing is public. Fix the cause (for
   example the environment secret) and re-run the failed jobs of the run.
+  The `dist` artifact of the build job is kept 7 days: after that a re-run
+  of the release job cannot download it; re-run the whole run (build
+  included) instead.
 - **"Publish the GitHub release" failed**: re-run the failed jobs. A draft
   left by the run is found and reused; identical assets are skipped.
   Hephaestus never deletes a release or replaces a published asset.
@@ -152,4 +165,5 @@ re-run its run (39766468249).
 The tag v0.0.2 (run 39779957468) stopped before anything was published: its
 workflow asked for a token that is not set. Nothing of it exists but the tag.
 v0.0.2 was then released by run 39783292007, and v0.0.3 (GoReleaser, the last
-one) by run 39959748642.
+one) by run 39959748642. v0.0.4, the first release made with Hephaestus, by
+run 40251808783.

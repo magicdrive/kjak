@@ -26,7 +26,7 @@ The layout follows magicdrive/ark and magicdrive/enma:
 
 ```
 main.go                      version from -ldflags or the build info; calls cmd.Execute
-cmd/kjak.go                  signals (SIGINT, SIGTERM -> context; SIGPIPE caught), exit status
+cmd/kjak.go                  signals (SIGINT, SIGTERM, SIGHUP -> context; SIGPIPE caught), exit status
 internal/
   commandline/               dispatch of `kjak <command>` (no default command)
     option/                  flag parsing per command; input exclusivity
@@ -148,8 +148,22 @@ A flaky test is a bug: fix it, never skip it.
 ### Tests skipped on a platform
 
 CI lists every skipped test with its reason (the job summary of each test
-job, and the artifact `test-report-<os>`). Linux and macOS skip none. On
-Windows:
+job, and the artifact `test-report-<os>`). Linux and macOS skip only the
+install.sh tests that need an input CI gives them elsewhere
+([installer.md](installer.md#tests)):
+
+| test | why | checked instead by |
+|---|---|---|
+| `TestDistArchives` | needs the archives of a release build (`KJAK_INSTALLER_DIST`) | the `dist` job, on the snapshot it built |
+| `TestRealReleases` | installs real releases from github.com (`KJAK_INSTALLER_NETWORK=1`): CI makes no outside connection | by hand before a release |
+| `TestBusyBoxUserland` (macOS) | needs a busybox, which macOS runners lack | the Linux jobs (`KJAK_INSTALLER_BUSYBOX=required`) |
+
+The install.sh tests do not build on Windows (`//go:build !windows`): the
+script does not run there. Neither do the tests of Unix-only behavior
+(`_unix_test.go`: signals sent to the binary, FIFOs, file modes); their
+Windows counterparts are `_windows_test.go` (Job Objects, DACLs). Ctrl+C
+sent to the Windows binary is not tested (only the cancellation of the
+context it causes). On Windows:
 
 | test | why | needs | effect | checked instead by |
 |---|---|---|---|---|

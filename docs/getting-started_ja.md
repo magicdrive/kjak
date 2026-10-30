@@ -36,17 +36,16 @@ kjak send --to development --level error --title "nightly build" "tests failed o
 brew install magicdrive/tap/kjak
 ```
 
-Formula は [magicdrive/homebrew-tap](https://github.com/magicdrive/homebrew-tap) にあります。
+Formula は [magicdrive/homebrew-tap](https://github.com/magicdrive/homebrew-tap) にあります。更新は `brew upgrade kjak` です。
 
-### Go
+### インストールスクリプト（macOS、Linux）
 
-Go 1.27 以降が必要です（古い `go` は 1.27 のツールチェーンを自動でダウンロードします）。
+Homebrew を使わない macOS と Linux（amd64、arm64）では、スクリプトをダウンロードし、必要なら中身を確認してから実行します。リリースのチェックサムでアーカイブを検証してから、最新版を `~/.local/bin`（または `--dir DIR`）に入れます。`sudo` は使わず、`PATH` も変更しません。後で更新するときは `sh install.sh --upgrade` です。オプションと検証の詳細は [README](../README.md#install-script-macos-and-linux-amd64-and-arm64)（英語）にあります。
 
 ```sh
-go install github.com/magicdrive/kjak@latest
+curl -fsSLO https://raw.githubusercontent.com/magicdrive/kjak/main/install.sh
+sh install.sh
 ```
-
-バイナリは `$(go env GOPATH)/bin`（通常は `~/go/bin`）に置かれます。
 
 ### GitHub Releases（全プラットフォーム）
 
@@ -64,10 +63,21 @@ sudo install -m 0755 kjak /usr/local/bin/kjak       # PATH の通った任意の
 必要であれば、アーカイブが kjak のリリースワークフローでビルドされたものか確認できます（[GitHub CLI](https://cli.github.com/) が必要です）。
 
 ```sh
-gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak
+gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak \
+  --signer-workflow magicdrive/kjak/.github/workflows/release.yml --source-ref refs/tags/v1.0.0
 ```
 
 Windows では、`.zip` から `kjak.exe` を取り出し、`PATH` の通ったディレクトリに置いてください。
+
+### ソースから（開発者向け）
+
+Go 1.27 以降が必要です（古い `go` は 1.27 のツールチェーンを自動でダウンロードします）。`git clone https://github.com/magicdrive/kjak.git && cd kjak && make build`（バイナリは `build/kjak`）、または次のコマンドでビルドできます。
+
+```sh
+go install github.com/magicdrive/kjak@latest
+```
+
+バイナリは `$(go env GOPATH)/bin`（通常は `~/go/bin`）に置かれます。リリースを入れるには Homebrew かインストールスクリプトを使ってください。ソースからビルドしたバイナリには attestation がありません。
 
 ### インストールの確認
 
