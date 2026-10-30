@@ -535,3 +535,21 @@ func TestWriteNew(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// trusted_at is read in UTC, so that an entry is written back as it was
+// read whatever the local zone; a time outside years 1 to 9999 (which TOML
+// cannot write back) breaks the store.
+func TestTrustStoreTimesInUTC(t *testing.T) {
+	ts, err := parseTrustStore("trust.toml", []byte("[[projects]]\npath = \"/p\"\nsha256 = \"x\"\ntrusted_at = 2026-01-01T09:00:00+09:00\n"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if at := ts.Projects[0].TrustedAt; at.Location() != time.UTC || !at.Equal(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("trusted_at = %v", at)
+	}
+	for _, at := range []string{"0000-01-01T00:00:00+09:00", "9999-12-31T23:00:00-05:00"} {
+		if _, err := parseTrustStore("trust.toml", []byte("[[projects]]\npath = \"/p\"\nsha256 = \"x\"\ntrusted_at = "+at+"\n"), true); err == nil || !strings.Contains(err.Error(), "out of range") {
+			t.Errorf("%s: %v", at, err)
+		}
+	}
+}

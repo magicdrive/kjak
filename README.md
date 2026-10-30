@@ -37,10 +37,16 @@ Or download an archive from [GitHub Releases](https://github.com/magicdrive/kjak
 
 ```sh
 sha256sum -c kjak_checksums.txt --ignore-missing
-gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak
+gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak \
+  --signer-workflow magicdrive/kjak/.github/workflows/release.yml --source-ref refs/tags/v1.0.0
 ```
 
-From source (Go 1.27): `git clone https://github.com/magicdrive/kjak.git && cd kjak && make build`
+On macOS, a browser marks the downloaded archive as quarantined, and the binary is not
+notarized: Gatekeeper may refuse to run `kjak` until you remove the mark
+(`xattr -d com.apple.quarantine kjak`). Homebrew, the install script and `curl` are not
+affected.
+
+From source (for developers; Go 1.27): `git clone https://github.com/magicdrive/kjak.git && cd kjak && make build`
 (the binary is `build/kjak`).
 
 Supported platforms: darwin/arm64, darwin/amd64, linux/arm64, linux/amd64,
@@ -87,11 +93,12 @@ sh install.sh --help
   broken or altered download, but not a release that was itself replaced on GitHub. For a
   stronger check, verify the archive's build provenance with the
   [GitHub CLI](https://cli.github.com/) before you trust it:
-  `gh attestation verify kjak_<version>_<os>_<arch>.tar.gz -R magicdrive/kjak`
-  (releases from v0.0.1 on have these attestations).
+  `gh attestation verify kjak_<version>_<os>_<arch>.tar.gz -R magicdrive/kjak --signer-workflow magicdrive/kjak/.github/workflows/release.yml --source-ref refs/tags/<version tag>`
+  (releases from v0.0.1 on have these attestations; the two last options accept only the
+  release workflow at that tag).
   The command above runs the script from the `main` branch; to run a fixed script, download it
   from a release tag instead (`https://raw.githubusercontent.com/magicdrive/kjak/<tag>/install.sh`;
-  only a release made after v0.0.4 has it; none is out yet). Piping it straight into `sh` (`curl ... | sh`) also works, but then you
+  the tags from v1.0.0 on have it). Piping it straight into `sh` (`curl ... | sh`) also works, but then you
   run what you have not seen.
 - **Homebrew**: the script refuses Homebrew's directories (its prefix, e.g. `/opt/homebrew`, or
   `/usr/local` on an Intel Mac) and does not replace a symbolic link such as one Homebrew made.

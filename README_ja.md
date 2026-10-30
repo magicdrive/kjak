@@ -26,10 +26,13 @@ brew install magicdrive/tap/kjak
 
 ```sh
 sha256sum -c kjak_checksums.txt --ignore-missing
-gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak
+gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak \
+  --signer-workflow magicdrive/kjak/.github/workflows/release.yml --source-ref refs/tags/v1.0.0
 ```
 
-ソースから（Go 1.27）：`git clone https://github.com/magicdrive/kjak.git && cd kjak && make build`（バイナリは `build/kjak`）
+macOS でブラウザからダウンロードしたアーカイブには quarantine の印が付きます。kjak のバイナリは notarize されていないため、印を外すまで Gatekeeper が実行を止めることがあります（`xattr -d com.apple.quarantine kjak`）。Homebrew、インストールスクリプト、`curl` では起きません。
+
+ソースから（開発者向け、Go 1.27）：`git clone https://github.com/magicdrive/kjak.git && cd kjak && make build`（バイナリは `build/kjak`）
 
 macOS と Linux（amd64、arm64）では、インストールスクリプトも使えます。ダウンロードして、必要なら中身を確認してから `sh` で実行します。
 

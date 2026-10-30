@@ -105,6 +105,11 @@ func (r *Ref) Validate() error {
 		if strings.IndexFunc(r.Keychain.Service+r.Keychain.Account, unicode.IsControl) >= 0 {
 			return fmt.Errorf("%w: keychain service and account must not contain a control character", ErrCredential)
 		}
+		// keychain:SERVICE/ACCOUNT names the entry (in a trust's allowed
+		// names too): with no "/" in the account it names exactly one
+		if strings.Contains(r.Keychain.Account, "/") {
+			return fmt.Errorf("%w: keychain account must not contain \"/\" (keychain:%s/%s would also name service %q)", ErrCredential, r.Keychain.Service, r.Keychain.Account, r.Keychain.Service+"/"+r.Keychain.Account[:strings.LastIndex(r.Keychain.Account, "/")])
+		}
 	case SourceLiteral:
 		if *r.Literal == "" {
 			return fmt.Errorf("%w: literal is empty", ErrCredential)

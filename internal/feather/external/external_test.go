@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -162,7 +163,9 @@ func pluginIn(t *testing.T, dir string, settings map[string]string, change func(
 	if err != nil {
 		t.Fatal(err)
 	}
-	env := map[string]string{"PATH": dir, "HOME": "/home/test", "LANG": "C", "SECRET_ENV": "env-SECRET-value", "ALLOWED_X": "x"}
+	// PATH with an empty and a relative element, which the plugin does not get
+	sep := string(os.PathListSeparator)
+	env := map[string]string{"PATH": dir + sep + sep + "rel", "HOME": "/home/test", "LANG": "C", "SECRET_ENV": "env-SECRET-value", "ALLOWED_X": "x"}
 	secrets := map[string]credential.Secret{}
 	for k := range fc.PluginSecrets {
 		secrets[k] = credential.NewSecret("value-of-" + k + "-SECRET")
@@ -214,6 +217,38 @@ func TestResolveSearchesAbsolutePATHOnly(t *testing.T) {
 	}
 	if _, err := Resolve("Test", "", abs, runtime.GOOS); err == nil {
 		t.Fatal("an upper-case name")
+	}
+}
+
+// On a file system that ignores case (macOS, Windows), a file
+// kjak-feather-Upper is also found as kjak-feather-upper: it is refused like
+// its name, pinned or on PATH (elsewhere it is simply not there).
+func TestResolveExactName(t *testing.T) {
+	dir := filepath.Join(tempDir(t), "bin")
+	p := install(t, dir, "upper")
+	odd := filepath.Join(dir, configure.PluginFile("Upper", runtime.GOOS))
+	if err := os.Rename(p, odd); err != nil {
+		t.Fatal(err)
+	}
+	if exe, err := Resolve("upper", "", dir, runtime.GOOS); err == nil {
+		t.Fatalf("PATH: %s was found as plugin upper", exe.Path)
+	}
+	if exe, err := Resolve("upper", p, dir, runtime.GOOS); err == nil {
+		t.Fatalf("pinned: %s was found as plugin upper", exe.Path)
+	}
+	// the exact name still works
+	if err := os.Rename(odd, p); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Resolve("upper", "", dir, runtime.GOOS); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Resolve("upper", p, dir, runtime.GOOS); err != nil {
+		t.Fatal(err)
+	}
+	// a pinned file that is gone is reported as such
+	if _, err := Resolve("upper", filepath.Join(dir, configure.PluginFile("gone", runtime.GOOS)), dir, runtime.GOOS); err == nil || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("missing pinned file: %v", err)
 	}
 }
 
@@ -307,14 +342,22 @@ func TestCritical_PluginSecretAndEnvironmentIsolation(t *testing.T) {
 		if strings.Contains(v, "SECRET") {
 			t.Errorf("a secret in the environment: %s", k)
 		}
+		if k == "PATH" && v != filepath.Dir(f.Exe.Path) {
+			t.Errorf("PATH=%s: only its absolute directories are passed", v)
+		}
 	}
 	for _, a := range d.Args {
 		if strings.Contains(a, "SECRET") {
 			t.Error("a secret in the arguments")
 		}
 	}
-	if tmp, _ := filepath.EvalSymlinks(os.TempDir()); d.Cwd != tmp && d.Cwd != os.TempDir() {
+	// a new private directory in the temporary directory, removed afterwards
+	tmp, _ := filepath.EvalSymlinks(os.TempDir())
+	if parent := filepath.Dir(d.Cwd); (parent != tmp && parent != filepath.Clean(os.TempDir())) || !strings.HasPrefix(filepath.Base(d.Cwd), "kjak-plugin-") {
 		t.Errorf("working directory %s", d.Cwd)
+	}
+	if _, err := os.Stat(d.Cwd); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the working directory %s was left behind: %v", d.Cwd, err)
 	}
 	// a variable that is the source of a secret is not passed as one
 	if _, err := New("x", configure.FeatherConfig{Type: configure.TypeExternal, Plugin: "test", Env: []string{"TOKEN"},
@@ -503,8 +546,11 @@ func TestParseResponse(t *testing.T) {
 			t.Errorf("%q accepted", bad)
 		}
 	}
-	o, _ := parseResponse(nil, []byte(`{"protocol_version":1,"status":"failed","acceptance":"rejected","retryable":true,"retry_after_ms":99999999999}`), now)
-	if o.RetryAfter != 24*time.Hour {
-		t.Fatalf("retry after %s", o.RetryAfter)
+	// capped at 24h, also a value that would overflow a time.Duration
+	for _, ms := range []string{"99999999999", "10000000000000", "9223372036854775807"} {
+		o, _ := parseResponse(nil, []byte(`{"protocol_version":1,"status":"failed","acceptance":"rejected","retryable":true,"retry_after_ms":`+ms+`}`), now)
+		if o.RetryAfter != 24*time.Hour {
+			t.Fatalf("retry_after_ms %s: retry after %s", ms, o.RetryAfter)
+		}
 	}
 }

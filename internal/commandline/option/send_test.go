@@ -79,6 +79,9 @@ func TestParseSendRejects(t *testing.T) {
 		{"body", "--output", "yaml"},
 		{"body", "--bogus"},
 		{"body", "--timeout", "soon"},
+		{"body", "--to", ""},
+		{"body", "--to", " , "},
+		{"body", "-t", ","},
 	}
 	for _, args := range bad {
 		if _, err := ParseSend(args); err == nil {
@@ -147,5 +150,18 @@ func TestParseManage(t *testing.T) {
 	tr, err := ParseConfigTrust("config trust", []string{"-y"})
 	if err != nil || !tr.Yes {
 		t.Fatalf("%+v %v", tr, err)
+	}
+}
+
+func TestSplitKeychain(t *testing.T) {
+	for in, want := range map[string][2]string{"kjak/hook": {"kjak", "hook"}, "kjak/prod/hook": {"kjak/prod", "hook"}} {
+		if s, a, ok := SplitKeychain(in); !ok || s != want[0] || a != want[1] {
+			t.Errorf("%s: %q %q %v", in, s, a, ok)
+		}
+	}
+	for _, in := range []string{"", "kjak", "/hook", "kjak/"} {
+		if _, _, ok := SplitKeychain(in); ok {
+			t.Errorf("%q accepted", in)
+		}
 	}
 }

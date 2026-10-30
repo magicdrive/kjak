@@ -35,7 +35,7 @@ func Feather(ctx context.Context, rt *Runtime, args []string) int {
 	case "enable", "disable":
 		return featherEnable(ctx, rt, rest, action == "enable")
 	case "types":
-		return featherTypes(rt)
+		return featherTypes(ctx, rt, rest)
 	case "plugins":
 		return featherPlugins(ctx, rt, rest)
 	case "-h", "--help", "help":
@@ -266,7 +266,7 @@ func featherAdd(ctx context.Context, rt *Runtime, args []string) int {
 		v := opt.Secret.Env
 		ref = &credential.Ref{Env: &v}
 	case opt.Secret.Keychain != "":
-		svc, acct, _ := strings.Cut(opt.Secret.Keychain, "/")
+		svc, acct, _ := option.SplitKeychain(opt.Secret.Keychain)
 		ref = &credential.Ref{Keychain: &credential.KeychainRef{Service: svc, Account: acct}}
 	case opt.Secret.Ref != "":
 		v := opt.Secret.Ref
@@ -391,7 +391,14 @@ func changeEntry(ctx context.Context, rt *Runtime, opt *option.ScopedNameOption,
 	return ExitOK
 }
 
-func featherTypes(rt *Runtime) int {
+func featherTypes(ctx context.Context, rt *Runtime, args []string) int {
+	// it takes no argument but --help
+	if len(args) > 0 {
+		if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
+			return rt.help(textbank.FeatherHelp)
+		}
+		return rt.fail(ctx, &option.UsageError{Command: "feather types", Err: fmt.Errorf("unexpected argument %q", args[0])})
+	}
 	fmt.Fprintln(rt.Stdout, "slack    Slack incoming webhook (secret: webhook_url)")
 	fmt.Fprintln(rt.Stdout, "discord  Discord webhook (secret: webhook_url)")
 	fmt.Fprintln(rt.Stdout, "email    E-mail over SMTP (secret: password)")

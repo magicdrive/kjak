@@ -126,6 +126,40 @@ func TestHTTPBodyTemplateRefusesRange(t *testing.T) {
 	}
 }
 
+// A name the body cannot use is a configuration error, not a failure of
+// every send (the template runs with missingkey=error), in every branch. The
+// check reads the tree: it does not run the template, which a project file
+// not trusted yet could make allocate without bound.
+func TestHTTPBodyTemplateUnknownName(t *testing.T) {
+	for _, c := range []struct{ format, tpl string }{
+		{"text", "{{.titel}}"},
+		{"json", `{"x":"{{.titel}}"}`},
+		{"json", `{"a":["{{.body}}", {"b":"{{.Level}}"}]}`},
+		{"text", `{{if eq .level "error"}}{{.titel}}{{end}}`},
+		{"text", `{{if .url}}{{.url}}{{else}}{{.uri}}{{end}}`},
+		{"text", `{{with .title}}{{$.bdy}}{{end}}`},
+		{"text", `{{printf "%s" .secret}}`},
+	} {
+		doc := httpBase + "url = \"https://a.example/\"\n[feathers.api.body]\nformat = \"" + c.format + "\"\ntemplate = '" + c.tpl + "'\n"
+		if _, err := Parse([]byte(doc)); err == nil || !strings.Contains(err.Error(), "no name") {
+			t.Errorf("%s %s: %v", c.format, c.tpl, err)
+		}
+	}
+	for _, tpl := range []string{
+		"{{.title}} {{.body}} {{.level}} {{.url}} {{.feather}}",
+		`{{if eq .level "error"}}!{{end}}{{.body}}`,
+		`{{slice .body 0 3}}{{index .title 2}}`,
+		`{{with .title}}{{.}}{{end}}{{$.body}}`,
+		// not run here (send refuses it): validating it costs nothing
+		strings.Repeat(`{{printf "%999999d" 1}}`, 200),
+	} {
+		doc := httpBase + "url = \"https://a.example/\"\n[feathers.api.body]\nformat = \"text\"\ntemplate = '" + tpl + "'\n"
+		if _, err := Parse([]byte(doc)); err != nil {
+			t.Errorf("%s: %v", tpl, err)
+		}
+	}
+}
+
 // allow_networks and allow_hosts are the address policy of http feathers
 // and of a project's slack, discord and email feathers; a plugin makes its
 // own connections.

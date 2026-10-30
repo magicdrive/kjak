@@ -75,8 +75,9 @@ release:
     name: kjak
     draft: false
     prerelease: auto  # a tag like v0.2.0-rc.1 is published as a pre-release
-    # GoReleaser wrote a commit list; GitHub's generated notes replace it.
-    generate_notes: true
+    # The notes of the release, written for it (a later release names its
+    # own file: hephaestus preflight checks that the file names the tag).
+    notes_file: docs/release-notes/v1.0.0.md
 
 brews:
   - name: kjak

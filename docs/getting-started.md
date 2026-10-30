@@ -46,16 +46,20 @@ brew install magicdrive/tap/kjak
 ```
 
 The formula lives in [magicdrive/homebrew-tap](https://github.com/magicdrive/homebrew-tap).
+Update with `brew upgrade kjak`.
 
-### Go
+### The install script (macOS, Linux)
 
-With Go 1.27 or later (an older `go` downloads the 1.27 toolchain by itself):
+Without Homebrew, on macOS and Linux (amd64, arm64): download the script, read it if you
+like, and run it. It installs the latest release into `~/.local/bin` (or `--dir DIR`) after
+checking the archive against the release's checksums, never uses `sudo` and never changes
+`PATH`; `sh install.sh --upgrade` updates it later. Its options and checks are in the
+[README](../README.md#install-script-macos-and-linux-amd64-and-arm64).
 
 ```sh
-go install github.com/magicdrive/kjak@latest
+curl -fsSLO https://raw.githubusercontent.com/magicdrive/kjak/main/install.sh
+sh install.sh
 ```
-
-The binary goes to `$(go env GOPATH)/bin` (usually `~/go/bin`).
 
 ### GitHub Releases (any platform)
 
@@ -77,11 +81,25 @@ Optionally, check that the archive was built by kjak's release workflow
 (needs the [GitHub CLI](https://cli.github.com/)):
 
 ```sh
-gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak
+gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak \
+  --signer-workflow magicdrive/kjak/.github/workflows/release.yml --source-ref refs/tags/v1.0.0
 ```
 
 On Windows, extract `kjak.exe` from the `.zip` into a directory of your
 `PATH`.
+
+### From source (for developers)
+
+With Go 1.27 or later (an older `go` downloads the 1.27 toolchain by itself), either
+`git clone https://github.com/magicdrive/kjak.git && cd kjak && make build` (the binary is
+`build/kjak`), or:
+
+```sh
+go install github.com/magicdrive/kjak@latest
+```
+
+which puts the binary in `$(go env GOPATH)/bin` (usually `~/go/bin`). Homebrew and the install
+script are the ways to install a release; a binary built from source has no attestation.
 
 ### Check the installation
 

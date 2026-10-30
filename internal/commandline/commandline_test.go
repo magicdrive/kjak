@@ -206,6 +206,17 @@ func TestNoDefaultCommand(t *testing.T) {
 	if r := e.must("--version"); r.stdout != "kjak version v0.1.0-test\n" {
 		t.Fatal(r.stdout)
 	}
+	// version and feather types take no argument but --help
+	for _, args := range [][]string{{"version", "--help"}, {"--version", "-h"}, {"feather", "types", "--help"}} {
+		if r := e.must(args...); !strings.Contains(r.stdout, "Usage:") {
+			t.Errorf("%v: %s", args, r.stdout)
+		}
+	}
+	for _, args := range [][]string{{"version", "--bogus"}, {"version", "x"}, {"feather", "types", "x"}, {"feather", "types", "--json"}} {
+		if r := e.run(args...); r.code != 2 || r.stdout != "" || !strings.Contains(r.stderr, "unexpected argument") {
+			t.Errorf("%v: %+v", args, r)
+		}
+	}
 	for _, c := range []string{"send", "feather", "group", "config", "template"} {
 		if r := e.must(c, "--help"); !strings.Contains(r.stdout, "Usage:") {
 			t.Errorf("%s --help: %s", c, r.stdout)

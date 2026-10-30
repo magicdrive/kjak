@@ -81,6 +81,16 @@ func execute(ctx context.Context, version string, args []string, rt Runtime) int
 	case Template:
 		return subcmd.Template(ctx, &rt, rest)
 	case Version, "-v", "--version":
+		// it takes no argument but --help (an unexpected one is an error, so
+		// that it can mean something later)
+		if len(rest) > 0 {
+			if len(rest) == 1 && (rest[0] == "-h" || rest[0] == "--help") {
+				fmt.Fprint(rt.Stdout, "Usage: kjak version\n\nPrint the version: kjak version vX.Y.Z\n")
+				return subcmd.ExitOK
+			}
+			fmt.Fprintf(rt.Stderr, "kjak: version: unexpected argument %q\nRun 'kjak version --help' for usage\n", rest[0])
+			return subcmd.ExitUsage
+		}
 		fmt.Fprintf(rt.Stdout, "kjak version %s\n", version)
 		return subcmd.ExitOK
 	case "-h", "--help", "help":

@@ -168,7 +168,13 @@ func checkBodyTemplate(format, src string) error {
 		if err != nil {
 			return err
 		}
-		return BodyTemplateProblem(t)
+		if err := BodyTemplateProblem(t); err != nil {
+			return err
+		}
+		// a name the body cannot use (a typo of .title) would fail every
+		// send: every name of the tree is checked, in every branch. The
+		// template is not run here: the file may not be trusted yet.
+		return unknownBodyName(t)
 	}
 	if format != BodyJSON {
 		return parse(src)
@@ -214,6 +220,77 @@ func BodyTemplateProblem(t *template.Template) error { return loopProblem(t, "a 
 // exponential time).
 func MessageTemplateProblem(t *template.Template) error {
 	return loopProblem(t, "a message template")
+}
+
+// unknownBodyName refuses a name an http body template cannot use: a field
+// of the data (.name, $.name) that is not one of TemplateData, wherever it is
+// in the tree (a branch that a test send would not take too).
+func unknownBodyName(t *template.Template) error {
+	known := map[string]bool{}
+	for _, k := range TemplateData {
+		known[k] = true
+	}
+	check := func(name string) error {
+		if !known[name] {
+			return fmt.Errorf("no name %q: a body template can use .%s", name, strings.Join(TemplateData, ", ."))
+		}
+		return nil
+	}
+	var walk func(n parse.Node) error
+	walk = func(n parse.Node) error {
+		switch x := n.(type) {
+		case *parse.ListNode:
+			if x == nil {
+				return nil
+			}
+			for _, c := range x.Nodes {
+				if err := walk(c); err != nil {
+					return err
+				}
+			}
+		case *parse.ActionNode:
+			return walk(x.Pipe)
+		case *parse.IfNode:
+			return walkBranch(walk, &x.BranchNode)
+		case *parse.WithNode:
+			return walkBranch(walk, &x.BranchNode)
+		case *parse.PipeNode:
+			if x == nil {
+				return nil
+			}
+			for _, c := range x.Cmds {
+				if err := walk(c); err != nil {
+					return err
+				}
+			}
+		case *parse.CommandNode:
+			for _, a := range x.Args {
+				if err := walk(a); err != nil {
+					return err
+				}
+			}
+		case *parse.FieldNode:
+			return check(x.Ident[0])
+		case *parse.VariableNode:
+			if x.Ident[0] == "$" && len(x.Ident) > 1 {
+				return check(x.Ident[1])
+			}
+		case *parse.ChainNode:
+			// (pipeline).field: the fields are of the pipeline's value
+			return walk(x.Node)
+		}
+		return nil
+	}
+	return walk(t.Root)
+}
+
+func walkBranch(walk func(parse.Node) error, b *parse.BranchNode) error {
+	for _, n := range []parse.Node{b.Pipe, b.List, b.ElseList} {
+		if err := walk(n); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func loopProblem(t *template.Template, kind string) error {

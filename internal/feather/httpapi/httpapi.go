@@ -246,10 +246,23 @@ func newClient(g *Guard, tlsConfig *tls.Config, fc configure.FeatherConfig, auth
 					req.Header.Del(auth.Header)
 				}
 			}
+			// 307 and 308 ask for the same request elsewhere: the hop before
+			// did not accept it, and whether this one is written is decided
+			// again. After a 301, 302 or 303 the first hop may have acted on
+			// the request: it stays written (an error is then unknown).
+			if r := req.Response; r != nil && (r.StatusCode == http.StatusTemporaryRedirect || r.StatusCode == http.StatusPermanentRedirect) {
+				if w, ok := req.Context().Value(wroteKey{}).(*atomic.Bool); ok {
+					w.Store(false)
+				}
+			}
 			return nil
 		},
 	}
 }
+
+// wroteKey is the context key of the attempt's "request written" flag, which
+// CheckRedirect resets for each hop.
+type wroteKey struct{}
 
 func hostPort(u *url.URL) string {
 	port := u.Port()
@@ -298,7 +311,8 @@ func (f *Feather) attempt(ctx context.Context, msg core.Message) feather.Outcome
 	if body != nil {
 		rd = bytes.NewReader(body)
 	}
-	req, err := http.NewRequestWithContext(httptrace.WithClientTrace(actx, trace), f.Method, f.URL.String(), rd)
+	rctx := context.WithValue(httptrace.WithClientTrace(actx, trace), wroteKey{}, &wrote)
+	req, err := http.NewRequestWithContext(rctx, f.Method, f.URL.String(), rd)
 	if err != nil {
 		// the error of NewRequest quotes the URL: never pass it on
 		return feather.Rejected(core.ErrCodeInternal, 0, false, errors.New("invalid request URL"))

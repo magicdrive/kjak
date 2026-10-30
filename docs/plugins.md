@@ -204,10 +204,10 @@ never retries it, so nothing is delivered twice.
 | | |
 |---|---|
 | arguments | none (only the program's path as `argv[0]`) |
-| environment | only `PATH`, `HOME`, `TMPDIR`, `TEMP`, `TMP`, `LANG`, `LC_ALL`, `LC_CTYPE`, `TZ`, `SYSTEMROOT`, `USERPROFILE` (those that are set), the names in the feather's `env`, and `KJAK_PLUGIN_PROTOCOL=1`. kjak puts no secret there. `env` cannot name `KJAK_*`, `LD_*`, `DYLD_*`, `GODEBUG`, `GOTRACEBACK`, nor a variable that is the source of one of the feather's secrets (it is in the request) |
-| working directory | the temporary directory (not the project) |
+| environment | only `PATH`, `HOME`, `TMPDIR`, `TEMP`, `TMP`, `LANG`, `LC_ALL`, `LC_CTYPE`, `TZ`, `SYSTEMROOT`, `USERPROFILE` (those that are set), the names in the feather's `env`, and `KJAK_PLUGIN_PROTOCOL=1`. kjak puts no secret there. `env` cannot name `KJAK_*`, `LD_*`, `DYLD_*`, `GODEBUG`, `GOTRACEBACK`, nor a variable that is the source of one of the feather's secrets (it is in the request). `PATH` keeps only its absolute directories (an empty or relative element would find commands in the working directory) |
+| working directory | a new empty directory that only you can write to, made for the attempt (in the temporary directory) and removed after it — not the project, not a shared directory such as `/tmp` |
 | standard input | the request, then closed |
-| timeout | the feather's `timeout` (default 10s) and the send's deadline; then kjak kills the plugin. Unix: the plugin runs in its own process group and the whole group is killed — at a timeout, at the deadline, at SIGINT, and after the plugin exits (nothing it started stays). Windows: the plugin runs in a Job Object of its own (created suspended, put in the job, then resumed; no breakaway) and the whole job is terminated in the same cases ([security](security.md#plugin-processes-and-files-per-os)) |
+| timeout | the feather's `timeout` (default 10s) and the send's deadline; then kjak kills the plugin. Unix: the plugin runs in its own process group and the whole group is killed — at a timeout, at the deadline, at SIGINT, SIGTERM or SIGHUP, and after the plugin exits (nothing it started stays). If kjak itself is killed with SIGKILL (or crashes), nobody kills the group: the plugin and its children run on until they end by themselves (on Windows the Job Object ends them). Windows: the plugin runs in a Job Object of its own (created suspended, put in the job, then resumed; no breakaway) and the whole job is terminated in the same cases ([security](security.md#plugin-processes-and-files-per-os)) |
 | after a kill | a plugin killed after it started has acceptance `unknown` |
 | concurrency | feathers run at the same time (`--concurrency`), so a plugin may run several times at once (for several feathers); one feather's attempts never overlap |
 
@@ -298,6 +298,13 @@ Guidelines:
   the Job Object on Windows. (kjak kills the group once more after the plugin exited; if
   the group is gone by then, the kill finds nothing — the identifier of a
   group that ended could in theory have been reused in that instant.)
+- A child you start in the background must not keep your standard output
+  or error open (`cmd >/dev/null 2>&1 &`): kjak reads them until they close
+  (at most 2 seconds after you exit), and a pipe still open then makes the
+  response unreadable (`failed`, acceptance `unknown`, a protocol error).
+- Write the response keys in lower case, as in the table above.
+- Do not rely on files in the working directory: it is new and empty for
+  each attempt, and removed after it.
 - Treat `settings` as input you validate: on a project, they come from the
   repository.
 

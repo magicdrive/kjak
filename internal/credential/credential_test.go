@@ -17,6 +17,7 @@ func TestRefValidate(t *testing.T) {
 	good := []*Ref{
 		{Env: strp("KJAK_HOOK")},
 		{Keychain: &KeychainRef{Service: "kjak", Account: "a"}},
+		{Keychain: &KeychainRef{Service: "kjak/prod", Account: "hook"}},
 		{Literal: strp("https://x")},
 	}
 	for _, r := range good {
@@ -32,7 +33,10 @@ func TestRefValidate(t *testing.T) {
 		"bad env":       {Env: strp("A-B")},
 		"empty literal": {Literal: strp("")},
 		"half keychain": {Keychain: &KeychainRef{Service: "s"}},
-		"nil":           nil,
+		// keychain:kjak/prod/hook would name both service kjak/prod,
+		// account hook and service kjak, account prod/hook
+		"slash in account": {Keychain: &KeychainRef{Service: "kjak", Account: "prod/hook"}},
+		"nil":              nil,
 	}
 	for name, r := range bad {
 		if err := r.Validate(); !errors.Is(err, ErrCredential) {

@@ -210,6 +210,10 @@ func TestCritical_RetryAfterHonored(t *testing.T) {
 	if got := res.History[1].StartedAt.Sub(res.History[0].StartedAt); got != 3*time.Second {
 		t.Fatalf("second attempt started %s after the first", got)
 	}
+	// the result's duration covers its attempts and the wait between them
+	if res.Duration != 3*time.Second {
+		t.Fatalf("duration = %s, want 3s", res.Duration)
+	}
 }
 
 func TestCritical_RetryAfterBeyondDeadline(t *testing.T) {

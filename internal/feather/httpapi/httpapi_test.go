@@ -206,11 +206,11 @@ func TestBodyTemplates(t *testing.T) {
 	if got[2].Body != "[SUCCESS] Deploy\n\napi 1.2 is live\n\nhttps://ci.example/1" || !strings.HasPrefix(got[2].Header.Get("Content-Type"), "text/plain") {
 		t.Fatalf("text: %q", got[2].Body)
 	}
-	// a template that names what is not there fails without sending
+	// a template that names what is not there is refused by the validation,
+	// before anything is sent
 	fc.Body = &configure.HTTPBody{Format: "text", Template: "{{.secret}}"}
-	n := len(rec.got())
-	if o := mustFeather(t, fc, Options{}).Deliver(context.Background(), msg()); o.Acceptance != core.AcceptanceRejected || o.Retryable || len(rec.got()) != n {
-		t.Fatalf("missing key: %+v", o)
+	if err := configure.ValidateFeather(fc); err == nil || !strings.Contains(err.Error(), `no name "secret"`) {
+		t.Fatalf("missing key: %v", err)
 	}
 }
 
@@ -477,6 +477,35 @@ func TestCritical_RedirectsKeepCredentialsAtTheirOrigin(t *testing.T) {
 	o = mustFeather(t, fc, Options{TLS: testTLS(tlsSrv)}).Deliver(context.Background(), msg())
 	if o.Acceptance != core.AcceptanceRejected || o.Code != core.ErrCodeBlocked || len(other.got()) != n {
 		t.Fatalf("https -> http: %+v", o)
+	}
+	// a redirect to an address that refuses the connection: the request was
+	// written to the first hop, which only redirected it, and never to the
+	// second: rejected, not unknown
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	closed := "http://" + l.Addr().String() + "/gone"
+	_ = l.Close()
+	refusing := newRecorder(t, func(w http.ResponseWriter, r *http.Request, _ int) {
+		http.Redirect(w, r, closed, http.StatusTemporaryRedirect)
+	})
+	fc = local(refusing.URL)
+	fc.MaxRedirects = 2
+	o = mustFeather(t, fc, Options{}).Deliver(context.Background(), msg())
+	if o.Acceptance != core.AcceptanceRejected || o.Code != core.ErrCodeNetwork {
+		t.Fatalf("redirect to a refused connection: %+v (%v)", o, o.Err)
+	}
+	// after a 303 (See Other) the first hop may have acted on the request:
+	// a refused connection to the second is unknown
+	seeOther := newRecorder(t, func(w http.ResponseWriter, r *http.Request, _ int) {
+		http.Redirect(w, r, closed, http.StatusSeeOther)
+	})
+	fc = local(seeOther.URL)
+	fc.MaxRedirects = 2
+	o = mustFeather(t, fc, Options{}).Deliver(context.Background(), msg())
+	if o.Acceptance != core.AcceptanceUnknown {
+		t.Fatalf("303 to a refused connection: %+v (%v)", o, o.Err)
 	}
 }
 
