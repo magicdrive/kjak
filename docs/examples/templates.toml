@@ -1,0 +1,17 @@
+# Message templates (Go text/template; variables come from --var):
+#   kjak send --to desktop --template deploy --var service=api --var version=1.2.3
+#   kjak template render failure --var job=nightly --var host=ci-1 --var reason=timeout
+
+[feathers.desktop]
+type = "os"
+
+[templates.deploy]
+title = "Deployed {{.service}}"
+body = "{{.service}} {{.version}} is live"
+level = "success"
+
+[templates.failure]
+title = "{{.job}} failed"
+body = "{{.job}} failed on {{.host}}: {{.reason}}"
+level = "error"
+url = "https://ci.example.com/jobs/{{.job}}"

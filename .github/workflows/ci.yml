@@ -90,6 +90,16 @@ jobs:
           sh scripts/test-report.sh test-report.json || status=1
           exit "$status"
 
+      # One real notification with the OS program of this runner (os
+      # feather, docs/os.md): it must accept the script, or refuse for a
+      # reason it states (no GUI or D-Bus session, notifications off). This
+      # checks the script on the real OS, not that anyone saw it.
+      - name: OS notification backend (one real notification)
+        shell: bash
+        env:
+          KJAK_OS_NOTIFY_NATIVE: "1"
+        run: go test -count=1 -v -run '^TestNativeBackend$' ./internal/feather/osnotify/
+
       - name: Keep the test report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

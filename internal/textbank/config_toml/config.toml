@@ -1,32 +1,180 @@
-# kjak configuration (https://github.com/magicdrive/kjak/blob/main/docs/configuration.md)
-#
-# Secrets are references, never plain values here:
-#   webhook_url = { env = "KJAK_DEV_SLACK_WEBHOOK" }
-#   webhook_url = { keychain = { service = "kjak", account = "dev_slack" } }
-#   webhook_url = { secret = "dev_slack.webhook_url" }
-# A secret reference names an entry of secrets.toml next to this file
-# (mode 0600; --secrets FILE or $KJAK_SECRETS choose another file):
-#   [dev_slack]
-#   webhook_url = "https://hooks.slack.com/services/..."
-# { literal = "..." } keeps the secret in this file and is deprecated
-# (kjak config migrate-secrets moves literals to a secrets file).
+## kjak configuration
+## https://github.com/magicdrive/kjak/blob/main/docs/configuration.md
+##
+## This file sends nothing yet: every example below is commented out.
+## Lines that start with "## " explain; lines that start with "# " are
+## settings: remove the "# " of the ones you want. The examples use different
+## names, so you can enable any of them together.
+## (`kjak config init --minimal` writes the same file without the examples.)
+##
+## ===== Quick start ======================================================
+##
+## 1. Enable a feather below (a destination), for example [feathers.desktop].
+## 2. kjak config validate
+## 3. kjak send --to desktop "Hello from kjak"
+##
+## Or let kjak write a feather for you:
+##   kjak feather add desktop --type os
+##
+## Secrets (webhook URLs, passwords, tokens) are never written here as
+## values: a setting names where kjak reads them, one of
+##   { env = "NAME" }                                   an environment variable
+##   { secret = "feather_name.key" }                    the secrets file (below)
+##   { keychain = { service = "kjak", account = "x" } } the OS keychain (macOS, Linux)
+## Tutorials of every feather: https://github.com/magicdrive/kjak/tree/main/docs/tutorials
 
 [defaults]
-# timeout = "10s"      # deadline of a whole send, retries included
+## The deadline of a whole send (retries included), the retries of a failed
+## delivery, how many feathers are sent to at once, the level of a message
+## that names none, and the feathers and groups of a send without --to.
+# timeout = "10s"
 # max_retries = 2
 # concurrency = 5
 # level = "info"
-# targets = ["development"]
+# targets = ["desktop"]
 
-# [feathers.dev_slack]
-# type = "slack"
-# webhook_url = { env = "KJAK_DEV_SLACK_WEBHOOK" }
+## ===== 1. OS notification (macOS, Windows, Linux) =========================
+## A notification on this machine's screen; no account, no secret.
+## macOS: osascript, in a GUI session; Windows: Windows PowerShell; Linux:
+## notify-send. https://github.com/magicdrive/kjak/blob/main/docs/tutorials/os.md
+
+# [feathers.desktop]
+# type = "os"
+
+## Only the levels you choose (any feather takes levels):
+# [feathers.desktop_alerts]
+# type = "os"
 # levels = ["warning", "error", "critical"]
 
-# [groups.development]
-# feathers = ["dev_slack"]
+## ===== 2. Discord ========================================================
+## A channel webhook (Server Settings, Integrations, Webhooks).
+## https://github.com/magicdrive/kjak/blob/main/docs/tutorials/discord.md
+
+# [feathers.discord]
+# type = "discord"
+# webhook_url = { env = "KJAK_DISCORD_WEBHOOK" }
+
+## With the name shown on the messages:
+# [feathers.discord_deploys]
+# type = "discord"
+# webhook_url = { secret = "discord_deploys.webhook_url" }
+# username = "deploy bot"
+
+## ===== 3. Slack ==========================================================
+## An incoming webhook of a Slack app (one channel per webhook).
+## https://github.com/magicdrive/kjak/blob/main/docs/tutorials/slack.md
+
+# [feathers.slack]
+# type = "slack"
+# webhook_url = { env = "KJAK_SLACK_WEBHOOK" }
+
+## ===== 4. Gmail ==========================================================
+## Gmail's SMTP server with an app password (a personal Google account with
+## 2-Step Verification). Never your Google password.
+## https://github.com/magicdrive/kjak/blob/main/docs/tutorials/gmail.md
+
+# [feathers.gmail]
+# type = "email"
+# host = "smtp.gmail.com"
+# port = 587
+# security = "starttls"
+# user = "you@gmail.com"
+# password = { secret = "gmail.password" }
+# from = "you@gmail.com"
+# to = ["you@gmail.com"]
+# subject_prefix = "[kjak]"
+
+## ===== 5. E-mail (any SMTP server) =========================================
+## security: "starttls" (default, port 587), "tls" (port 465) or "none"
+## (no user and password allowed then).
+## https://github.com/magicdrive/kjak/blob/main/docs/tutorials/smtp.md
+
+# [feathers.mail]
+# type = "email"
+# host = "smtp.example.com"
+# port = 587
+# user = "kjak@example.com"
+# password = { env = "KJAK_SMTP_PASSWORD" }
+# from = "kjak@example.com"
+# to = ["ops@example.com", "dev@example.com"]
+
+## ===== 6. HTTP API =========================================================
+## Any HTTP API: method, headers, authentication by reference, a JSON body
+## built from the message. https only; private and local addresses are
+## refused unless allowed. https://github.com/magicdrive/kjak/blob/main/docs/tutorials/http.md
+
+# [feathers.api]
+# type = "http"
+# url = "https://api.example.com/v1/notifications"
+# method = "POST"
+# headers = { "X-Source" = "kjak" }
+# idempotency_key = true
+# [feathers.api.auth]
+# type = "bearer"
+# token = { env = "KJAK_API_TOKEN" }
+# [feathers.api.body]
+# format = "json"
+# template = '{"title": "{{.title}}", "text": "{{.body}}", "severity": "{{.level}}"}'
+
+## ===== 7. Plugin ===========================================================
+## Your own executable kjak-feather-NAME on PATH, which reads the message as
+## JSON (protocol v1). It runs with your rights: kjak does not sandbox it.
+## https://github.com/magicdrive/kjak/blob/main/docs/tutorials/plugin.md
+
+# [feathers.pager]
+# type = "external"
+# plugin = "pager"
+# settings = { service = "backend" }
+# secrets = { routing_key = { secret = "pager.routing_key" } }
+
+## ===== 8. Secrets ==========================================================
+## { secret = "NAME.KEY" } reads secrets.toml next to this file (mode 0600,
+## or --secrets FILE, or $KJAK_SECRETS). That file looks like:
+##
+##   [gmail]
+##   password = "your app password"
+##
+##   [discord_deploys]
+##   webhook_url = "https://discord.com/api/webhooks/..."
+##
+## kjak config migrate-secrets moves secrets written in this file as values
+## (deprecated) to the secrets file. https://github.com/magicdrive/kjak/blob/main/docs/configuration.md
+
+## ===== 9. Groups ===========================================================
+## A group sends to several feathers at once: kjak send --to everywhere "...".
+## A member whose levels exclude the message is skipped.
+
+# [groups.everywhere]
+# feathers = ["desktop", "discord", "slack", "mail"]
+
+# [groups.alerts]
+# feathers = ["desktop_alerts", "gmail"]
+
+## ===== 10. Templates =======================================================
+## kjak send --template deploy --var service=api --var version=1.2.3
 
 # [templates.deploy]
 # title = "Deployed {{.service}}"
 # body = "{{.service}} {{.version}} is live"
 # level = "success"
+
+# [templates.failure]
+# title = "{{.job}} failed"
+# body = "{{.job}} failed on {{.host}}: {{.reason}}"
+# level = "error"
+# url = "https://ci.example.com/{{.job}}"
+
+## ===== 11. Advanced delivery ===============================================
+## Retries of an http feather (safe: GET, PUT, DELETE, and POST or PATCH with
+## an idempotency key), its own timeout per attempt, a private address the
+## project allows. https://github.com/magicdrive/kjak/blob/main/docs/http.md
+
+# [feathers.internal_api]
+# type = "http"
+# url = "https://alerts.internal.example/hook"
+# allow_hosts = ["alerts.internal.example"]
+# timeout = "3s"
+# success_status = ["2xx"]
+# [feathers.internal_api.retry]
+# policy = "safe"
+# max_attempts = 2

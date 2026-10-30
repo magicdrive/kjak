@@ -2,7 +2,7 @@ Usage:
   kjak config path [-o text|json]
   kjak config show [-o text|json]
   kjak config validate [--strict] [-o text|json]
-  kjak config init [--force]
+  kjak config init [--minimal] [--force]
   kjak config trust [--yes [--allow-user-secrets]]
   kjak config untrust
   kjak config migrate-secrets [--scope global|project] [--dry-run]
@@ -14,7 +14,9 @@ Usage:
   show      Show the effective configuration (literal secrets redacted)
   validate  Check the global and the project file (trusted or not) and the
             secrets files; --strict refuses literal secrets
-  init      Create the global configuration file
+  init      Create the global configuration file: no feather, and a
+            commented example of every feather (--minimal: without them);
+            --force replaces an existing file
   trust     Trust ./.kjak.toml with ./.kjak.secrets.toml: their canonical
             paths and the SHA-256 of their content. A changed file needs a
             new trust. The secrets the project reads from your own secrets

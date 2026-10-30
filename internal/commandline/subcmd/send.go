@@ -97,6 +97,7 @@ func Send(ctx context.Context, rt *Runtime, args []string) int {
 		Clock:      rt.Clock,
 		HTTPClient: httpClient,
 		LookupEnv:  rt.LookupEnv,
+		OSNotify:   rt.OSNotify,
 	}
 	targets := make([]delivery.Target, 0, len(plan.Entries))
 	for _, e := range plan.Entries {

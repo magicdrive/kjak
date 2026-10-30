@@ -113,9 +113,40 @@ your `PATH` (for `go install`: add `$(go env GOPATH)/bin`).
 
 ## 3. Your first notification
 
-This section uses Slack. For Discord or e-mail, get the webhook URL or SMTP
-settings from [section 5](#5-discord) or [section 6](#6-e-mail-smtp) and
-follow the same steps.
+### On this machine's screen
+
+The quickest first notification needs no account: an `os` feather, which
+shows the message as a notification of macOS, Windows or Linux.
+
+```sh
+kjak config init
+kjak feather add desktop --type os
+kjak send --to desktop --title "kjak" --level success "Hello from kjak"
+```
+
+```toml
+# ~/.config/kjak/config.toml after `kjak feather add desktop --type os` (its comments left out)
+[defaults]
+
+[feathers.desktop]
+type = "os"
+```
+
+`delivered` means that the OS accepted the notification. If you see none,
+check the notification settings (macOS: Script Editor; Windows: Windows
+PowerShell) and Focus or Do Not Disturb; over SSH, in a service or in CI
+there is no screen to show it on, and kjak says `unavailable`. The
+[OS notification tutorial](tutorials/os.md) has the details for each OS.
+
+Without a desktop (a server, CI), or to reach people elsewhere, use Slack,
+Discord or e-mail, as below.
+
+### With Slack
+
+The rest of this section uses Slack. For Discord or e-mail, get the webhook
+URL or SMTP settings from [section 5](#5-discord) or
+[section 6](#6-e-mail-smtp) and follow the same steps. Every feather has a
+[tutorial](tutorials/README.md).
 
 ### Step 1 — prepare the destination
 

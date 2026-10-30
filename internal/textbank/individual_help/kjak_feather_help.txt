@@ -1,7 +1,7 @@
 Usage:
   kjak feather list [-o text|json]
   kjak feather show NAME [-o text|json]
-  kjak feather add NAME --type slack|discord|email [options]
+  kjak feather add NAME --type os|slack|discord|email [options]
   kjak feather remove NAME [--scope global|project]
   kjak feather enable NAME [--scope global|project]
   kjak feather disable NAME [--scope global|project]
@@ -14,13 +14,14 @@ in the configuration file: see docs/http.md and docs/plugins.md. `plugins`
 lists the plugins of PATH; it runs none of them.
 
 Options of add:
-      --type TYPE              slack, discord or email (required)
+      --type TYPE              os, slack, discord or email (required)
   -s, --scope SCOPE            global (default) or project
       --force                  Replace a feather of the same name
       --disabled               Add it disabled
       --levels L[,L]           Accept only these levels (default: all)
 
-  The secret (webhook_url of slack and discord, password of email), one of:
+  The secret (webhook_url of slack and discord, password of email; an os
+  feather has none), one of:
       --secret-env VAR         Read it from the environment variable VAR
       --secret-keychain S/A    Read it from the OS keychain (service/account)
       --secret-ref NAME        Read it from a secrets file (kjak config --help)
@@ -48,6 +49,7 @@ Without --scope, remove, enable and disable change the file that defines the
 feather. A project file is changed only when it is trusted.
 
 Examples:
+  kjak feather add desktop --type os
   kjak feather add dev_slack --type slack --secret-env KJAK_DEV_SLACK_WEBHOOK
   kjak feather add ops_mail --type email --host smtp.example.com \
       --user kjak@example.com --secret-keychain kjak/ops_mail \

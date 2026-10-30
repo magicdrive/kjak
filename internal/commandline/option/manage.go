@@ -201,7 +201,7 @@ func ParseFeatherAdd(args []string) (*FeatherAddOption, error) {
 	}
 	opt.Name, opt.Levels, opt.MailTo = pos[0], levels, mailTo
 	if opt.Type == "" {
-		return nil, usageErr(cmd, "--type is required (slack, discord or email)")
+		return nil, usageErr(cmd, "--type is required (os, slack, discord or email)")
 	}
 	if n := opt.Secret.Count(); n > 1 {
 		return nil, usageErr(cmd, "--secret-env, --secret-keychain, --secret-ref and --secret-stdin exclude each other")
@@ -282,6 +282,8 @@ func ParseTemplateSet(args []string) (*TemplateSetOption, error) {
 type ConfigInitOption struct {
 	ConfigOption
 	Force bool
+	// Minimal: the file without the commented examples.
+	Minimal bool
 }
 
 func ParseConfigInit(args []string) (*ConfigInitOption, error) {
@@ -290,6 +292,7 @@ func ParseConfigInit(args []string) (*ConfigInitOption, error) {
 	fs := newFlagSet(cmd)
 	opt.register(fs)
 	fs.BoolVar(&opt.Force, "force", false, "")
+	fs.BoolVar(&opt.Minimal, "minimal", false, "")
 	pos, err := parse(cmd, fs, args)
 	if err != nil {
 		return nil, err

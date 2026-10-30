@@ -90,7 +90,31 @@ command -v kjak     # シェルが見つけた場所（PowerShell では Get-Com
 
 ## 3. 最初の通知を送る
 
-この節では Slack を例にします。Discord やメールを使う場合は、[5 章](#5-discord)または[6 章](#6-メールsmtp)で Webhook URL や SMTP の設定値を用意し、同じ手順で進めてください。
+### このマシンの画面に通知する
+
+アカウントなしで最も手早く試せるのは、`os` feather です。メッセージを macOS、Windows、Linux の通知として表示します。
+
+```sh
+kjak config init
+kjak feather add desktop --type os
+kjak send --to desktop --title "kjak" --level success "Hello from kjak"
+```
+
+```toml
+# `kjak feather add desktop --type os` の後の ~/.config/kjak/config.toml（コメントは省略）
+[defaults]
+
+[feathers.desktop]
+type = "os"
+```
+
+`delivered` は、OS が通知を受け付けたことを意味します。何も表示されない場合は、通知の設定（macOS は「スクリプトエディタ」、Windows は「Windows PowerShell」）と、集中モードや応答不可を確認してください。SSH、サービス、CI には表示する画面がなく、kjak は `unavailable` と報告します。OS ごとの詳細は [OS の通知のチュートリアル](tutorials/os_ja.md)を参照してください。
+
+デスクトップのない環境（サーバー、CI）や、別の場所にいる人に届けたい場合は、以下のように Slack、Discord、メールを使ってください。
+
+### Slack で通知する
+
+この節の残りでは Slack を例にします。Discord やメールを使う場合は、[5 章](#5-discord)または[6 章](#6-メールsmtp)で Webhook URL や SMTP の設定値を用意し、同じ手順で進めてください。すべての feather に[チュートリアル](tutorials/README_ja.md)があります。
 
 ### 手順 1 — 通知先を用意する
 

@@ -365,6 +365,21 @@ yours, local relays and private SMTP servers are common there, and they keep
 the proxy environment variables. Moving a feather to the global file is
 the explicit way to give it the network access of your own configuration.
 
+## OS notifications
+
+An `os` feather ([os.md](os.md)) shows the message on this machine's screen
+by running a program of the OS (`/usr/bin/osascript` on macOS, Windows
+PowerShell 5.1 by its path under `%SystemRoot%` on Windows, `notify-send`
+from `PATH` on Linux). The title and the body are data, never code: the
+script is a constant, and the text reaches it as JSON on standard input
+(macOS), base64 in an environment variable (Windows) or arguments after
+`--` (Linux). Control characters become spaces and the text is shortened.
+kjak registers nothing and changes no permission; the notification is shown
+under the identity of that program (Script Editor, Windows PowerShell). An
+`os` feather reads no secret and makes no connection, so a project's `os`
+feather can only show notifications on your screen. `confirmed` is the OS's
+acceptance, not proof that anyone saw it.
+
 ## External plugins
 
 A plugin (`type = "external"`) is an executable that runs with the user's

@@ -1,0 +1,16 @@
+# The desktop of this machine and a Discord channel, in one send:
+#   kjak send --to notify "Backup finished"
+# Tutorials: ../tutorials/os.md, ../tutorials/discord.md
+
+[defaults]
+targets = ["notify"]
+
+[feathers.desktop]
+type = "os"
+
+[feathers.discord]
+type = "discord"
+webhook_url = { env = "KJAK_DISCORD_WEBHOOK" }
+
+[groups.notify]
+feathers = ["desktop", "discord"]

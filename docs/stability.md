@@ -130,7 +130,7 @@ Options and arguments may come in any order; `--` ends the options.
 | `kjak config path` | `-o`/`--output`, `-c`/`--config`, `--secrets`, `--no-project` |
 | `kjak config show` | `-o`/`--output`, `-c`/`--config`, `--secrets`, `--no-project` |
 | `kjak config validate` | `--strict`, `-o`/`--output`, `-c`/`--config`, `--secrets`, `--no-project` |
-| `kjak config init` | `--force`, `-c`/`--config`, `--secrets`, `--no-project` |
+| `kjak config init` | `--force`, `--minimal`, `-c`/`--config`, `--secrets`, `--no-project` |
 | `kjak config trust` | `-y`/`--yes`, `--allow-user-secrets`, `-c`/`--config`, `--secrets`, `--no-project` |
 | `kjak config untrust` | `-y`/`--yes`, `-c`/`--config`, `--secrets`, `--no-project` |
 | `kjak config migrate-secrets` | `-s`/`--scope`, `--secrets-out`, `--config-out`, `--dry-run`, `-c`/`--config`, `--secrets`, `--no-project` |
@@ -351,6 +351,8 @@ or a delivery failed.
 | `canceled` | interrupted (SIGINT, SIGTERM, SIGHUP; a SIGHUP ignored when kjak started, as with `nohup`, stays ignored) |
 | `protocol` | an unexpected answer (a redirect, a malformed reply, a plugin's broken response) |
 | `blocked` | kjak's own address policy refused the connection or a redirect: nothing was sent |
+| `unsupported` | an `os` feather on a system kjak has no OS notifications for (since 1.1.0) |
+| `unavailable` | an `os` feather where the OS cannot show a notification: no GUI or desktop session, the OS program missing or failing (since 1.1.0) |
 | `internal` | a failure inside kjak (a bug) |
 
 An attempt interrupted or ended by the deadline **after its request was
@@ -474,6 +476,7 @@ A credential is an inline table with exactly one source:
 <!-- contract: feather-types -->
 | type | sends to |
 |---|---|
+| `os` | a notification of the operating system kjak runs on (since 1.1.0; [os.md](os.md)) |
 | `slack` | a Slack incoming webhook |
 | `discord` | a Discord webhook |
 | `email` | an SMTP server |
@@ -481,12 +484,12 @@ A credential is an inline table with exactly one source:
 | `external` | a plugin, `kjak-feather-<plugin>` ([plugins.md](plugins.md)) |
 
 These names are refused with an explanation (a configuration error, never a
-silent no-op), and reserved for an OS-native notification feather:
+silent no-op) that names `os`, the type of OS notifications (up to 1.0, `os`
+was reserved too):
 
 <!-- contract: reserved-feather-types -->
 | type |
 |---|
-| `os` |
 | `native` |
 | `macos` |
 | `linux` |

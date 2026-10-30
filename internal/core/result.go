@@ -50,6 +50,8 @@ const (
 	ErrCodeCanceled    ErrorCode = "canceled"     // interrupted (SIGINT)
 	ErrCodeProtocol    ErrorCode = "protocol"     // an unexpected answer (redirect, malformed reply)
 	ErrCodeBlocked     ErrorCode = "blocked"      // kjak's own policy refused the request before it was sent (http: an address or a redirect)
+	ErrCodeUnsupported ErrorCode = "unsupported"  // os feather: kjak has no OS notifications on this system
+	ErrCodeUnavailable ErrorCode = "unavailable"  // os feather: no GUI or desktop session, or the OS program is missing or failed
 	ErrCodeInternal    ErrorCode = "internal"
 )
 

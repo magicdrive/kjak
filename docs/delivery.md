@@ -139,6 +139,18 @@ MiB of replies.
 
 One refused recipient (RCPT) refuses the whole message: no DATA is sent.
 
+### OS notifications
+
+An `os` feather runs a program of the OS once ([os.md](os.md)):
+
+| outcome | acceptance | retryable |
+|---|---|---|
+| the program accepted the notification | confirmed (not "seen") | — |
+| no OS notifications on this system | rejected (`unsupported`) | no |
+| no GUI or D-Bus session, the program missing or failing | rejected (`unavailable`) | no |
+| notifications of the program turned off (Windows) | rejected (`rejected`) | no |
+| the deadline or SIGINT while the program ran | **unknown** | never |
+
 ## Retries and backoff
 
 - At most `max_retries` (default 2) retries after the first attempt, only of

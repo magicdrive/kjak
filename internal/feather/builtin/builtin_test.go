@@ -61,7 +61,11 @@ func TestBuildPreflightErrors(t *testing.T) {
 	if err == nil || strings.Contains(err.Error(), "just-text-secret") {
 		t.Fatalf("not a URL: %v", err)
 	}
-	if _, err := Build(context.Background(), "o", configure.FeatherConfig{Type: "os"}, d); err == nil || !strings.Contains(err.Error(), "not supported") {
+	if _, err := Build(context.Background(), "o", configure.FeatherConfig{Type: "native"}, d); err == nil || !strings.Contains(err.Error(), `type = "os"`) {
+		t.Fatalf("native: %v", err)
+	}
+	// an os feather needs nothing to resolve; the backend is the OS's
+	if f, err := Build(context.Background(), "o", configure.FeatherConfig{Type: "os"}, d); err != nil || f == nil {
 		t.Fatalf("os: %v", err)
 	}
 	_, err = Build(context.Background(), "k", configure.FeatherConfig{Type: "slack", WebhookURL: &credential.Ref{Keychain: &credential.KeychainRef{Service: "s", Account: "a"}}}, d)

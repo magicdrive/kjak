@@ -1,0 +1,9 @@
+# A notification on this machine's screen (macOS, Windows, Linux).
+# Tutorial: ../tutorials/os.md
+#   kjak send --to desktop --title "Build complete" --level success "All tests passed"
+
+[defaults]
+targets = ["desktop"]
+
+[feathers.desktop]
+type = "os"

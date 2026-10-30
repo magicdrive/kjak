@@ -1,0 +1,11 @@
+## kjak configuration (minimal)
+## https://github.com/magicdrive/kjak/blob/main/docs/configuration.md
+##
+## Add a feather, then send:
+##   kjak feather add desktop --type os
+##   kjak send --to desktop "Hello from kjak"
+## `kjak config init` (without --minimal) writes this file with a commented
+## example of every feather; tutorials:
+## https://github.com/magicdrive/kjak/tree/main/docs/tutorials
+
+[defaults]

@@ -1,0 +1,10 @@
+# A Discord channel webhook. The webhook URL is a secret: here it is read from
+# the environment variable KJAK_DISCORD_WEBHOOK.
+# Tutorial: ../tutorials/discord.md
+#   export KJAK_DISCORD_WEBHOOK='https://discord.com/api/webhooks/...'
+#   kjak send --to discord "Deployed"
+
+[feathers.discord]
+type = "discord"
+webhook_url = { env = "KJAK_DISCORD_WEBHOOK" }
+username = "kjak"

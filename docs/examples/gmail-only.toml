@@ -1,0 +1,17 @@
+# Gmail's SMTP server with an app password of a personal Google account (with
+# 2-Step Verification). Put the app password in secrets.toml, never your
+# Google password:
+#   [gmail]
+#   password = "the 16-character app password"
+# Tutorial: ../tutorials/gmail.md
+
+[feathers.gmail]
+type = "email"
+host = "smtp.gmail.com"
+port = 587
+security = "starttls"
+user = "you@gmail.com"
+password = { secret = "gmail.password" }
+from = "you@gmail.com"
+to = ["you@gmail.com"]
+subject_prefix = "[kjak]"

@@ -33,7 +33,7 @@ kjak config path        # kjak が使うファイルと、./.kjak.toml の状態
 kjak config init        # グローバル設定ファイルを作成（--force で上書き）
 ```
 
-`config init` はコメント付きのひな形を書き出します。グローバル設定ファイルがなくてもエラーにはならず、kjak は組み込みの既定値で動作します。
+`config init` は、feather のない設定と、すべての feather、group、template、既定値のコメント付きの設定例（それぞれチュートリアルへのリンク付き）を書き出します。使いたい行の先頭の `# ` を外してください（`## ` で始まる行は説明です）。`config init --minimal` は、同じ設定を設定例なしで書き出します。どちらも、既存のファイルは `--force` がない限り上書きしません。グローバル設定ファイルがなくてもエラーにはならず、kjak は組み込みの既定値で動作します。
 
 **優先順位**：プロジェクト設定をグローバル設定の上に重ねます。
 
@@ -94,7 +94,16 @@ targets = ["development"]
 
 ## 4. Feather
 
-feather は1つの通知先です。Slack の Incoming Webhook、Discord の Webhook、SMTP サーバーと宛先の組、任意の HTTP API、またはプラグインです。`kjak feather types` で種類を一覧できます。
+feather は1つの通知先です。このマシンの OS の通知、Slack の Incoming Webhook、Discord の Webhook、SMTP サーバーと宛先の組、任意の HTTP API、またはプラグインです。`kjak feather types` で種類を一覧できます。種類ごとの[チュートリアル](tutorials/README_ja.md)と、完全な[設定例](examples/README.md)があります。
+
+### OS の通知（`type = "os"`）
+
+v1.1.0 から。kjak を動かしているマシンの画面に通知を表示します（macOS、Windows、Linux）。共通のキー（`enabled`、`levels`）以外のキーはありません。仕様は [os.md](os.md)（英語）を参照してください。
+
+```toml
+[feathers.desktop]
+type = "os"
+```
 
 **名前**（feather、group、テンプレート共通）：英数字、`_`、`.`、`-`。最大 64 文字で、英数字で始まる必要があります。同じ名前を feather と group の両方に使うことはできません。
 
@@ -560,4 +569,6 @@ level = "success"
 - ロックを取ります。`<file>.lock` に OS の排他ロックをかけ、別の kjak が書き換え中なら待たずに失敗します（`the configuration is being changed by another kjak process`）。ロックはプロセスの終了時に OS が解放するので、異常終了した kjak が他をブロックすることはありません。`.lock` ファイル自体は残りますが、害はありません。`kjak send` は読み込むだけで、ロックを取りません。
 - 変更を検出します。書き込み中に別の手段（ロックを無視するエディターなど）でファイルが変更された場合、kjak は中止し、その変更には手を付けません。
 
-kjak は独自のレイアウトで書き出すため、**コメントとキーの順序は保持されません**。残したい場合は、ファイルを直接編集してください。
+新しい feather、group、template を**追加するだけ**の変更（新しい名前の `feather add`、`group set`、`template set`）は、ファイルをそのまま（コメントとレイアウトも）残し、新しいテーブルを末尾に追記します（v1.1.0 から）。追記したファイルを読み直した結果が書き直した場合と完全に同じときだけ、追記を使います。それ以外は書き直します。
+
+それ以外の変更（`--force`、`remove`、`enable`、`disable`、既存の group への `group set` など）は独自のレイアウトで書き直すため、**コメントとキーの順序は保持されません**。ファイルにコメントがあった場合は、stderr にその旨を表示します（`kjak: note: FILE was rewritten without its comments`）。残したい場合は、ファイルを直接編集してください。

@@ -1,0 +1,10 @@
+# A Slack incoming webhook (one channel per webhook), read from the secrets
+# file (secrets.toml next to this file):
+#   [slack]
+#   webhook_url = "https://hooks.slack.com/services/..."
+# Tutorial: ../tutorials/slack.md
+
+[feathers.slack]
+type = "slack"
+webhook_url = { secret = "slack.webhook_url" }
+levels = ["warning", "error", "critical"]

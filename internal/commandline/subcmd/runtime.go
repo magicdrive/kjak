@@ -18,6 +18,7 @@ import (
 	"github.com/magicdrive/kjak/internal/core"
 	"github.com/magicdrive/kjak/internal/credential"
 	"github.com/magicdrive/kjak/internal/delivery"
+	"github.com/magicdrive/kjak/internal/feather/osnotify"
 	"github.com/magicdrive/kjak/internal/output"
 	"github.com/magicdrive/kjak/internal/routing"
 	"github.com/magicdrive/kjak/internal/template"
@@ -45,6 +46,9 @@ type Runtime struct {
 	Clock      clock.Clock
 	HTTPClient *http.Client // nil: the webhook feathers' own
 	Backoff    delivery.Backoff
+	// OSNotify replaces the OS backend of os feathers (tests); nil: the
+	// backend of this OS.
+	OSNotify osnotify.Backend
 
 	// jsonErrors: the command asked for --output json, so its errors are
 	// JSON documents on stdout too; jsonReport: in the shape of a send report.
@@ -147,6 +151,14 @@ func errorCode(err error) string {
 }
 
 // help prints a help text and returns ExitOK.
+// commentsNote says when a change rewrote a file without its comments (kjak
+// keeps them when a change only adds a feather, a group or a template).
+func (rt *Runtime) commentsNote(res configure.UpdateResult) {
+	if res.CommentsDropped {
+		fmt.Fprintf(rt.Stderr, "kjak: note: %s was rewritten without its comments: only adding a new feather, group or template keeps them\n", output.EscapeControls(res.Path))
+	}
+}
+
 func (rt *Runtime) help(text string) int {
 	fmt.Fprint(rt.Stdout, text)
 	return ExitOK

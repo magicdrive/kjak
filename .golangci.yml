@@ -67,6 +67,14 @@ linters:
       - path: internal/credential/keychain\.go
         linters: [gosec]
         text: "G204:"
+      # G204: the os feather runs a program of the OS that backends.go chose
+      # from fixed paths (/bin/launchctl, /usr/bin/osascript, powershell.exe
+      # under %SystemRoot%) or notify-send on PATH, with constant arguments;
+      # the notification's text is data on stdin, in an environment
+      # variable or after "--" (docs/os.md).
+      - path: internal/feather/osnotify/run\.go
+        linters: [gosec]
+        text: "G204:"
 
       # G103 (unsafe): fcntl(F_GETPATH) on macOS takes the address of the
       # buffer it fills; the buffer is a heap slice kept alive across the

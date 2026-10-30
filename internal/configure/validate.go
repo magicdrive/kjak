@@ -168,6 +168,13 @@ func featherProblems(fc FeatherConfig) []string {
 		add("%s feathers take no timeout or retry of their own (use [defaults])", fc.Type)
 	}
 	switch fc.Type {
+	case TypeOS:
+		if webhookFields || emailFields {
+			add("os feathers take no webhook_url, username or email settings (they show the message on this machine)")
+		}
+		if len(fc.AllowNetworks) > 0 || len(fc.AllowHosts) > 0 {
+			add("os feathers take no allow_networks or allow_hosts (they make no connection)")
+		}
 	case TypeExternal:
 		if webhookFields || emailFields {
 			add("external feathers take no webhook_url, username or email settings (give the plugin settings and secrets)")

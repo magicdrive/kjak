@@ -21,20 +21,21 @@ const (
 	// TypeExternal runs a plugin: the executable kjak-feather-<plugin>
 	// (feather/external, docs/plugins.md).
 	TypeExternal = "external"
+	// TypeOS is a notification of the operating system kjak runs on
+	// (feather/osnotify, docs/os.md).
+	TypeOS = "os"
 )
 
-// FeatherTypes are the types kjak implements. OS-native notifications are a
-// future feather and are refused (UnsupportedFeatherTypes).
-var FeatherTypes = []string{TypeSlack, TypeDiscord, TypeEmail, TypeHTTP, TypeExternal}
+// FeatherTypes are the types kjak implements.
+var FeatherTypes = []string{TypeOS, TypeSlack, TypeDiscord, TypeEmail, TypeHTTP, TypeExternal}
 
-// UnsupportedFeatherTypes are known but not implemented; a feather
+// UnsupportedFeatherTypes are names kept for no type of their own; a feather
 // of one of them is a configuration error, never a silent no-op.
 var UnsupportedFeatherTypes = map[string]string{
-	"os":      "OS-native notifications are not supported",
-	"native":  "OS-native notifications are not supported",
-	"macos":   "OS-native notifications are not supported",
-	"linux":   "OS-native notifications are not supported",
-	"windows": "OS-native notifications are not supported",
+	"native":  `OS notifications are type = "os"`,
+	"macos":   `OS notifications are type = "os" (on every OS)`,
+	"linux":   `OS notifications are type = "os" (on every OS)`,
+	"windows": `OS notifications are type = "os" (on every OS)`,
 }
 
 // Defaults of the engine (spec: timeout 10s, 2 retries, 5 at a time).

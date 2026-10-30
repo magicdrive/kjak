@@ -126,7 +126,7 @@ partial: 1 delivered, 2 failed (1 with unknown acceptance), 1 skipped
 | `results[]` | one per target, in the order of the targets |
 | `status` | `delivered`, `failed`, `skipped`, `planned` (dry run) |
 | `acceptance` | `confirmed`, `rejected`, `unknown`, `none` (no attempt) |
-| `error.code` | `rejected`, `rate_limited`, `server_error`, `network`, `ambiguous`, `deadline`, `canceled`, `protocol`, `blocked` (an http feather's address policy refused the address or a redirect: nothing was sent), `internal` |
+| `error.code` | `rejected`, `rate_limited`, `server_error`, `network`, `ambiguous`, `deadline`, `canceled`, `protocol`, `blocked` (an http feather's address policy refused the address or a redirect: nothing was sent), `unsupported` and `unavailable` (an `os` feather on a system without OS notifications, or where none can be shown: [os.md](os.md)), `internal` |
 | `skipped.reason` | `disabled`, `level_filter` |
 
 Within schema version 1, fields are only added, never removed or renamed.
@@ -271,7 +271,7 @@ kjak config path [-o json]      # the files, how each was chosen, trust and secr
 kjak config show [-o json]      # the effective configuration, literal secrets redacted
 kjak config validate [--strict] [-o json]
                                 # both files, whether or not the project file is trusted, and the secrets files
-kjak config init [--force]      # create the global file
+kjak config init [--minimal] [--force]   # create the global file (with commented examples; --minimal without)
 kjak config trust [--yes [--allow-user-secrets]]
                                 # trust ./.kjak.toml and ./.kjak.secrets.toml (asks on a terminal)
 kjak config untrust

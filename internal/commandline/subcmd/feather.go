@@ -281,6 +281,13 @@ func featherAdd(ctx context.Context, rt *Runtime, args []string) int {
 		fmt.Fprintln(rt.Stderr, "kjak: warning: --secret-stdin keeps the secret in the configuration file as a literal (deprecated); prefer a secrets file and --secret-ref NAME")
 	}
 	switch opt.Type {
+	case configure.TypeOS:
+		if ref != nil {
+			return rt.fail(ctx, withCode(output.CodeUsage, fmt.Errorf("feather add: an os feather takes no secret (it shows the message on this machine)")))
+		}
+		if opt.Username != "" || opt.Host != "" || opt.Port != 0 || opt.Security != "" || opt.User != "" || opt.From != "" || len(opt.MailTo) > 0 || opt.SubjectPrefix != "" {
+			return rt.fail(ctx, withCode(output.CodeUsage, fmt.Errorf("feather add: an os feather takes only --levels, --disabled, --scope and --force")))
+		}
 	case configure.TypeSlack, configure.TypeDiscord:
 		fc.WebhookURL = ref
 		fc.Username = opt.Username
@@ -300,7 +307,7 @@ func featherAdd(ctx context.Context, rt *Runtime, args []string) int {
 	if opt.Scope != "" {
 		scope = configure.Scope(opt.Scope)
 	}
-	err = configure.Update(p, scope, rt.Clock.Now(), func(f *configure.File) error {
+	res, err := configure.UpdateFile(p, scope, rt.Clock.Now(), func(f *configure.File) error {
 		if _, exists := f.Feathers[opt.Name]; exists && !opt.Force {
 			return fmt.Errorf("feather %q exists in the %s configuration (--force replaces it)", opt.Name, scope)
 		}
@@ -316,6 +323,7 @@ func featherAdd(ctx context.Context, rt *Runtime, args []string) int {
 	if err != nil {
 		return rt.fail(ctx, err)
 	}
+	rt.commentsNote(res)
 	fmt.Fprintf(rt.Stdout, "added feather %q (%s) to the %s configuration\n", opt.Name, opt.Type, scope)
 	return ExitOK
 }
@@ -384,9 +392,11 @@ func changeEntry(ctx context.Context, rt *Runtime, opt *option.ScopedNameOption,
 	if err != nil {
 		return rt.fail(ctx, err)
 	}
-	if err := configure.Update(p, scope, rt.Clock.Now(), fn); err != nil {
+	res, err := configure.UpdateFile(p, scope, rt.Clock.Now(), fn)
+	if err != nil {
 		return rt.fail(ctx, err)
 	}
+	rt.commentsNote(res)
 	fmt.Fprintf(rt.Stdout, done, opt.Name, scope)
 	return ExitOK
 }
@@ -399,13 +409,12 @@ func featherTypes(ctx context.Context, rt *Runtime, args []string) int {
 		}
 		return rt.fail(ctx, &option.UsageError{Command: "feather types", Err: fmt.Errorf("unexpected argument %q", args[0])})
 	}
+	fmt.Fprintln(rt.Stdout, "os       A notification of this machine's OS: macOS, Windows, Linux (no secret)")
 	fmt.Fprintln(rt.Stdout, "slack    Slack incoming webhook (secret: webhook_url)")
 	fmt.Fprintln(rt.Stdout, "discord  Discord webhook (secret: webhook_url)")
 	fmt.Fprintln(rt.Stdout, "email    E-mail over SMTP (secret: password)")
 	fmt.Fprintln(rt.Stdout, "http     Any HTTP API: method, headers, auth, body (secrets: url_secret, auth); configured in the file")
 	fmt.Fprintln(rt.Stdout, "external A plugin, the executable kjak-feather-<plugin> on PATH (secrets: the ones it is given); configured in the file")
-	fmt.Fprintln(rt.Stdout, "")
-	fmt.Fprintln(rt.Stdout, "Not supported yet: OS-native notifications (a future feather).")
 	return ExitOK
 }
 

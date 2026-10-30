@@ -565,16 +565,16 @@ func TestCompatV004ProjectTrust(t *testing.T) {
 	}
 }
 
-// What v0.0.4 refused is still refused: an OS notification feather (not
-// implemented), a webhook URL in clear text to a remote host, an e-mail
-// password in clear text.
+// What v0.0.4 refused is still refused: the other names of an OS
+// notification feather (since v1.1.0 it is type = "os"), a webhook URL in
+// clear text to a remote host, an e-mail password in clear text.
 func TestCompatV004StillRefused(t *testing.T) {
 	e := newCompatEnv(t)
 	for name, feather := range map[string]string{
-		"os notification": "[feathers.desk]\ntype = \"os\"\n",
-		"macos":           "[feathers.desk]\ntype = \"macos\"\n",
-		"http webhook":    "[feathers.desk]\ntype = \"slack\"\nwebhook_url = { literal = \"http://hooks.example.com/x\" }\n",
-		"clear password":  "[feathers.desk]\ntype = \"email\"\nhost = \"smtp.example.com\"\nsecurity = \"none\"\nuser = \"u\"\npassword = { env = \"P\" }\nfrom = \"a@example.com\"\nto = [\"b@example.com\"]\n",
+		"native":         "[feathers.desk]\ntype = \"native\"\n",
+		"macos":          "[feathers.desk]\ntype = \"macos\"\n",
+		"http webhook":   "[feathers.desk]\ntype = \"slack\"\nwebhook_url = { literal = \"http://hooks.example.com/x\" }\n",
+		"clear password": "[feathers.desk]\ntype = \"email\"\nhost = \"smtp.example.com\"\nsecurity = \"none\"\nuser = \"u\"\npassword = { env = \"P\" }\nfrom = \"a@example.com\"\nto = [\"b@example.com\"]\n",
 	} {
 		if err := os.WriteFile(filepath.Join(e.xdg, "config.toml"), []byte(feather), 0o600); err != nil {
 			t.Fatal(err)

@@ -92,3 +92,11 @@ config-nonblock	internal/configure/open_unix.go	./internal/commandline	os.O_RDON
 template-loop	internal/template/template.go	./internal/template	if err := problem(tpl); err != nil {	if err := problem(tpl); false && err != nil {	a message template can loop without end (range, recursion)
 ssrf-local-nat64	internal/feather/httpapi/guard.go	./internal/feather/httpapi	return localNAT64(b)	return CatTunnel	a local-use NAT64 address of the metadata endpoint can be allowed
 ssrf-azure-wireserver	internal/feather/httpapi/guard.go	./internal/feather/httpapi	netip.MustParseAddr("168.63.129.16"),	netip.MustParseAddr("0.0.0.0"),	the Azure WireServer is a public address
+osnotify-linux-dashdash	internal/feather/osnotify/backends.go	./internal/feather/osnotify	"--urgency=" + urgency(n.Level), "--", n.Title	"--urgency=" + urgency(n.Level), n.Title	Linux: the title is passed without -- (a title starting with - would be an option)
+osnotify-darwin-aqua	internal/feather/osnotify/backends.go	./internal/feather/osnotify	s != "Aqua"	s == ""	macOS: no GUI session check (osascript runs over SSH and reports success)
+osnotify-windows-disabled	internal/feather/osnotify/backends.go	./internal/feather/osnotify	ee.ExitCode() == 3	ee.ExitCode() == 4	Windows: notifications turned off are not reported as rejected
+osnotify-deliver-unknown	internal/feather/osnotify/osnotify.go	./internal/feather/osnotify		case ctx.Err() != nil:
+		case false:
+	an interrupted OS program is reported as rejected, not unknown
+osnotify-control-chars	internal/feather/osnotify/osnotify.go	./internal/feather/osnotify	if unicode.IsControl(r) ||	if unicode.IsControl(r) && false ||	control characters reach the OS program
+config-append-only-check	internal/configure/keep.go	./internal/configure ./internal/commandline	|| !bytes.Equal(want, got)	|| false && !bytes.Equal(want, got)	the appended file is used even when it does not read back as the rewrite

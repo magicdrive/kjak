@@ -19,6 +19,7 @@ import (
 	"github.com/magicdrive/kjak/internal/feather/email"
 	"github.com/magicdrive/kjak/internal/feather/external"
 	"github.com/magicdrive/kjak/internal/feather/httpapi"
+	"github.com/magicdrive/kjak/internal/feather/osnotify"
 	"github.com/magicdrive/kjak/internal/feather/slack"
 	"github.com/magicdrive/kjak/internal/feather/webhook"
 )
@@ -37,6 +38,8 @@ type Deps struct {
 	// variables a plugin may see); GOOS names the plugin file.
 	LookupEnv func(string) (string, bool)
 	GOOS      string
+	// OSNotify replaces the backend of os feathers (tests).
+	OSNotify osnotify.Backend
 	// ProjectTrust is set for a feather of the project configuration: its
 	// plugin must be the executable the trust recorded.
 	ProjectTrust *configure.TrustEntry
@@ -139,6 +142,16 @@ func Build(ctx context.Context, name string, fc configure.FeatherConfig, d Deps)
 		return buildHTTP(name, fc, d, resolve)
 	case configure.TypeExternal:
 		return buildExternal(name, fc, d, resolve)
+	case configure.TypeOS:
+		backend := d.OSNotify
+		if backend == nil {
+			goos := d.GOOS
+			if goos == "" {
+				goos = runtime.GOOS
+			}
+			backend = osnotify.New(goos, osnotify.SystemEnv())
+		}
+		return &osnotify.Feather{Name: name, Backend: backend}, nil
 	}
 	return nil, fmt.Errorf("feather %q: unknown type %q", name, fc.Type)
 }

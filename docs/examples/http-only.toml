@@ -1,0 +1,18 @@
+# Any HTTP API: a JSON body built from the message, a bearer token read from
+# the environment, retries only with an idempotency key (POST).
+# Tutorial: ../tutorials/http.md   Reference: ../http.md
+
+[feathers.api]
+type = "http"
+url = "https://api.example.com/v1/notifications"
+method = "POST"
+idempotency_key = true
+headers = { "X-Source" = "kjak" }
+
+[feathers.api.auth]
+type = "bearer"
+token = { env = "KJAK_API_TOKEN" }
+
+[feathers.api.body]
+format = "json"
+template = '{"title": "{{.title}}", "text": "{{.body}}", "severity": "{{.level}}", "link": "{{.url}}"}'

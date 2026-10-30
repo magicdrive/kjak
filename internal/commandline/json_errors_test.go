@@ -50,7 +50,7 @@ func TestJSONErrorContract(t *testing.T) {
 	}{
 		{name: "invalid config", global: "[feathers.a\n", args: []string{"send", "--to", "a", "x"}, code: "config"},
 		{name: "untrusted project", global: featherConfig("a", "slack", p.URL), proj: "[templates.t]\nbody = \"x\"\n", args: []string{"send", "--to", "a", "x"}, code: "untrusted_project"},
-		{name: "invalid feather", global: "[feathers.a]\ntype = \"os\"\n", args: []string{"send", "--to", "a", "x"}, code: "config"},
+		{name: "invalid feather", global: "[feathers.a]\ntype = \"native\"\n", args: []string{"send", "--to", "a", "x"}, code: "config"},
 		{name: "unknown target", global: featherConfig("a", "slack", p.URL), args: []string{"send", "--to", "ghost", "x"}, code: "routing"},
 		{name: "disabled direct feather", global: "[feathers.a]\ntype = \"slack\"\nenabled = false\nwebhook_url = { literal = \"" + p.URL + "\" }\n", args: []string{"send", "--to", "a", "x"}, code: "routing"},
 		{name: "credential missing", global: "[feathers.a]\ntype = \"slack\"\nwebhook_url = { env = \"NOT_SET\" }\n", args: []string{"send", "--to", "a", "x"}, code: "credential"},

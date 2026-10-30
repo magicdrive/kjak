@@ -504,8 +504,15 @@ func TestManagementCommands(t *testing.T) {
 	if r := e.run("feather", "add", "dev_slack", "--type", "slack", "--secret-env", "X"); r.code != 2 {
 		t.Fatal("add replaced without --force")
 	}
-	if r := e.run("feather", "add", "nat", "--type", "os"); r.code != 2 || !strings.Contains(r.stderr, "not supported") {
-		t.Fatalf("os feather: %+v", r)
+	// an os feather takes no secret; the other names of OS notifications
+	// are refused with the type to use
+	e.must("feather", "add", "desk", "--type", "os")
+	e.must("feather", "remove", "desk")
+	if r := e.run("feather", "add", "desk2", "--type", "os", "--secret-env", "X"); r.code != 2 || !strings.Contains(r.stderr, "no secret") {
+		t.Fatalf("os feather with a secret: %+v", r)
+	}
+	if r := e.run("feather", "add", "nat", "--type", "macos"); r.code != 2 || !strings.Contains(r.stderr, `type = "os"`) {
+		t.Fatalf("macos feather: %+v", r)
 	}
 	if r := e.run("feather", "add", "x", "--type", "slack"); r.code != 2 {
 		t.Fatal("slack without secret accepted")
@@ -564,7 +571,7 @@ func TestManagementCommands(t *testing.T) {
 	if r := e.must("feather", "list"); strings.Contains(r.stdout, "dev_slack") {
 		t.Fatal(r.stdout)
 	}
-	if r := e.must("feather", "types"); !strings.Contains(r.stdout, "OS-native notifications") {
+	if r := e.must("feather", "types"); !strings.HasPrefix(r.stdout, "os ") {
 		t.Fatal(r.stdout)
 	}
 }
