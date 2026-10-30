@@ -29,7 +29,18 @@ sha256sum -c kjak_checksums.txt --ignore-missing
 gh attestation verify kjak_1.0.0_linux_amd64.tar.gz --repo magicdrive/kjak
 ```
 
-ソースから（Go 1.27）：`go install github.com/magicdrive/kjak@latest`
+ソースから（Go 1.27）：`git clone https://github.com/magicdrive/kjak.git && cd kjak && make build`（バイナリは `build/kjak`）
+
+macOS と Linux（amd64、arm64）では、インストールスクリプトも使えます。ダウンロードして、必要なら中身を確認してから `sh` で実行します。
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/magicdrive/kjak/main/install.sh
+sh install.sh                                  # 最新の安定版を ~/.local/bin に
+sh install.sh --version v0.0.3                 # 版を指定（古い版も可、v0.0.2 以降）
+sh install.sh --dir "$HOME/bin"                # インストール先を指定
+```
+
+アーカイブはリリースの `kjak_checksums.txt` の SHA-256 で検証してから展開し、取り出すのは `kjak` だけです。`sudo` は使わず、`PATH` も変更しません。Homebrew の管理するディレクトリには入れません（Homebrew の kjak は `brew upgrade kjak` で更新してください）。Windows では動きません（WSL の中では Linux と同じ手順）。オプション、検証、注意点の詳細は [README](README.md#install-script-macos-and-linux-amd64-and-arm64)（英語）を参照してください。
 
 対応プラットフォーム：darwin/arm64、darwin/amd64、linux/arm64、linux/amd64、windows/amd64
 

@@ -126,8 +126,14 @@ golangci-lint:
 # The static analysis of CI: staticcheck, golangci-lint, plus shellcheck of
 # the scripts
 .PHONY: lint
-lint: staticcheck golangci-lint
+lint: staticcheck golangci-lint shellcheck
 	@shellcheck -s sh scripts/*.sh
+
+# Check install.sh (shellcheck must be installed)
+.PHONY: shellcheck
+shellcheck:
+	@sh -n install.sh
+	@shellcheck -s sh install.sh
 
 # Lint the GitHub Actions workflows with the pinned actionlint
 .PHONY: actionlint
@@ -338,6 +344,7 @@ help:
 	@echo "  make staticcheck       - Run the pinned staticcheck"
 	@echo "  make golangci-lint     - Run the pinned golangci-lint for linux, darwin and windows"
 	@echo "  make lint              - Run staticcheck, golangci-lint and shellcheck"
+	@echo "  make shellcheck        - Check install.sh with shellcheck"
 	@echo "  make vulncheck         - Run the pinned govulncheck"
 	@echo "  make actionlint        - Lint the workflows with the pinned actionlint"
 	@echo "  make renovate-check    - Validate renovate.json with the pinned Renovate"
