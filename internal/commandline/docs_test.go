@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -144,6 +145,22 @@ func isWholeConfig(p string) bool {
 	return strings.Contains(p, "tutorials") || strings.Contains(p, "getting-started") || strings.Contains(p, "README")
 }
 
+// posixPathOnWindows: the documents write paths the POSIX way
+// (/home/me/...), which are not absolute on Windows; that is the only
+// refusal tolerated there.
+func posixPathOnWindows(err error) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+	for _, line := range strings.Split(err.Error(), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && line != "invalid configuration:" && !strings.HasSuffix(line, "must be absolute") {
+			return false
+		}
+	}
+	return true
+}
+
 // TestDocsConfigurations: every example file, and every TOML block of the
 // tutorials, the getting started guides and the READMEs, is a whole valid
 // configuration (or, when its first line says so, a valid secrets file);
@@ -178,7 +195,7 @@ func TestDocsConfigurations(t *testing.T) {
 			t.Errorf("%s: %v\n%s", where, err, doc)
 			return
 		}
-		if err := configure.Validate(f); err != nil {
+		if err := configure.Validate(f); err != nil && !posixPathOnWindows(err) {
 			t.Errorf("%s: %v", where, err)
 		}
 	}
@@ -353,7 +370,7 @@ func shellSplit(s string) ([][]word, bool) {
 // level, type or a value of the wrong form. ("exists in the ...
 // configuration": the getting started guides show the same feather in the
 // walkthrough and in its own section.)
-var sandboxRefusal = regexp.MustCompile(`no (feather|group|template)( or group)? named|unknown feather or group|no project configuration|no configuration file|environment variable \S+ is not set|no secrets file is available|secrets file \S+ does not exist|is not in the .*secrets file|no such keychain entry|template error: open \S+: no such file|exists in the (global|project) configuration \(--force replaces it\)|routing error`)
+var sandboxRefusal = regexp.MustCompile(`no (feather|group|template)( or group)? named|unknown feather or group|no project configuration|no configuration file|environment variable \S+ is not set|no secrets file is available|secrets file \S+ does not exist|is not in the .*secrets file|no such keychain entry|template error: open \S+: |exists in the (global|project) configuration \(--force replaces it\)|routing error`)
 
 // TestDocsCommandLines runs the kjak commands of each document in order in a
 // sandbox of its own (a tutorial's later commands use what its earlier ones
