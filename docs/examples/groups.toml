@@ -1,0 +1,24 @@
+# Groups: one name for several feathers. A member whose levels exclude the
+# message's level is skipped (the send still succeeds).
+#   kjak send --to team "Deployed"                 # discord and slack
+#   kjak send --to team --level error "Failed"     # and mail too
+
+[feathers.discord]
+type = "discord"
+webhook_url = { env = "KJAK_DISCORD_WEBHOOK" }
+
+[feathers.slack]
+type = "slack"
+webhook_url = { env = "KJAK_SLACK_WEBHOOK" }
+
+[feathers.mail]
+type = "email"
+host = "smtp.example.com"
+user = "kjak@example.com"
+password = { env = "KJAK_SMTP_PASSWORD" }
+from = "kjak@example.com"
+to = ["team@example.com"]
+levels = ["error", "critical"]
+
+[groups.team]
+feathers = ["discord", "slack", "mail"]

@@ -26,5 +26,14 @@ var ConfigHelp string
 //go:embed individual_help/kjak_template_help.txt
 var TemplateHelp string
 
+// DefaultConfigToml is the file `kjak config init` writes: no feather, and a
+// commented example of every feather and setting.
+//
 //go:embed config_toml/config.toml
 var DefaultConfigToml string
+
+// MinimalConfigToml is the file `kjak config init --minimal` writes: the
+// same configuration as DefaultConfigToml, without the examples.
+//
+//go:embed config_toml/minimal.toml
+var MinimalConfigToml string

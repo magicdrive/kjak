@@ -63,7 +63,14 @@ func anchorsOf(t *testing.T, path string) map[string]bool {
 }
 
 func TestDocsLinks(t *testing.T) {
-	files, err := filepath.Glob("docs/*.md")
+	// every Markdown file under docs (tutorials, design, examples too)
+	var files []string
+	err := filepath.WalkDir("docs", func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.HasSuffix(p, ".md") {
+			files = append(files, p)
+		}
+		return err
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

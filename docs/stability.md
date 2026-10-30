@@ -130,7 +130,7 @@ Options and arguments may come in any order; `--` ends the options.
 | `kjak config path` | `-o`/`--output`, `-c`/`--config`, `--secrets`, `--no-project` |
 | `kjak config show` | `-o`/`--output`, `-c`/`--config`, `--secrets`, `--no-project` |
 | `kjak config validate` | `--strict`, `-o`/`--output`, `-c`/`--config`, `--secrets`, `--no-project` |
-| `kjak config init` | `--force`, `-c`/`--config`, `--secrets`, `--no-project` |
+| `kjak config init` | `--force`, `--minimal`, `-c`/`--config`, `--secrets`, `--no-project` |
 | `kjak config trust` | `-y`/`--yes`, `--allow-user-secrets`, `-c`/`--config`, `--secrets`, `--no-project` |
 | `kjak config untrust` | `-y`/`--yes`, `-c`/`--config`, `--secrets`, `--no-project` |
 | `kjak config migrate-secrets` | `-s`/`--scope`, `--secrets-out`, `--config-out`, `--dry-run`, `-c`/`--config`, `--secrets`, `--no-project` |

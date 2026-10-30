@@ -86,6 +86,13 @@ given. Without `--scope`, `remove`, `enable` and `disable` change the file
 that defines the entry. A project file is changed only when it is trusted
 (or does not exist yet).
 
+**Creating the file.** `kjak config init` writes the global file with no
+feather and a commented example of every feather, group, template and
+default (each feather linked to its tutorial): remove the `# ` of the lines you want
+(lines that start with `## ` explain). `kjak config init --minimal` writes
+the same configuration without the examples. Both refuse an existing file
+unless `--force` is given.
+
 **Checking.**
 
 ```sh
@@ -118,6 +125,8 @@ The options `--timeout`, `--max-retries`, `--concurrency`, `--level` and
 
 A feather is one destination: a Slack incoming webhook, a Discord webhook,
 an SMTP server with its recipients, any HTTP API, or a plugin. `kjak feather types` lists the types.
+Tutorials of each: [tutorials](tutorials/README.md); complete files:
+[examples](examples/README.md).
 
 **Names** (feathers, groups, templates): letters, digits, `_`, `.`, `-`; at
 most 64; starting with a letter or a digit. A name cannot be both a feather
@@ -726,5 +735,14 @@ other file) and write it back:
 - checked: if the file changed while kjak wrote it (an editor that ignores
   the lock), kjak stops and leaves that change alone.
 
-kjak writes its own layout: **comments and key order are not kept**. Edit by
+A change that **only adds** feathers, groups or templates (`feather add` of
+a new name, `group set` and `template set` of a new name) keeps the file as
+it was, comments and layout included, and appends the new tables at its end
+(since v1.1.0). kjak uses the appended file only when it reads back exactly
+as a rewrite would; otherwise it rewrites.
+
+Any other change (`--force` of an existing name, `remove`, `enable`, `disable`, `group set` of
+an existing group, ...) rewrites the file in kjak's own layout: **comments
+and key order are not kept**, and kjak says so on stderr when the file had
+comments (`kjak: note: FILE was rewritten without its comments`). Edit by
 hand if you want to keep them.

@@ -300,7 +300,7 @@ func featherAdd(ctx context.Context, rt *Runtime, args []string) int {
 	if opt.Scope != "" {
 		scope = configure.Scope(opt.Scope)
 	}
-	err = configure.Update(p, scope, rt.Clock.Now(), func(f *configure.File) error {
+	res, err := configure.UpdateFile(p, scope, rt.Clock.Now(), func(f *configure.File) error {
 		if _, exists := f.Feathers[opt.Name]; exists && !opt.Force {
 			return fmt.Errorf("feather %q exists in the %s configuration (--force replaces it)", opt.Name, scope)
 		}
@@ -316,6 +316,7 @@ func featherAdd(ctx context.Context, rt *Runtime, args []string) int {
 	if err != nil {
 		return rt.fail(ctx, err)
 	}
+	rt.commentsNote(res)
 	fmt.Fprintf(rt.Stdout, "added feather %q (%s) to the %s configuration\n", opt.Name, opt.Type, scope)
 	return ExitOK
 }
@@ -384,9 +385,11 @@ func changeEntry(ctx context.Context, rt *Runtime, opt *option.ScopedNameOption,
 	if err != nil {
 		return rt.fail(ctx, err)
 	}
-	if err := configure.Update(p, scope, rt.Clock.Now(), fn); err != nil {
+	res, err := configure.UpdateFile(p, scope, rt.Clock.Now(), fn)
+	if err != nil {
 		return rt.fail(ctx, err)
 	}
+	rt.commentsNote(res)
 	fmt.Fprintf(rt.Stdout, done, opt.Name, scope)
 	return ExitOK
 }

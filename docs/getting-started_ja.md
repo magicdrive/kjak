@@ -90,7 +90,7 @@ command -v kjak     # シェルが見つけた場所（PowerShell では Get-Com
 
 ## 3. 最初の通知を送る
 
-この節では Slack を例にします。Discord やメールを使う場合は、[5 章](#5-discord)または[6 章](#6-メールsmtp)で Webhook URL や SMTP の設定値を用意し、同じ手順で進めてください。
+この節では Slack を例にします。Discord やメールを使う場合は、[5 章](#5-discord)または[6 章](#6-メールsmtp)で Webhook URL や SMTP の設定値を用意し、同じ手順で進めてください。すべての feather に[チュートリアル](tutorials/README_ja.md)があり、そのまま使える設定は [docs/examples](examples/README.md) にあります。
 
 ### 手順 1 — 通知先を用意する
 

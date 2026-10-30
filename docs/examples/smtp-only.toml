@@ -1,0 +1,13 @@
+# Any SMTP server. security: "starttls" (the default; port 587), "tls"
+# (implicit TLS; port 465) or "none" (no authentication then).
+# Tutorial: ../tutorials/smtp.md
+
+[feathers.mail]
+type = "email"
+host = "smtp.example.com"
+port = 465
+security = "tls"
+user = "kjak@example.com"
+password = { env = "KJAK_SMTP_PASSWORD" }
+from = "kjak@example.com"
+to = ["ops@example.com"]

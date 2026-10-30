@@ -1,0 +1,9 @@
+# Your own plugin: the executable kjak-feather-log on PATH (protocol v1). It
+# gets the settings, the secrets named here and nothing else.
+# Tutorial: ../tutorials/plugin.md   Reference: ../plugins.md
+
+[feathers.log]
+type = "external"
+plugin = "log"
+settings = { file = "/home/me/kjak-notifications.log" }   # an absolute path in your own directory (not /tmp)
+timeout = "5s"

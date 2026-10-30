@@ -134,6 +134,7 @@ lint: staticcheck golangci-lint shellcheck
 shellcheck:
 	@sh -n install.sh
 	@shellcheck -s sh install.sh
+	@shellcheck -s sh docs/examples/plugins/kjak-feather-log
 
 # Lint the GitHub Actions workflows with the pinned actionlint
 .PHONY: actionlint
