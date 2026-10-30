@@ -61,6 +61,27 @@ jobs:
       # log shows the failed tests' output and every skipped test with its
       # reason (scripts/test-report.sh; also in the job summary), and the
       # file is kept as an artifact. The step fails when go test fails.
+      # The install.sh tests (internal/installer) run the script with each shell
+      # and downloader named here, and with the BusyBox tools on Linux; one that
+      # is missing fails them instead of skipping it. Not on Windows.
+      - name: Install busybox and wget for the installer tests
+        if: runner.os != 'Windows'
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q busybox wget
+            {
+              # /bin/sh is dash on Ubuntu
+              echo "KJAK_INSTALLER_SHELLS=sh bash bash-nonposix busybox"
+              echo "KJAK_INSTALLER_BUSYBOX=required"
+            } >> "$GITHUB_ENV"
+          else
+            command -v wget >/dev/null || brew install wget
+            echo "KJAK_INSTALLER_SHELLS=sh dash bash bash-nonposix ksh" >> "$GITHUB_ENV"
+          fi
+          echo "KJAK_INSTALLER_DOWNLOADERS=curl wget" >> "$GITHUB_ENV"
+          curl --version | head -1; wget --version | head -1
+
       - name: Test
         shell: bash
         run: |
@@ -79,10 +100,14 @@ jobs:
           retention-days: 30
 
       # the race detector needs cgo, which the Windows image lacks
+      # The install.sh tests ran with every shell and downloader above; -race
+      # checks only their Go side, so one shell and curl are enough here.
       - name: Test (race)
         if: runner.os != 'Windows'
         env:
           CGO_ENABLED: "1"
+          KJAK_INSTALLER_SHELLS: sh
+          KJAK_INSTALLER_DOWNLOADERS: curl
         run: go test -count=1 -race ./...
 
       # The binary built the way a release builds it (-trimpath -s -w,
@@ -145,6 +170,11 @@ jobs:
 
       - name: Shell scripts
         run: shellcheck -s sh scripts/*.sh
+
+      - name: install.sh (shellcheck)
+        run: |
+          shellcheck --version | head -2
+          make shellcheck
 
       - name: Workflows (actionlint)
         run: make actionlint  # version pinned in the Makefile (ACTIONLINT)
@@ -238,6 +268,15 @@ jobs:
 
       - name: Verify archives
         run: sh scripts/verify-dist.sh dist SNAPSHOT
+
+      # install.sh installs this machine's archive from the snapshot, served
+      # as one release by a fake github.com (docs/installer.md)
+      - name: install.sh with the snapshot archives
+        env:
+          KJAK_INSTALLER_DIST: ${{ github.workspace }}/dist
+          KJAK_INSTALLER_SHELLS: sh
+          KJAK_INSTALLER_DOWNLOADERS: curl
+        run: go test -count=1 -v -run '^TestDistArchives$' ./internal/installer/
 
       - name: Show artifacts
         env:
