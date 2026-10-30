@@ -56,11 +56,6 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      # Includes the end-to-end tests of the built binary (internal/e2e).
-      # -count=1: no cached results. -json keeps every test's result: the
-      # log shows the failed tests' output and every skipped test with its
-      # reason (scripts/test-report.sh; also in the job summary), and the
-      # file is kept as an artifact. The step fails when go test fails.
       # The install.sh tests (internal/installer) run the script with each shell
       # and downloader named here, and with the BusyBox tools on Linux; one that
       # is missing fails them instead of skipping it. Not on Windows.
@@ -82,6 +77,11 @@ jobs:
           echo "KJAK_INSTALLER_DOWNLOADERS=curl wget" >> "$GITHUB_ENV"
           curl --version | head -1; wget --version | head -1
 
+      # Includes the end-to-end tests of the built binary (internal/e2e).
+      # -count=1: no cached results. -json keeps every test's result: the
+      # log shows the failed tests' output and every skipped test with its
+      # reason (scripts/test-report.sh; also in the job summary), and the
+      # file is kept as an artifact. The step fails when go test fails.
       - name: Test
         shell: bash
         run: |

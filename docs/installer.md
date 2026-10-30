@@ -31,10 +31,10 @@ With `TAG` the release tag and `VERSION` = `TAG` without the leading `v`:
 | Archive content | the binary `kjak` at the top of the archive (other files are ignored) |
 | Version output | the first line of `kjak --version` is `kjak version vVERSION` |
 
-The releases from v0.0.2 to v0.0.4 meet it: installing each of them from github.com with the script was checked, and `TestRealReleases` installs v0.0.2 and the latest release. v0.0.1 (released by an earlier workflow) has `checksums.txt` and is refused with "release v0.0.1 not found (or it has no checksum file)".
+The releases from v0.0.2 to v0.0.4 meet it: installing each of them from github.com with the script was checked, and `TestRealReleases` installs v0.0.2 and the latest release. v0.0.1 (released by an earlier workflow) has `checksums.txt` and is refused: "release v0.0.1 not found at https://github.com/magicdrive/kjak/releases (or it has no checksum file)".
 
 Changing any of these in `hephaestus.yaml` or in the binary breaks the installer. CI checks
-them on every pull request: the `snapshot` job installs the archives it has just built with
+them on every pull request: the `dist` job installs the archives it has just built with
 `install.sh` (`TestDistArchives`).
 
 ## Tests

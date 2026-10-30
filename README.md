@@ -91,7 +91,7 @@ sh install.sh --help
   (releases from v0.0.1 on have these attestations).
   The command above runs the script from the `main` branch; to run a fixed script, download it
   from a release tag instead (`https://raw.githubusercontent.com/magicdrive/kjak/<tag>/install.sh`;
-  the tags of the releases after v0.0.4 have it). Piping it straight into `sh` (`curl ... | sh`) also works, but then you
+  only a release made after v0.0.4 has it; none is out yet). Piping it straight into `sh` (`curl ... | sh`) also works, but then you
   run what you have not seen.
 - **Homebrew**: the script refuses Homebrew's directories (its prefix, e.g. `/opt/homebrew`, or
   `/usr/local` on an Intel Mac) and does not replace a symbolic link such as one Homebrew made.
@@ -110,8 +110,6 @@ sh install.sh --help
   if it persists; *release not found* — check the version on the
   [Releases page](https://github.com/magicdrive/kjak/releases); *inside the Homebrew prefix* —
   use `brew upgrade kjak`, or another `--dir`.
-
-The [Getting started guide](docs/getting-started.md#2-install) has the details.
 
 ## Quick start
 
