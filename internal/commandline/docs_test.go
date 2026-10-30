@@ -192,7 +192,9 @@ func TestDocsConfigurations(t *testing.T) {
 		}
 		f, err := configure.Parse([]byte(doc))
 		if err != nil {
-			t.Errorf("%s: %v\n%s", where, err, doc)
+			if !posixPathOnWindows(err) {
+				t.Errorf("%s: %v\n%s", where, err, doc)
+			}
 			return
 		}
 		if err := configure.Validate(f); err != nil && !posixPathOnWindows(err) {
