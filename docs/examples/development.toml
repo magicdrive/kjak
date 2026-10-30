@@ -1,0 +1,24 @@
+# A developer's own channel for everything, Discord for failures only, and a
+# template for the end of a long command:
+#   make test; kjak send --template done --var task="make test" --var status=$?
+
+[defaults]
+targets = ["dev"]
+level = "info"
+
+[feathers.me]
+type = "slack"
+webhook_url = { env = "KJAK_MY_SLACK_WEBHOOK" }
+
+[feathers.discord_failures]
+type = "discord"
+webhook_url = { env = "KJAK_DISCORD_WEBHOOK" }
+levels = ["error", "critical"]
+
+[groups.dev]
+feathers = ["me", "discord_failures"]
+
+[templates.done]
+title = "{{.task}} finished"
+body = "{{.task}} exited with status {{.status}}"
+level = "info"

@@ -1,0 +1,66 @@
+#!/bin/sh
+# kjak-feather-log: a minimal kjak plugin (protocol v1, docs/plugins.md).
+#
+# It appends the message of each notification, as one JSON line, to the file
+# named by the setting "file", and answers {"protocol_version":1,...}.
+#
+#   [feathers.log]
+#   type = "external"
+#   plugin = "log"
+#   settings = { file = "/home/me/kjak-notifications.log" }
+#
+# Needs only sh, cat, tr, grep, sed and date (no jq). kjak writes the
+# request as one JSON object on standard input; the values this script
+# needs are found with sed patterns that respect JSON strings (an escaped
+# quote inside the message cannot end a string or start a key). It never
+# writes the secrets of the request anywhere.
+#
+# Tutorial: docs/tutorials/plugin.md
+
+LC_ALL=C   # byte-wise patterns, whatever the locale
+export LC_ALL
+umask 077  # the log file is created readable by you only
+
+reply() {
+	printf '%s\n' "$1"
+	exit 0
+}
+
+# The response of a request that certainly delivered nothing.
+refuse() {
+	reply "{\"protocol_version\":1,\"status\":\"failed\",\"acceptance\":\"rejected\",\"error\":{\"code\":\"$1\",\"message\":\"$2\"}}"
+}
+
+# Read the whole request first; JSON allows line breaks between tokens only.
+req=$(cat | tr -d '\r\n') || refuse internal "cannot read the request"
+
+sp='[[:space:]]*'
+str='"([^"\\]|\\.)*"' # a JSON string
+
+if ! printf '%s\n' "$req" | grep -Eq "\"protocol_version\"$sp:${sp}1${sp}[,}]"; then
+	refuse protocol "unexpected request (protocol_version 1 expected)"
+fi
+
+# settings.file: a plain absolute path (no JSON escape in it)
+file=$(printf '%s\n' "$req" | sed -n -E "s/.*\"settings\"$sp:$sp\\{$sp(\"[a-z0-9_]+\"$sp:$sp$str$sp,$sp)*\"file\"$sp:$sp\"([^\"\\\\]*)\".*/\\3/p")
+case $file in
+/*) ;;
+"") refuse rejected "the setting file is missing, or holds a quote or a backslash" ;;
+*) refuse rejected "the setting file must be an absolute path" ;;
+esac
+
+# the message object as kjak sent it (still JSON), and the idempotency key
+message=$(printf '%s\n' "$req" | sed -n -E "s/.*\"message\"$sp:$sp(\\{$sp(\"[a-z_]+\"$sp:$sp$str$sp,?$sp)*\\}).*/\\1/p")
+key=$(printf '%s\n' "$req" | sed -n -E "s/.*\"idempotency_key\"$sp:$sp\"([^\"\\\\]*)\".*/\\1/p")
+[ -n "$message" ] || refuse protocol "the request has no message"
+
+# Opening the file is the last step that cannot have written anything.
+if ! : >>"$file"; then
+	refuse rejected "cannot open the file"
+fi
+line="{\"time\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"idempotency_key\":\"$key\",\"message\":$message}"
+if ! printf '%s\n' "$line" >>"$file"; then
+	# part of the line may be there: say that it may have arrived
+	reply '{"protocol_version":1,"status":"failed","acceptance":"unknown","error":{"message":"the write failed"}}'
+fi
+reply '{"protocol_version":1,"status":"delivered"}'

@@ -271,7 +271,7 @@ kjak config path [-o json]      # the files, how each was chosen, trust and secr
 kjak config show [-o json]      # the effective configuration, literal secrets redacted
 kjak config validate [--strict] [-o json]
                                 # both files, whether or not the project file is trusted, and the secrets files
-kjak config init [--force]      # create the global file
+kjak config init [--minimal] [--force]   # create the global file (with commented examples; --minimal without)
 kjak config trust [--yes [--allow-user-secrets]]
                                 # trust ./.kjak.toml and ./.kjak.secrets.toml (asks on a terminal)
 kjak config untrust

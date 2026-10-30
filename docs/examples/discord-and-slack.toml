@@ -1,0 +1,17 @@
+# Discord and Slack, in one send:
+#   kjak send --to notify "Backup finished"
+# Tutorials: ../tutorials/discord.md, ../tutorials/slack.md
+
+[defaults]
+targets = ["notify"]
+
+[feathers.discord]
+type = "discord"
+webhook_url = { env = "KJAK_DISCORD_WEBHOOK" }
+
+[feathers.slack]
+type = "slack"
+webhook_url = { env = "KJAK_SLACK_WEBHOOK" }
+
+[groups.notify]
+feathers = ["discord", "slack"]

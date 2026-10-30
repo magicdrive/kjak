@@ -121,7 +121,8 @@ sh install.sh --help
 ## Quick start
 
 The [Getting started guide](docs/getting-started.md) walks through each step
-for Slack, Discord and e-mail.
+for Slack, Discord and e-mail, and every feather has a
+[tutorial](docs/tutorials/README.md).
 
 ```sh
 # 1. a configuration file (~/.config/kjak/config.toml)
@@ -170,6 +171,21 @@ unknown), `2` input, configuration or preflight error (nothing was sent),
 `130` interrupted.
 
 See [docs/cli.md](docs/cli.md) for every command and the JSON report.
+
+## Tutorials and examples
+
+Every feather has a tutorial (English and Japanese), from the setup on the
+service to a first notification, with complete `config.toml` files:
+[Discord](docs/tutorials/discord.md),
+[Slack](docs/tutorials/slack.md), [Gmail](docs/tutorials/gmail.md),
+[any SMTP server](docs/tutorials/smtp.md), [HTTP APIs](docs/tutorials/http.md) and
+[plugins](docs/tutorials/plugin.md) ([index](docs/tutorials/README.md)).
+
+[docs/examples](docs/examples/README.md) has complete configurations to copy
+(one feather, several, groups, templates, secrets files), each checked in CI.
+`kjak config init` writes a commented catalog of every feather into the new
+configuration file; `kjak config init --minimal` writes it without the
+examples.
 
 ## Feathers, groups, templates
 
@@ -335,8 +351,10 @@ privately: [SECURITY.md](SECURITY.md).
 - OS keychain: macOS (`security`) and Linux (`secret-tool`, libsecret) are
   read-only; **Windows has no keychain support** (use `env`).
 - Groups do not nest.
-- kjak rewrites its configuration files without their comments when a
-  command (`feather add`, `group set`, ...) changes them.
+- A command that changes a configuration file keeps its comments only when it
+  adds a new feather, group or template; a change of an existing one
+  (`remove`, `enable`, `feather add --force` of an existing name, ...) rewrites
+  the file without them, and says so.
 - Plugins are not sandboxed (they run with your rights). kjak ends a plugin
   and every process it started (its process group on Unix, its Job Object
   on Windows) at its timeout, the deadline and Ctrl-C.
@@ -346,6 +364,8 @@ More in [docs/troubleshooting.md](docs/troubleshooting.md).
 ## Documentation
 
 - [Getting started](docs/getting-started.md) ([日本語](docs/getting-started_ja.md)): install, Slack, Discord, e-mail, recipes
+- [Tutorials](docs/tutorials/README.md) ([日本語](docs/tutorials/README_ja.md)): one per feather
+- [Configuration examples](docs/examples/README.md)
 - [Configuration reference](docs/configuration.md) ([日本語](docs/configuration_ja.md)): every key, CLI management, credentials, trust, delivery behavior
 - [CLI usage](docs/cli.md)
 - [Stability and compatibility (v1)](docs/stability.md): what scripts, configurations and plugins may rely on

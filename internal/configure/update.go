@@ -29,28 +29,50 @@ func ParseScope(s string) (Scope, error) {
 // kjak does not edit content the user has not reviewed. The trust then moves
 // to the new content, which kjak itself wrote.
 func Update(p Paths, scope Scope, now time.Time, fn func(*File) error) error {
+	_, err := UpdateFile(p, scope, now, fn)
+	return err
+}
+
+// UpdateResult is how UpdateFile wrote the file.
+type UpdateResult struct {
+	Path string
+	// CommentsDropped: the file had comments and was rewritten without
+	// them. A change that only adds feathers, groups or templates keeps the
+	// file as it was and appends them (appendOnly).
+	CommentsDropped bool
+}
+
+// UpdateFile is Update, and tells whether the comments of the file were
+// kept.
+func UpdateFile(p Paths, scope Scope, now time.Time, fn func(*File) error) (UpdateResult, error) {
+	res, err := update(p, scope, now, fn)
+	return res, err
+}
+
+func update(p Paths, scope Scope, now time.Time, fn func(*File) error) (UpdateResult, error) {
+	var res UpdateResult
 	path := p.Global
 	expect := Expect{}
 	if scope == ScopeProject {
 		if p.Project == "" {
-			return fmt.Errorf("the project configuration is disabled (--no-project)")
+			return res, fmt.Errorf("the project configuration is disabled (--no-project)")
 		}
 		path = p.Project
 		src, err := ReadFile(path)
 		if err != nil {
-			return err
+			return res, err
 		}
 		if src.Exists {
 			ts, err := ReadTrustStore(p.TrustStore)
 			if err != nil {
-				return err
+				return res, err
 			}
 			ok, err := ts.IsTrusted(path, src.Hash)
 			if err != nil {
-				return err
+				return res, err
 			}
 			if !ok {
-				return fmt.Errorf("%w: %s (kjak edits a project file only once it is trusted: `kjak config trust`)", ErrUntrustedProject, path)
+				return res, fmt.Errorf("%w: %s (kjak edits a project file only once it is trusted: `kjak config trust`)", ErrUntrustedProject, path)
 			}
 			expect = Expect{Check: true, Exists: true, Hash: src.Hash}
 		} else {
@@ -78,15 +100,24 @@ func Update(p Paths, scope Scope, now time.Time, fn func(*File) error) error {
 			return nil, err
 		}
 		written = f
-		return Encode(f)
+		encoded, err := Encode(f)
+		if err != nil || current == nil {
+			return encoded, err
+		}
+		if kept, ok := appendOnly(current, f); ok {
+			return kept, nil
+		}
+		res.CommentsDropped = hasComments(current)
+		return encoded, nil
 	})
+	res.Path = path
 	if err != nil {
-		return err
+		return res, err
 	}
 	if scope == ScopeProject {
-		return retrust(p.TrustStore, path, newHash, now, append(SecretNames(written), GatedNames(written)...))
+		return res, retrust(p.TrustStore, path, newHash, now, append(SecretNames(written), GatedNames(written)...))
 	}
-	return nil
+	return res, nil
 }
 
 // validateWithOther checks the references of f merged with the other file

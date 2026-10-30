@@ -341,10 +341,14 @@ func configInit(ctx context.Context, rt *Runtime, args []string) int {
 	if err != nil {
 		return rt.fail(ctx, err)
 	}
-	if _, err := configure.Parse([]byte(textbank.DefaultConfigToml)); err != nil {
+	content := textbank.DefaultConfigToml
+	if opt.Minimal {
+		content = textbank.MinimalConfigToml
+	}
+	if _, err := configure.Parse([]byte(content)); err != nil {
 		return rt.fail(ctx, fmt.Errorf("internal error: the default configuration is invalid: %w", err))
 	}
-	if err := configure.WriteNew(p.Global, []byte(textbank.DefaultConfigToml), opt.Force); err != nil {
+	if err := configure.WriteNew(p.Global, []byte(content), opt.Force); err != nil {
 		return rt.fail(ctx, err)
 	}
 	fmt.Fprintf(rt.Stdout, "created %s\n", p.Global)

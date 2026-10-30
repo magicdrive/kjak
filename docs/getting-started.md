@@ -115,7 +115,9 @@ your `PATH` (for `go install`: add `$(go env GOPATH)/bin`).
 
 This section uses Slack. For Discord or e-mail, get the webhook URL or SMTP
 settings from [section 5](#5-discord) or [section 6](#6-e-mail-smtp) and
-follow the same steps.
+follow the same steps. Every feather also has a
+[tutorial](tutorials/README.md), and [docs/examples](examples/README.md) has
+complete configurations to copy.
 
 ### Step 1 — prepare the destination
 

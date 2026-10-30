@@ -1,0 +1,42 @@
+# Every kind of destination, and groups by audience. Each feather is
+# delivered on its own: one that fails does not stop the others (exit 1,
+# outcome partial).
+#   kjak send --to everyone "Release 2.0 is out"
+#   kjak send --to oncall --level critical "Database down"
+
+[defaults]
+timeout = "20s"
+max_retries = 2
+
+[feathers.discord]
+type = "discord"
+webhook_url = { env = "KJAK_DISCORD_WEBHOOK" }
+
+[feathers.slack]
+type = "slack"
+webhook_url = { secret = "slack.webhook_url" }
+
+[feathers.mail]
+type = "email"
+host = "smtp.example.com"
+user = "kjak@example.com"
+password = { secret = "mail.password" }
+from = "kjak@example.com"
+to = ["oncall@example.com"]
+levels = ["error", "critical"]
+
+[feathers.api]
+type = "http"
+url = "https://status.example.com/api/events"
+method = "PUT"
+
+[feathers.api.auth]
+type = "header"
+header = "X-Api-Key"
+value = { env = "KJAK_STATUS_KEY" }
+
+[groups.everyone]
+feathers = ["discord", "slack", "api"]
+
+[groups.oncall]
+feathers = ["slack", "mail"]

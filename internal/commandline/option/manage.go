@@ -282,6 +282,8 @@ func ParseTemplateSet(args []string) (*TemplateSetOption, error) {
 type ConfigInitOption struct {
 	ConfigOption
 	Force bool
+	// Minimal: the file without the commented examples.
+	Minimal bool
 }
 
 func ParseConfigInit(args []string) (*ConfigInitOption, error) {
@@ -290,6 +292,7 @@ func ParseConfigInit(args []string) (*ConfigInitOption, error) {
 	fs := newFlagSet(cmd)
 	opt.register(fs)
 	fs.BoolVar(&opt.Force, "force", false, "")
+	fs.BoolVar(&opt.Minimal, "minimal", false, "")
 	pos, err := parse(cmd, fs, args)
 	if err != nil {
 		return nil, err

@@ -41,6 +41,8 @@ curl -fsSLO https://raw.githubusercontent.com/magicdrive/kjak/main/install.sh
 sh install.sh                                  # 最新の安定版を ~/.local/bin に
 sh install.sh --version v0.0.3                 # 版を指定（古い版も可、v0.0.2 以降）
 sh install.sh --dir "$HOME/bin"                # インストール先を指定
+sh install.sh --upgrade                        # 最新の安定版に切り替える（インストール済みのとき）
+sh install.sh --upgrade --version v0.0.3       # 指定した版に切り替える（ダウングレードも可）
 ```
 
 アーカイブはリリースの `kjak_checksums.txt` の SHA-256 で検証してから展開し、取り出すのは `kjak` だけです。`sudo` は使わず、`PATH` も変更しません。Homebrew の管理するディレクトリには入れません（Homebrew の kjak は `brew upgrade kjak` で更新してください）。Windows では動きません（WSL の中では Linux と同じ手順）。オプション、検証、注意点の詳細は [README](README.md#install-script-macos-and-linux-amd64-and-arm64)（英語）を参照してください。
@@ -51,7 +53,7 @@ sh install.sh --dir "$HOME/bin"                # インストール先を指定
 
 ## クイックスタート
 
-Slack、Discord、メールそれぞれの手順は[導入ガイド](docs/getting-started_ja.md)で詳しく説明しています。
+Slack、Discord、メールそれぞれの手順は[導入ガイド](docs/getting-started_ja.md)で、すべての feather の手順は[チュートリアル](docs/tutorials/README_ja.md)で詳しく説明しています。
 
 ```sh
 # 1. 設定ファイルを作成（~/.config/kjak/config.toml）
@@ -74,6 +76,12 @@ kjak send --to development --title "CI" --level success "build finished"
 ok    dev_slack (slack) delivered in 312ms (1 attempt)
 success: 1 delivered, 0 failed, 0 skipped
 ```
+
+## チュートリアルと設定例
+
+すべての feather にチュートリアル（日本語・英語）があります。サービスでの準備から最初の通知まで、そのまま使える `config.toml` 付きで説明します：[Discord](docs/tutorials/discord_ja.md)、[Slack](docs/tutorials/slack_ja.md)、[Gmail](docs/tutorials/gmail_ja.md)、[任意の SMTP サーバー](docs/tutorials/smtp_ja.md)、[HTTP API](docs/tutorials/http_ja.md)、[プラグイン](docs/tutorials/plugin_ja.md)（[一覧](docs/tutorials/README_ja.md)）。
+
+[docs/examples](docs/examples/README.md) には、そのままコピーして使える設定（1 つの feather、複数、group、template、secrets ファイル）があり、すべて CI で検証しています。`kjak config init` は新しい設定ファイルに全 feather のコメント付き設定例を書き込みます。`kjak config init --minimal` は設定例なしで書き込みます。
 
 ## 送信
 
@@ -175,7 +183,7 @@ secrets = { routing_key = { secret = "pagerduty.routing_key" } }
 - feather：Slack（Incoming Webhook）、Discord（Webhook）、メール（SMTP）、HTTP API（`http`）、プラグイン（`external`）。**OS ネイティブの通知には対応していません**。種類 `os` の feather は設定エラーになります。
 - OS のキーチェーン：macOS（`security`）と Linux（`secret-tool`、libsecret）は読み取りのみ対応。**Windows はキーチェーンに対応していません**（`env` を使ってください）。
 - group は入れ子にできません。
-- 設定を変更するコマンド（`feather add`、`group set` など）は、設定ファイルをコメントなしで書き直します。
+- 設定を変更するコマンドがコメントを保つのは、新しい feather、group、template を追加するときだけです。既存のものの変更（`remove`、`enable`、既存の名前への `feather add --force` など）はコメントなしで書き直し、その旨を表示します。
 - プラグインはサンドボックス化されません（あなたの権限で動きます）。タイムアウト、送信の期限、Ctrl-C のときは、プラグインとそれが起動したすべてのプロセスを終了させます（Unix ではプロセスグループ、Windows では Job Object 単位）。
 
 詳しくは [docs/troubleshooting.md](docs/troubleshooting.md)（英語）を参照してください。
@@ -183,6 +191,8 @@ secrets = { routing_key = { secret = "pagerduty.routing_key" } }
 ## ドキュメント
 
 - [導入ガイド](docs/getting-started_ja.md)（[English](docs/getting-started.md)）：インストール、Slack、Discord、メール、利用例
+- [チュートリアル](docs/tutorials/README_ja.md)（[English](docs/tutorials/README.md)）：feather ごと
+- [設定例](docs/examples/README.md)
 - [設定リファレンス](docs/configuration_ja.md)（[English](docs/configuration.md)）：設定キー、CLI による管理、認証情報、Trust、配信の動作
 - 以下は英語のみです：[CLI usage](docs/cli.md)、[Stability and compatibility (v1)](docs/stability.md)、[Credentials, trust and security](docs/security.md)、[Migrating to v1.0.0](docs/migration.md)、[HTTP API / webhook feathers](docs/http.md)、[External feather plugins](docs/plugins.md)、[Delivery, retry and acceptance semantics](docs/delivery.md)、[Discord end-to-end check](docs/discord-e2e.md)、[Development guide](docs/development.md)、[Release runbook](docs/release.md)、[Troubleshooting](docs/troubleshooting.md)
 
