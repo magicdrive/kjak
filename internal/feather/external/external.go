@@ -285,6 +285,13 @@ func (f *Feather) run(ctx context.Context, msg core.Message, attempt int) feathe
 	if err != nil {
 		return feather.Rejected(core.ErrCodeInternal, 0, false, fmt.Errorf("the plugin was not run: %v", err))
 	}
+	if f.Exe.Homebrew {
+		// in directories the admin group can write to: checked again as
+		// late as kjak can, after the request was prepared (homebrew.go)
+		if err := f.Exe.Verify(true); err != nil {
+			return feather.Rejected(core.ErrCodeBlocked, 0, false, fmt.Errorf("the plugin was not run: %v", err))
+		}
+	}
 	if err := box.start(); err != nil {
 		return feather.Rejected(core.ErrCodeInternal, 0, false, fmt.Errorf("the plugin could not be started: %s", describeStart(err)))
 	}

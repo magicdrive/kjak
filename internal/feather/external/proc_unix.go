@@ -57,7 +57,12 @@ func ownedByRootOrUser(st os.FileInfo) (uint32, bool) {
 // sticky). The ACLs are checked the same way (fileacl: NoWrite for the
 // directories that hold it, NoReplace above them). Someone else could
 // otherwise put a link or a file there.
-func checkPlace(path, real string) error {
+//
+// With hb (macOS), a directory Homebrew makes writable by group admin is
+// excepted from the group-write rule only (homebrewGroupWrite) and recorded
+// in hb.used; the caller then requires the content to be accepted
+// (homebrew.go). Without hb, the strict checks only.
+func checkPlace(path, real string, hb *relaxed) error {
 	if st, err := os.Lstat(path); err == nil && st.Mode()&os.ModeSymlink != 0 {
 		if uid, ok := ownedByRootOrUser(st); !ok {
 			return fmt.Errorf("the link %s is owned by uid %d, neither root nor the user running kjak", path, uid)
@@ -71,8 +76,11 @@ func checkPlace(path, real string) error {
 		if uid, ok := ownedByRootOrUser(st); !ok {
 			return fmt.Errorf("its directory %s is owned by uid %d, neither root nor the user running kjak", dir, uid)
 		}
-		if st.Mode().Perm()&0o022 != 0 {
-			return fmt.Errorf("its directory %s is writable by group or others", dir)
+		if perm := st.Mode().Perm(); perm&0o022 != 0 {
+			if hb == nil || perm&0o002 != 0 || !homebrewGroupWrite(dir, path, real, true) {
+				return fmt.Errorf("its directory %s is writable by group or others", dir)
+			}
+			hb.used = append(hb.used, dir)
 		}
 		if err := fileacl.CheckPath(dir, fileacl.NoWrite); err != nil {
 			return fmt.Errorf("its directory %s: %v", dir, err)
@@ -85,8 +93,11 @@ func checkPlace(path, real string) error {
 			if uid, ok := ownedByRootOrUser(st); !ok {
 				return fmt.Errorf("the directory %s above it is owned by uid %d, neither root nor the user running kjak", d, uid)
 			}
-			if st.Mode().Perm()&0o022 != 0 && st.Mode()&os.ModeSticky == 0 {
-				return fmt.Errorf("the directory %s above it is writable by group or others", d)
+			if perm := st.Mode().Perm(); perm&0o022 != 0 && st.Mode()&os.ModeSticky == 0 {
+				if hb == nil || perm&0o002 != 0 || !homebrewGroupWrite(d, path, real, false) {
+					return fmt.Errorf("the directory %s above it is writable by group or others", d)
+				}
+				hb.used = append(hb.used, d)
 			}
 			if err := fileacl.CheckPath(d, fileacl.NoReplace); err != nil {
 				return fmt.Errorf("the directory %s above it: %v", d, err)

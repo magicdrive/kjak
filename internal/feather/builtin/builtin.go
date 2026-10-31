@@ -161,6 +161,29 @@ func projectGuard(fc configure.FeatherConfig, d Deps) (*httpapi.Guard, error) {
 	return &httpapi.Guard{AllowNetworks: networks, AllowHosts: fc.AllowHosts, Resolver: d.HTTPAPI.Resolver}, nil
 }
 
+// homebrewAccept is what lets a plugin in Homebrew's admin-writable
+// directories run (external/homebrew.go): for a feather of a project, the
+// project's trust recording that path and that SHA-256 (the project's own
+// sha256 is not enough: the trust is the user's statement); for a feather
+// of the global configuration, its sha256 equal to the file's.
+func homebrewAccept(fc configure.FeatherConfig, trust *configure.TrustEntry) external.Accept {
+	return func(real, sum string) error {
+		if trust != nil {
+			if tp, ok := trust.Plugin(fc.Plugin); ok && tp.Path == real && tp.SHA256 == sum {
+				return nil
+			}
+			return fmt.Errorf("when the project's trust records this path and SHA-256 %s: review it, then run `kjak config trust`", sum)
+		}
+		switch {
+		case fc.SHA256 == "":
+			return fmt.Errorf("with its SHA-256 pinned: sha256 = %q", sum)
+		case fc.SHA256 != sum:
+			return fmt.Errorf("with its SHA-256 pinned, and it has %s, not the pinned %s", sum, fc.SHA256)
+		}
+		return nil
+	}
+}
+
 // buildExternal finds and checks the plugin's executable and resolves the
 // secrets the configuration gives it (only those).
 func buildExternal(name string, fc configure.FeatherConfig, d Deps, resolve func(string, *credential.Ref) (credential.Secret, error)) (feather.Feather, error) {
@@ -172,7 +195,7 @@ func buildExternal(name string, fc configure.FeatherConfig, d Deps, resolve func
 	if d.LookupEnv != nil {
 		pathList, _ = d.LookupEnv("PATH")
 	}
-	exe, err := external.Resolve(fc.Plugin, fc.Path, pathList, goos)
+	exe, err := external.ResolveAccept(fc.Plugin, fc.Path, pathList, goos, homebrewAccept(fc, d.ProjectTrust))
 	if err != nil {
 		return nil, fmt.Errorf("feather %q: %w", name, err)
 	}

@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -34,7 +35,10 @@ import (
 //     others cannot write to (unless sticky); the ACLs too (internal/fileacl:
 //     the POSIX ACL, the macOS ACL, the Windows owner and DACL);
 //   - its identity (device, inode, size, modification time) and SHA-256 are
-//     recorded, and checked again just before each run.
+//     recorded, and checked again just before each run;
+//   - on macOS, a plugin installed by Homebrew, whose directories the admin
+//     group can write to, runs only when its content is what the user
+//     stated (ResolveAccept, homebrew.go).
 
 // ErrPlugin wraps every error of finding or checking a plugin.
 var ErrPlugin = errors.New("plugin error")
@@ -48,7 +52,11 @@ type Executable struct {
 	Path   string // where it was found (a PATH directory), or the pinned path
 	Real   string // symbolic links resolved: what runs
 	SHA256 string
-	id     identity
+	// Homebrew: it passed the place checks only through the Homebrew
+	// exception, its content accepted (homebrew.go). Verify then hashes it
+	// and checks its place again before every run.
+	Homebrew bool
+	id       identity
 }
 
 // SkippedDir is a PATH element that is not searched.
@@ -74,8 +82,17 @@ func searchDirs(pathList string) (dirs []string, skipped []SkippedDir) {
 }
 
 // Resolve finds and checks the executable of plugin name: the pinned path,
-// else the PATH search.
+// else the PATH search. The strict checks only: a plugin in Homebrew's
+// admin-writable directories is refused.
 func Resolve(name, pinned, pathList, goos string) (*Executable, error) {
+	return ResolveAccept(name, pinned, pathList, goos, nil)
+}
+
+// ResolveAccept is Resolve, where a candidate the strict checks refuse only
+// because it is in Homebrew's admin-writable directories (macOS) is
+// accepted when accept accepts its resolved path and SHA-256. A nil accept
+// is Resolve.
+func ResolveAccept(name, pinned, pathList, goos string, accept Accept) (*Executable, error) {
 	if err := configure.ValidPluginName(name); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrPlugin, err)
 	}
@@ -90,7 +107,7 @@ func Resolve(name, pinned, pathList, goos string) (*Executable, error) {
 				return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, pinned, err)
 			}
 		}
-		return check(name, pinned)
+		return check(name, pinned, accept)
 	}
 	dirs, _ := searchDirs(pathList)
 	var found []*Executable
@@ -109,7 +126,7 @@ func Resolve(name, pinned, pathList, goos string) (*Executable, error) {
 			}
 			continue
 		}
-		exe, err := check(name, p)
+		exe, err := check(name, p, accept)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
@@ -164,8 +181,11 @@ func exactEntry(dir, name string) error {
 	return nil
 }
 
-// check checks one candidate and records its identity and digest.
-func check(name, path string) (*Executable, error) {
+// check checks one candidate and records its identity and digest. The
+// strict place checks come first; only when they refuse it, and accept is
+// set, are they run again with the Homebrew exception, and the content must
+// then be accepted.
+func check(name, path string, accept Accept) (*Executable, error) {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -173,8 +193,22 @@ func check(name, path string) (*Executable, error) {
 		}
 		return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, path, err)
 	}
-	if err := checkPlace(path, real); err != nil {
-		return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, path, err)
+	var hb *relaxed
+	if err := checkPlace(path, real, nil); err != nil {
+		hb = &relaxed{}
+		if accept == nil {
+			return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, path, err)
+		}
+		rerr := checkPlace(path, real, hb)
+		switch {
+		case len(hb.used) == 0:
+			// not Homebrew's layout: the strict refusal, as before
+			return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, path, err)
+		case rerr != nil:
+			// Homebrew's layout, refused for another reason (an ACL, a keg
+			// directory its group can write to): that reason
+			return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, path, rerr)
+		}
 	}
 	f, err := openNoBlock(real)
 	if err != nil {
@@ -192,7 +226,22 @@ func check(name, path string) (*Executable, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrPlugin, path, err)
 	}
-	return &Executable{Name: name, Path: path, Real: real, SHA256: sum, id: identityOf(st)}, nil
+	exe := &Executable{Name: name, Path: path, Real: real, SHA256: sum, id: identityOf(st)}
+	if hb != nil {
+		// the keg's file is the plugin's own name, and a program that loads
+		// nothing the admin group could replace (homebrew.go)
+		if base := filepath.Base(real); base != configure.PluginFile(name, runtime.GOOS) {
+			return nil, fmt.Errorf("%w: %s: %s in Homebrew's directories is not named %s", ErrPlugin, path, real, configure.PluginFile(name, runtime.GOOS))
+		}
+		if err := selfContained(f); err != nil {
+			return nil, fmt.Errorf("%w: %s: %s in Homebrew's directories %v", ErrPlugin, path, real, err)
+		}
+		if err := accept(real, sum); err != nil {
+			return nil, &HomebrewError{Path: path, Real: real, SHA256: sum, Dirs: hb.used, Reason: err}
+		}
+		exe.Homebrew = true
+	}
+	return exe, nil
 }
 
 func digest(r io.Reader) (string, error) {
@@ -211,6 +260,18 @@ func digest(r io.Reader) (string, error) {
 // checked (same identity; same digest when pinned). The file can still be
 // replaced between this check and the exec: docs/plugins.md.
 func (e *Executable) Verify(rehash bool) error {
+	if e.Homebrew {
+		// in directories the admin group can write to: the content and the
+		// place are checked again, whatever the caller asks
+		rehash = true
+		real, err := filepath.EvalSymlinks(e.Path)
+		if err != nil || real != e.Real {
+			return fmt.Errorf("%w: %s no longer leads to %s", ErrPlugin, e.Path, e.Real)
+		}
+		if err := checkPlace(e.Path, e.Real, &relaxed{}); err != nil {
+			return fmt.Errorf("%w: %s: %v", ErrPlugin, e.Path, err)
+		}
+	}
 	f, err := openNoBlock(e.Real)
 	if err != nil {
 		return fmt.Errorf("%w: %s: %v", ErrPlugin, e.Real, err)
@@ -245,7 +306,15 @@ type Found struct {
 	SHA256   string `json:"sha256,omitempty"`
 	Problem  string `json:"problem,omitempty"`  // why it would be refused
 	Shadowed bool   `json:"shadowed,omitempty"` // a directory before it has the same name
+	// Homebrew: in Homebrew's admin-writable directories (macOS); it runs
+	// only for a feather that pins SHA256 (or a project trust that records
+	// it). Problem says so; Discover never accepts it.
+	Homebrew bool `json:"homebrew,omitempty"`
 }
+
+// discoverAccept accepts nothing: Discover knows no configuration, so a
+// plugin in Homebrew's directories is reported with the SHA-256 to pin.
+func discoverAccept(real, sum string) error { return errNotAccepted }
 
 // Discover lists the plugins of the PATH directories, without running any.
 func Discover(pathList, goos string) (found []Found, skipped []SkippedDir) {
@@ -274,8 +343,12 @@ func Discover(pathList, goos string) (found []Found, skipped []SkippedDir) {
 			fd := Found{Name: name, Path: filepath.Join(d, file)}
 			if err := configure.ValidPluginName(name); err != nil {
 				fd.Problem = err.Error()
-			} else if exe, err := check(name, fd.Path); err != nil {
+			} else if exe, err := check(name, fd.Path, discoverAccept); err != nil {
 				fd.Problem = strings.TrimPrefix(err.Error(), ErrPlugin.Error()+": ")
+				var he *HomebrewError
+				if errors.As(err, &he) {
+					fd.Homebrew, fd.SHA256 = true, he.SHA256
+				}
 			} else {
 				fd.SHA256 = exe.SHA256
 			}

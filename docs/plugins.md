@@ -81,6 +81,27 @@ must be:
 | a `PATH` entry that is a symbolic link: the link owned by root or the user | |
 | a FIFO or a device named like a plugin is refused without waiting | |
 
+**Homebrew (macOS).** Homebrew's `bin`, `Cellar` and `opt` are writable by
+the `admin` group (mode 775), so the checks above refuse a plugin installed
+with `brew` (`kjak feather plugins` shows `Homebrew: runs only for a feather
+with sha256 = "..."`). Pin its SHA-256 and it runs:
+
+```toml
+[feathers.mac]
+type = "external"
+plugin = "notify-macos"
+sha256 = "3276acaa..."      # kjak feather plugins shows it; update it after brew upgrade
+```
+
+For a feather of a project, `kjak config trust` records the path and the
+SHA-256 instead. Only the standard prefixes (`/opt/homebrew`, `/usr/local`)
+and a plugin in a keg (`<prefix>/Cellar/<formula>/<version>/bin/kjak-feather-<name>`)
+get this exception, and only from the group-write rule; the plugin must be a
+Mach-O that loads system libraries only (not a script, not a program linked
+to a library of Homebrew). Check the SHA-256 against what you installed
+before you pin it. The trust boundary this opens to other admin users and
+the TOCTOU risk that remains are in [security.md](security.md#external-plugins).
+
 The ACLs are checked too (internal/fileacl): on Linux the POSIX ACL and on
 macOS the ACL of the file and of those directories must not let anyone else
 change them (macOS: no allow entry with a write right, whoever it names),
@@ -103,8 +124,9 @@ just before every run (the SHA-256 too when it is pinned, by `sha256` or by
 a project's trust). A changed file is not run (`error.code: blocked`).
 **Limit:** the file is executed by its path after that check; a process
 that can replace it in that instant (it would need write access to the file
-or its directory, which the checks above keep to root and you) could still
-win the race. kjak does not copy or `fexecve` the executable.
+or its directory, which the checks above keep to root and you, and for a
+plugin installed by Homebrew also to the other admin users: below) could
+still win the race. kjak does not copy or `fexecve` the executable.
 
 ## Projects
 
