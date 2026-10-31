@@ -410,7 +410,15 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 		if _, done := (configure.TrustEntry{Plugins: grant.Plugins}).Plugin(fc.Plugin); done {
 			continue
 		}
-		exe, err := external.Resolve(fc.Plugin, fc.Path, pathList, runtime.GOOS)
+		// a plugin in Homebrew's admin-writable directories: trusting the
+		// project records its path and SHA-256, which every run then
+		// requires; a sha256 the project pins must match
+		exe, err := external.ResolveAccept(fc.Plugin, fc.Path, pathList, runtime.GOOS, func(real, sum string) error {
+			if fc.SHA256 != "" && fc.SHA256 != sum {
+				return fmt.Errorf("with the sha256 the project pins, %s, and it has %s", fc.SHA256, sum)
+			}
+			return nil
+		})
 		if err != nil {
 			return rt.fail(ctx, fmt.Errorf("config trust: feather %s: %w (install the plugin, then trust)", name, err))
 		}
@@ -419,6 +427,9 @@ func configTrust(ctx context.Context, rt *Runtime, args []string) int {
 		}
 		grant.Plugins = append(grant.Plugins, configure.TrustedPlugin{Name: fc.Plugin, Path: exe.Real, SHA256: exe.SHA256})
 		fmt.Fprintf(rt.Stdout, "plugin %s: %s\nsha256 %s\n", output.Shown(fc.Plugin), output.Shown(exe.Real), exe.SHA256)
+		if exe.Homebrew {
+			fmt.Fprintf(rt.Stdout, "  installed by Homebrew, in directories the admin group can write to: only this SHA-256 will run\n")
+		}
 	}
 	// the names the project reads from the personal secrets file: each one
 	// is shown and allowed explicitly

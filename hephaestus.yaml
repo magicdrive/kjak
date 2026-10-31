@@ -77,7 +77,7 @@ release:
     prerelease: auto  # a tag like v0.2.0-rc.1 is published as a pre-release
     # The notes of the release, written for it (a later release names its
     # own file: hephaestus preflight checks that the file names the tag).
-    notes_file: docs/release-notes/v1.1.0.md
+    notes_file: docs/release-notes/v1.2.0.md
 
 brews:
   - name: kjak

@@ -92,3 +92,26 @@ config-nonblock	internal/configure/open_unix.go	./internal/commandline	os.O_RDON
 template-loop	internal/template/template.go	./internal/template	if err := problem(tpl); err != nil {	if err := problem(tpl); false && err != nil {	a message template can loop without end (range, recursion)
 ssrf-local-nat64	internal/feather/httpapi/guard.go	./internal/feather/httpapi	return localNAT64(b)	return CatTunnel	a local-use NAT64 address of the metadata endpoint can be allowed
 ssrf-azure-wireserver	internal/feather/httpapi/guard.go	./internal/feather/httpapi	netip.MustParseAddr("168.63.129.16"),	netip.MustParseAddr("0.0.0.0"),	the Azure WireServer is a public address
+# the Homebrew exception (macOS): internal/feather/external/homebrew*.go
+homebrew-accept	internal/feather/external/discover.go	./internal/feather/external	if err := accept(real, sum); err != nil {	if err := error(nil); err != nil {	a plugin in Homebrew's admin-writable directories runs without its content accepted
+homebrew-discover-ok	internal/feather/external/homebrew.go	./internal/feather/external	var errNotAccepted = errors.New(	var errNotAccepted error = nil; var _ = errors.New(	kjak feather plugins reports a Homebrew plugin as ok
+homebrew-gid	internal/feather/external/homebrew_darwin.go	./internal/feather/external	s.Gid == gidAdmin	true	a Homebrew directory of another group (staff) is excepted
+homebrew-owner	internal/feather/external/homebrew_darwin.go	./internal/feather/external	int(s.Uid) == euid && s.Uid != 0	true	a Homebrew directory of another user is excepted
+homebrew-root	internal/feather/external/homebrew_darwin.go	./internal/feather/external	 && s.Uid != 0 &&	 &&	a root-owned group-writable directory is excepted as Homebrew's
+homebrew-setid	internal/feather/external/homebrew_darwin.go	./internal/feather/external	 && mode&(os.ModeSetuid|os.ModeSetgid) == 0	 && true	a setgid Homebrew directory is excepted
+homebrew-lstat	internal/feather/external/homebrew_darwin.go	./internal/feather/external	st, err := os.Lstat(dir)	st, err := os.Stat(dir)	a link in place of Cellar (or bin, opt) is excepted
+homebrew-keg-bin	internal/feather/external/homebrew_darwin.go	./internal/feather/external	parts[2] != "bin"	false	a file outside the keg's bin gets the exception
+homebrew-holds-bin	internal/feather/external/homebrew_darwin.go	./internal/feather/external	dir != prefix+"/bin" || 	false || 	a group-writable keg bin (or another directory) holding the plugin is excepted
+homebrew-above	internal/feather/external/homebrew_darwin.go	./internal/feather/external	} else if dir != prefix+"/Cellar" && dir != prefix+"/opt" {	} else if false {	a group-writable keg directory above the plugin is excepted
+homebrew-verify-rehash	internal/feather/external/discover.go	./internal/feather/external	\t\trehash = true\n	\t\trehash = rehash\n	a Homebrew plugin changed in place (same size and time) runs
+homebrew-verify-link	internal/feather/external/discover.go	./internal/feather/external	if err != nil || real != e.Real {	if err != nil || real == "" {	a Homebrew link moved to another file after the check is followed
+homebrew-verify-place	internal/feather/external/discover.go	./internal/feather/external	if err := checkPlace(e.Path, e.Real, &relaxed{}); err != nil {	if err := error(nil); err != nil {	a Homebrew directory made writable by others after the check is not noticed
+homebrew-trust-path	internal/feather/builtin/builtin.go	./internal/feather/builtin	ok && tp.Path == real && tp.SHA256 == sum	ok && tp.SHA256 == sum	a project trust of another path lets a Homebrew plugin run
+homebrew-trust-sha	internal/feather/builtin/builtin.go	./internal/feather/builtin	ok && tp.Path == real && tp.SHA256 == sum	ok && tp.Path == real	a project trust of another content lets a Homebrew plugin run
+homebrew-pin-mismatch	internal/feather/builtin/builtin.go	./internal/feather/builtin	case fc.SHA256 != sum:	case false:	a Homebrew plugin runs with another sha256 pinned
+homebrew-pin-unset	internal/feather/builtin/builtin.go	./internal/feather/builtin	case fc.SHA256 == "":	case false:	a Homebrew plugin runs without a sha256 pin
+homebrew-self-contained	internal/feather/external/discover.go	./internal/feather/external	if err := selfContained(f); err != nil {	if err := error(nil); err != nil {	a script or a Mach-O loading a library of the prefix gets the Homebrew exception
+homebrew-macho-dylib	internal/feather/external/macho_darwin.go	./internal/feather/external	if !strings.HasPrefix(name, "/usr/lib/") && !strings.HasPrefix(name, "/System/Library/") {	if false {	a Mach-O loading a library outside the system's gets the Homebrew exception
+homebrew-macho-script	internal/feather/external/macho_darwin.go	./internal/feather/external	\t\treturn errors.New("is not a Mach-O executable (a script's interpreter could be replaced by another admin user)")	\t\treturn nil	a script gets the Homebrew exception
+homebrew-name	internal/feather/external/discover.go	./internal/feather/external	if base := filepath.Base(real); base != configure.PluginFile(name, runtime.GOOS) {	if base := filepath.Base(real); base == "" {	a keg file of another name gets the Homebrew exception
+homebrew-macho-dylinker	internal/feather/external/macho_darwin.go	./internal/feather/external	if name != "/usr/lib/dyld" {	if false {	a Mach-O naming another dynamic linker gets the Homebrew exception

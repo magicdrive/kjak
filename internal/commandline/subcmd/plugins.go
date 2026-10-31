@@ -58,6 +58,11 @@ func featherPlugins(ctx context.Context, rt *Runtime, args []string) int {
 		for _, v := range views {
 			state := "ok"
 			switch {
+			case v.Homebrew:
+				state = fmt.Sprintf("Homebrew: runs only for a feather with sha256 = %q (or a project trust)", v.SHA256)
+				if v.Shadowed {
+					state += "; duplicate (an earlier PATH directory has it: pin path =)"
+				}
 			case v.Problem != "":
 				state = "refused: " + v.Problem
 			case v.Shadowed:

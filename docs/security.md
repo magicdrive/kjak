@@ -390,13 +390,66 @@ controls which executable runs and what it is given ([plugins.md](plugins.md)):
   again before every run; the SHA-256 too when it is pinned (`sha256`, or a
   project's trust). **TOCTOU limit:** the file is executed by path after the
   check; replacing it in between needs write access the checks keep to root
-  and the user. The ACLs are checked as well (macOS, Linux: no ACL entry
+  and the user (for a plugin installed by Homebrew, also to the other admin
+  users: below). The ACLs are checked as well (macOS, Linux: no ACL entry
   that lets anyone else change the file or its directories, nor remove or
   replace an entry of a directory above them; Windows: the file, its
   directories and every directory above them must be owned by you,
   `SYSTEM`, `Administrators` or `TrustedInstaller`, and no other principal
   may change the file or what its directories hold — in a directory above,
   adding new entries is allowed, as `Users` may on `C:\`).
+- **Homebrew (macOS).** Homebrew makes `<prefix>/bin`, `Cellar` and `opt`
+  writable by the `admin` group (mode 775), so a plugin installed with `brew`
+  fails the checks above. kjak does **not** treat `admin` as root: unlike
+  `sudo`, writing there needs no authentication and leaves no record, so
+  another admin user could replace the link in `bin` or the keg under
+  `Cellar`. Such a plugin runs only when **its content is the one you
+  stated**: a feather of the global configuration whose `sha256` equals the
+  file's SHA-256, or a feather of a trusted project whose trust records that
+  resolved path and that SHA-256 (the project's own `sha256` is not enough).
+  The exception covers only the group-write rule, only for `bin` (holding
+  the name `<prefix>/bin/kjak-feather-*`), `Cellar` and `opt` of
+  `/opt/homebrew` and `/usr/local`, each a real directory (not a link) owned
+  by you (not root), of group `admin`, not writable by others, without
+  setuid/setgid, with the ACL checks unchanged, and only for a file in a keg
+  named for the plugin (`<prefix>/Cellar/<formula>/<version>/bin/kjak-feather-<name>`,
+  whose directories and the file keep every check). The strict checks run
+  first; a plugin anywhere else is checked exactly as without the
+  exception. `kjak feather plugins` never reports it as `ok`: it shows the
+  SHA-256 to pin.
+  - **What the SHA-256 covers.** The plugin's own file, not what it loads. A
+    script's interpreter (`<prefix>/bin/python3`) or a library of the prefix
+    (`<prefix>/opt/<dep>/lib/*.dylib`) is in the same admin-writable
+    directories and would run whatever another admin user put there. So the
+    exception takes only a Mach-O executable whose every library is the
+    system's (`/usr/lib/`, `/System/Library/`), without a run path or a dyld
+    environment, read from the hashed file; a script, or a program that
+    needs a library of Homebrew, is refused there (install it in a directory
+    of your own). This covers what the executable names in its load
+    commands, not what it does once it runs: a library it opens itself
+    (`dlopen`), a program it starts through `PATH` (which may hold
+    `<prefix>/bin`) or a file it reads from `<prefix>/share` or `etc` is the
+    plugin's own business, as for any plugin.
+  - **Pin what you meant to install.** `kjak feather plugins` and `kjak
+    config trust` hash the file there now. Another admin user cannot plant a
+    file that is yours, but can rename your kegs (for example point `bin` at
+    an older version still in the Cellar). Compare the SHA-256 with what you
+    expect (the release's checksum, or `shasum -a 256` of the file you just
+    installed) before pinning it.
+  - **Residual TOCTOU risk.** kjak checks the plugin when the feather is
+    built, again before the request is prepared, and once more just before
+    it starts the process: that the name still leads to the same file, the
+    file's identity and SHA-256, and its place. Between that last check and
+    the exec (the fork, microseconds to milliseconds), another member of
+    `admin` (not only root and you) could rename the keg or the link and
+    have their own program run with your rights and your request, secrets
+    included. kjak executes by path (macOS has no `fexecve`). Running a
+    private, hashed copy instead would close the window for the file itself;
+    kjak does not do it, because macOS scans every new copy of an executable
+    on its first run (seconds under load, counted in the plugin's timeout)
+    and a copy breaks a plugin's relative paths. On a Mac where you are the
+    only admin user, nobody else can win this race.
+  - Linux (Linuxbrew included) and Windows have no exception.
 - **Projects.** `config trust` records each plugin's resolved path and
   SHA-256; another or a changed executable makes the project untrusted. The
   trust shows the secrets, environment variables and settings the project

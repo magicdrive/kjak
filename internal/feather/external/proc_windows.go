@@ -39,8 +39,9 @@ func openNoBlock(path string) (*os.File, error) { return os.Open(path) }
 // must not be changeable by anyone else (fileacl.NoWrite); in every
 // directory above them, nobody else may remove or replace an entry or
 // change the DACL (fileacl.NoReplace: creating a new entry is allowed, as
-// the "create folders" right of Users on C:\).
-func checkPlace(path, real string) error {
+// the "create folders" right of Users on C:\). hb is ignored: the
+// Homebrew exception is macOS's only.
+func checkPlace(path, real string, hb *relaxed) error {
 	for _, dir := range []string{filepath.Dir(path), filepath.Dir(real)} {
 		if err := fileacl.CheckPath(dir, fileacl.NoWrite); err != nil {
 			return fmt.Errorf("its directory %s: %v", dir, err)
