@@ -243,6 +243,15 @@ func TestCritical_HomebrewTampering(t *testing.T) {
 			copy(data[i:], "/tmp/lib/libSystem.B.dylib")
 			replaceExe(t, b, data)
 		}},
+		{"a Mach-O naming another dynamic linker", "names the dynamic linker /tmp/lib/dyld", "same", func(t *testing.T, b brewTree) {
+			data := mustRead(t, b.exe)
+			i := bytes.Index(data, []byte("/usr/lib/dyld\x00"))
+			if i < 0 {
+				t.Skip("the test plugin names no dynamic linker")
+			}
+			copy(data[i:], "/tmp/lib/dyld")
+			replaceExe(t, b, data)
+		}},
 		{"a keg file of another name, pinned through opt", "writable by group or others", "is not named kjak-feather-test", func(t *testing.T, b brewTree) {
 			other := b.kegBin + "/other-program"
 			if err := os.Rename(b.exe, other); err != nil {

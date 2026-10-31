@@ -425,7 +425,11 @@ controls which executable runs and what it is given ([plugins.md](plugins.md)):
     system's (`/usr/lib/`, `/System/Library/`), without a run path or a dyld
     environment, read from the hashed file; a script, or a program that
     needs a library of Homebrew, is refused there (install it in a directory
-    of your own).
+    of your own). This covers what the executable names in its load
+    commands, not what it does once it runs: a library it opens itself
+    (`dlopen`), a program it starts through `PATH` (which may hold
+    `<prefix>/bin`) or a file it reads from `<prefix>/share` or `etc` is the
+    plugin's own business, as for any plugin.
   - **Pin what you meant to install.** `kjak feather plugins` and `kjak
     config trust` hash the file there now. Another admin user cannot plant a
     file that is yours, but can rename your kegs (for example point `bin` at

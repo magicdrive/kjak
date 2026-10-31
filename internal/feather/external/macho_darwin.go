@@ -21,6 +21,7 @@ const (
 	lcLoadUpwardDylib = 0x80000023
 	lcRpath           = 0x8000001c
 	lcDyldEnvironment = 0x27
+	lcLoadDylinker    = 0xe
 )
 
 // selfContained: r is a Mach-O (thin or universal) whose every library is
@@ -52,6 +53,15 @@ func selfContained(r io.ReaderAt) error {
 				return errors.New("has a run path (LC_RPATH): its libraries could come from elsewhere")
 			case lcDyldEnvironment:
 				return errors.New("sets a dyld environment (LC_DYLD_ENVIRONMENT)")
+			case lcLoadDylinker:
+				// its name has the same layout as a dylib's (offset at 8)
+				name, err := dylibName(raw, f.ByteOrder)
+				if err != nil {
+					return err
+				}
+				if name != "/usr/lib/dyld" {
+					return fmt.Errorf("names the dynamic linker %s, not /usr/lib/dyld", name)
+				}
 			case lcLoadDylib, lcLoadWeakDylib, lcReexportDylib, lcLazyLoadDylib, lcLoadUpwardDylib:
 				name, err := dylibName(raw, f.ByteOrder)
 				if err != nil {
