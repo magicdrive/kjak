@@ -81,7 +81,7 @@ must be:
 | a `PATH` entry that is a symbolic link: the link owned by root or the user | |
 | a FIFO or a device named like a plugin is refused without waiting | |
 
-**Homebrew (macOS).** Homebrew's `bin`, `Cellar` and `opt` are writable by
+**Homebrew (macOS, since v1.2.0).** Homebrew's `bin`, `Cellar` and `opt` are writable by
 the `admin` group (mode 775), so the checks above refuse a plugin installed
 with `brew` (`kjak feather plugins` shows `Homebrew: runs only for a feather
 with sha256 = "..."`). Pin its SHA-256 and it runs:
