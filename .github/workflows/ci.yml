@@ -164,7 +164,7 @@ jobs:
           go test -count=1 -exec /bin/true ./...
 
       # every mutant of scripts/mutants.tsv still applies to the code (the
-      # mutation run itself is mutation.yml: weekly and on demand)
+      # mutation run itself is make mutation, or mutation.yml on demand)
       - name: Mutants apply
         run: make mutation-check
 

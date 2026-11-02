@@ -4,12 +4,12 @@ name: Mutation
 # scripts/mutants.tsv: secret permissions, trust, SSRF, redirects, plugin
 # authorization, cancellation, retry, redaction). It takes minutes, so it
 # does not run on pull requests (ci.yml only checks that every mutant still
-# applies): weekly, and on demand. A surviving mutant fails the run: add the
-# test that kills it.
+# applies): on demand only. A surviving mutant fails the run: add the test
+# that kills it. It runs on Linux, where the darwin-only Homebrew mutants of
+# internal/feather/external survive: run those on macOS (make mutation
+# MUTANTS=homebrew), or exclude them here.
 
 on:
-  schedule:
-    - cron: '17 3 * * 1'  # Monday 03:17 UTC
   workflow_dispatch:
     inputs:
       mutants:

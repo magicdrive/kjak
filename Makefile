@@ -178,7 +178,8 @@ fuzz:
 
 # Mutation testing of the security-critical paths (scripts/mutation.sh,
 # scripts/mutants.tsv): every mutant must be killed. MUTANTS=regex selects
-# mutants by id. Slow (minutes): CI runs it weekly (mutation.yml).
+# mutants by id. Slow (minutes): run it locally, or
+# mutation.yml on demand.
 MUTANTS =
 .PHONY: mutation
 mutation:

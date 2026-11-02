@@ -210,10 +210,11 @@ cancellation, retries and redaction — to a copy of the module, runs the
 tests of the packages that guard that code, and restores the copy (checked
 with `cmp`) before the next one. Every mutant must be killed: a surviving
 mutant is a missing test. `make mutation` runs them all (minutes;
-`MUTANTS=regex` selects by id); CI runs it weekly and on demand
-(`mutation.yml`), and checks on every change that each mutant still applies
-to the code (`make mutation-check`). When the code of a mutant changes,
-update its line in `scripts/mutants.tsv`.
+`MUTANTS=regex` selects by id), locally or on demand in CI
+(`mutation.yml`, Linux: the darwin-only Homebrew mutants need macOS). CI
+checks on every change that each mutant still applies to the code (`make
+mutation-check`). When the code of a mutant changes, update its line in
+`scripts/mutants.tsv`.
 
 ### Static analysis
 
@@ -250,8 +251,8 @@ to main and every pull request:
 | homebrew-e2e (ubuntu, macos) | `make homebrew-e2e`: the generated formula with file:// URLs, `brew style`, `brew audit --strict`, install, smoke test, `brew test`, uninstall |
 
 Every released platform runs its tests natively (see Platforms). The
-weekly `mutation.yml` runs `make mutation`. Tool versions are pinned in the
-Makefile (staticcheck, golangci-lint, govulncheck, actionlint, Renovate,
-Hephaestus) and the workflows (actions by commit SHA,
+`mutation.yml` workflow (on demand) runs `make mutation`. Tool versions are
+pinned in the Makefile (staticcheck, golangci-lint, govulncheck,
+actionlint, Renovate, Hephaestus) and the workflows (actions by commit SHA,
 `magicdrive/hephaestus` included); Go comes from `go.mod`. Renovate
 (`renovate.json`) updates all of them.
