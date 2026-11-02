@@ -25,7 +25,7 @@ TOOLS_DIR = $(BUILD_DIR)/tools
 # release (hephaestus.yaml). The version is kept in step with the commit SHA
 # of the magicdrive/hephaestus action in .github/workflows (Renovate updates
 # both).
-HEPHAESTUS_VERSION ?= v1.3.0
+HEPHAESTUS_VERSION ?= v1.5.0
 # (no VAR=value prefix: scripts/homebrew-e2e.sh runs it as a plain command)
 HEPHAESTUS ?= go run github.com/magicdrive/hephaestus@$(HEPHAESTUS_VERSION)
 
