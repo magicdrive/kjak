@@ -75,9 +75,10 @@ release:
     name: kjak
     draft: false
     prerelease: auto  # a tag like v0.2.0-rc.1 is published as a pre-release
-    # The notes of the release, written for it (a later release names its
-    # own file: hephaestus preflight checks that the file names the tag).
-    notes_file: docs/release-notes/v1.2.0.md
+    # GitHub's generated notes, as Ark: edit them on GitHub after the
+    # release if needed (docs/release-notes/ keeps the notes written by hand
+    # for v1.0.0-v1.2.0).
+    generate_notes: true
 
 brews:
   - name: kjak

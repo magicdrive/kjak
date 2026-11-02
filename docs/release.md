@@ -36,10 +36,10 @@ when one is not met.
 
 ## Releasing
 
-Each release has its notes in `docs/release-notes/vX.Y.Z.md`, the file that
-`release.github.notes_file` of `hephaestus.yaml` names: write it and point
-`notes_file` to it in the pull request that prepares the release (the
-preflight refuses a notes file that does not name the tag).
+The release notes are GitHub's generated notes
+(`release.github.generate_notes` of `hephaestus.yaml`); edit them on GitHub
+after the release if needed. No file has to be prepared for a release
+(`docs/release-notes/` keeps the notes written by hand for v1.0.0-v1.2.0).
 
 ```sh
 git switch main && git pull --ff-only
